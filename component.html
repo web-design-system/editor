@@ -1,0 +1,54 @@
+<template component="wds-editor" shadow-dom="open">
+  <link rel="stylesheet" href="./styles.css" />
+
+  <section class="wds-workbench">
+    <aside class="wds-workbench__sidebar">
+      <p class="text-xs font-bold tracking-[0.16em] text-cyan-300">WDS / REGISTRY</p>
+      <h2 class="mt-sm text-lg">{{ team }}</h2>
+      <button class="mt-md wds-btn wds-btn-primary wds-btn-sm" on-click="createComponent()">
+        New component
+      </button>
+      <nav class="mt-lg grid gap-xxs text-sm">
+        <button class="text-left font-bold text-white">{{ component }}</button>
+        <button class="text-left text-slate-400">Baseline styles</button>
+      </nav>
+    </aside>
+
+    <main class="wds-workbench__workspace">
+      <header class="wds-workbench__toolbar">
+        <div>
+          <p class="text-xs text-slate-400">{{ team }} / {{ component }}</p>
+          <strong>{{ activeFile }}</strong>
+        </div>
+        <button class="wds-btn wds-btn-primary wds-btn-sm" on-click="commit()">Commit to latest</button>
+      </header>
+
+      <textarea
+        class="wds-workbench__source"
+        bind-value="source"
+        on-input="updateSource($event)"
+        aria-label="Component source"
+      ></textarea>
+
+      <footer class="flex justify-between border-t border-slate-700 px-md py-xs font-mono text-xs text-slate-400">
+        <span>{{ status }}</span>
+        <span>CTRL + ENTER commits</span>
+      </footer>
+    </main>
+
+    <aside class="wds-workbench__inspector">
+      <p class="text-xs font-bold tracking-[0.16em] text-cyan-300">DESIGN INSPECTOR</p>
+      <dl class="mt-md grid gap-sm text-sm">
+        <div><dt class="text-slate-400">Viewport</dt><dd>{{ viewport }}px</dd></div>
+        <div><dt class="text-slate-400">Runtime</dt><dd>Li3 / Shadow DOM</dd></div>
+        <div><dt class="text-slate-400">Revision</dt><dd>{{ revision }}</dd></div>
+      </dl>
+      <label class="mt-lg block text-xs text-slate-400">
+        Preview width
+        <input class="mt-xs w-full" type="range" min="320" max="1440" bind-value="viewport" on-input="setViewport($event)" />
+      </label>
+    </aside>
+  </section>
+
+  <script setup src="./editor.mjs"></script>
+</template>

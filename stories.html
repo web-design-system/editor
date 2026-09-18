@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script type="importmap">
+      { "imports": { "@li3/": "https://cdn.li3.dev/@li3/" } }
+    </script>
+    <script type="module">import '@li3/web';</script>
+    <link rel="component" href="./component.html" />
+    <style>
+      body { margin: 0; background: #020617; padding: 2rem; }
+      main { max-width: 1280px; margin: 0 auto; }
+      h1, p { color: #e2e8f0; font-family: system-ui, sans-serif; }
+      p { color: #94a3b8; }
+    </style>
+  </head>
+  <body>
+    <template app>
+      <main>
+        <h1>Web Design System Editor</h1>
+        <p>Initial component story using the extracted legacy Tailwind definitions.</p>
+        <wds-editor team="web-design-system" component="editor" revision="latest"></wds-editor>
+      </main>
+    </template>
+  </body>
+</html>

@@ -1,0 +1,13 @@
+{
+  "name": "@web-design-system/editor",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:css": "npx @tailwindcss/cli -i styles.css -o dist/editor.css",
+    "test": "node --test spec.mjs"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.1.13",
+    "tailwindcss": "^4.1.13"
+  }
+}

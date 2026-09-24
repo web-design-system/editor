@@ -4,43 +4,13 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>WDS / Component Workbench</title>
-    <link rel="stylesheet" href="/app.css" />
+    <script type="importmap">
+      { "imports": { "@li3/": "https://cdn.li3.dev/@li3/" } }
+    </script>
+    <script type="module">import '@li3/web';</script>
+    <link rel="component" href="/static/web-design-system/workbench/latest/component.html" />
   </head>
   <body>
-    <header class="topbar">
-      <a class="brand" href="/">WDS <span>/ WORKBENCH</span></a>
-      <nav><button class="active">Inspector</button><button>Styleguide</button><button>Releases</button></nav>
-      <div class="session">MOUNTED WORKSPACE <span>AUTH NEXT</span></div>
-    </header>
-    <main class="workbench">
-      <aside class="registry">
-        <div class="pane-title"><h1>Component registry</h1><p>Team-owned repositories</p></div>
-        <button id="new-project" class="outline">+ New repository</button>
-        <div id="project-list" class="project-list"></div>
-        <div class="registry-foot"><span class="live-dot"></span> Mounted source workspace</div>
-      </aside>
-      <section class="studio">
-        <header class="studio-bar">
-          <div><span id="crumb-team">acme-corp</span> / <strong id="crumb-repo">buttons</strong> <code id="revision">...</code></div>
-          <div class="actions"><button id="run-tests" class="outline">Run spec</button><button id="commit" class="outline">Commit to latest</button><button id="release" class="primary">Release</button></div>
-        </header>
-        <div class="editor-tabs" id="tabs"></div>
-        <textarea id="editor" spellcheck="false" aria-label="Source editor"></textarea>
-        <footer class="editor-foot"><span id="save-status">Loaded from Git main</span><span>CMD/CTRL + ENTER commits</span></footer>
-      </section>
-      <aside class="inspector">
-        <div class="pane-title"><h2>Design inspector</h2><p id="description">Loading metadata</p></div>
-        <dl id="metadata"></dl>
-        <section class="import-list"><h3>Release contract</h3><p>Every external CSS, HTML component, and ESM URL remains explicit in source.</p><a id="component-url" target="preview">Open latest component</a><a id="styleguide-url" target="preview">Open latest styleguide</a></section>
-        <section class="test-panel"><h3>Spec output</h3><pre id="test-output">No run yet.</pre></section>
-      </aside>
-      <section class="preview">
-        <header class="preview-bar"><span>LIVE STYLEGUIDE</span><div id="breakpoints" class="breakpoints"></div><span id="width-readout">960 px</span></header>
-        <div class="viewport-shell"><div class="ruler"><input id="viewport" type="range" min="320" max="1440" value="960" aria-label="Preview width" /></div><iframe id="frame" title="Sandboxed component styleguide" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads"></iframe></div>
-      </section>
-    </main>
-    <dialog id="release-dialog"><form method="dialog"><h2>Create immutable release</h2><p>Tags the current commit. Releases can never be deleted.</p><div class="release-options"><button value="major">Major version</button><button value="minor">Minor version</button></div><button value="cancel" class="quiet">Cancel</button></form></dialog>
-    <dialog id="project-dialog"><form method="dialog"><h2>New repository</h2><label>Team slug <input name="team" value="acme-corp" required pattern="[a-z0-9][a-z0-9._-]*" /></label><label>Repository slug <input name="repo" placeholder="forms" required pattern="[a-z0-9][a-z0-9._-]*" /></label><menu><button value="cancel">Cancel</button><button value="create" class="primary">Create</button></menu></form></dialog>
-    <script type="module" src="/app.js"></script>
+    <template app><wds-workbench></wds-workbench></template>
   </body>
 </html>

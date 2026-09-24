@@ -17,7 +17,7 @@ const sourceRepo = process.env.SOURCE_REPO || 'editor';
 const sourceTeamPath = join(volumeRoot, sourceTeam);
 const port = Number(process.env.PORT || 4173);
 const safePart = /^[a-z0-9][a-z0-9._-]*$/;
-const sourceFiles = ['component.html', 'styles.css', 'editor.mjs', 'buttons.mjs', 'action-button.mjs', 'viewport-control.mjs', 'stories.html', 'component.json', 'spec.mjs'];
+const sourceFiles = ['component.html', 'styles.css', 'editor.mjs', 'buttons.mjs', 'action-button.mjs', 'viewport-control.mjs', 'registry.mjs', 'editor-tabs.mjs', 'studio.mjs', 'inspector.mjs', 'preview.mjs', 'workbench.mjs', 'stories.html', 'component.json', 'spec.mjs'];
 const assetFiles = [...sourceFiles, 'manifest.json'];
 
 const sample = {
@@ -204,7 +204,7 @@ async function compileSource(path = sourcePath) {
   const cli = join(root, 'node_modules', '.bin', 'tailwindcss');
   if (!existsSync(cli) || !existsSync(sourceFilePath('styles.css', path))) return;
   await mkdir(join(path, 'dist'), { recursive: true });
-  await exec(cli, ['-i', 'styles.css', '-o', 'dist/editor.css'], { cwd: path });
+  await exec(cli, ['-i', 'styles.css', '-o', 'dist/editor.css', '--minify'], { cwd: path });
 }
 async function readSourceFiles(path = sourcePath) {
   return Object.fromEntries(await Promise.all(sourceFiles.map(async (file) => [file, existsSync(sourceFilePath(file, path)) ? await readFile(sourceFilePath(file, path), 'utf8') : ''])));

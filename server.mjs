@@ -14,9 +14,10 @@ const volumeRoot = existsSync('/data/web-design-system') ? '/data' : '/data/clou
 const sourcePath = process.env.SOURCE_PATH || join(volumeRoot, 'web-design-system', 'editor');
 const sourceTeam = process.env.SOURCE_TEAM || 'web-design-system';
 const sourceRepo = process.env.SOURCE_REPO || 'editor';
+const sourceTeamPath = join(volumeRoot, sourceTeam);
 const port = Number(process.env.PORT || 4173);
 const safePart = /^[a-z0-9][a-z0-9._-]*$/;
-const sourceFiles = ['component.html', 'styles.css', 'editor.mjs', 'buttons.mjs', 'stories.html', 'component.json', 'spec.mjs'];
+const sourceFiles = ['component.html', 'styles.css', 'editor.mjs', 'buttons.mjs', 'action-button.mjs', 'viewport-control.mjs', 'stories.html', 'component.json', 'spec.mjs'];
 const assetFiles = [...sourceFiles, 'manifest.json'];
 
 const sample = {
@@ -117,9 +118,10 @@ const baseline = {
 
 function valid(...parts) { return parts.every((part) => safePart.test(part)); }
 function repoPath(team, repo) { return join(reposDir, team, repo); }
-function isMountedSource(team, repo) { return team === sourceTeam && repo === sourceRepo && existsSync(join(sourcePath, 'component.json')); }
-function sourceFilePath(file) { return join(sourcePath, file); }
-function releasePath(version, file) { return join(sourcePath, '.wds', 'releases', version, file); }
+function mountedPath(team, repo) { return team === sourceTeam && valid(repo) ? join(sourceTeamPath, repo) : null; }
+function isMountedSource(team, repo) { const path = mountedPath(team, repo); return Boolean(path && existsSync(join(path, 'component.json'))); }
+function sourceFilePath(file, path = sourcePath) { return join(path, file); }
+function releasePath(version, file, path = sourcePath) { return join(path, '.wds', 'releases', version, file); }
 function revisionFor(files) {
   return createHash('sha256').update(sourceFiles.map((file) => files[file] || '').join('\0')).digest('hex').slice(0, 8);
 }
@@ -149,10 +151,17 @@ async function ensureRepo(team, repo, files) {
   return path;
 }
 async function listRepos() {
-  if (isMountedSource(sourceTeam, sourceRepo)) {
-    const metadata = JSON.parse(await readFile(sourceFilePath('component.json'), 'utf8'));
-    const files = await readSourceFiles();
-    return [{ team: sourceTeam, repo: sourceRepo, ...metadata, revision: revisionFor(files), sourceMode: 'filesystem' }];
+  if (existsSync(sourceTeamPath)) {
+    const entries = await readdir(sourceTeamPath, { withFileTypes: true });
+    const projects = [];
+    for (const entry of entries.filter((item) => item.isDirectory() && valid(item.name))) {
+      if (!isMountedSource(sourceTeam, entry.name)) continue;
+      const path = mountedPath(sourceTeam, entry.name);
+      const metadata = JSON.parse(await readFile(join(path, 'component.json'), 'utf8'));
+      const files = await readSourceFiles(path);
+      projects.push({ team: sourceTeam, repo: entry.name, ...metadata, revision: revisionFor(files), sourceMode: 'filesystem' });
+    }
+    if (projects.length) return projects;
   }
   if (!existsSync(reposDir)) return [];
   const teams = await readdir(reposDir, { withFileTypes: true });
@@ -172,8 +181,9 @@ async function listRepos() {
 async function readRevision(team, repo, revision, file) {
   if (!valid(team, repo) || !safePart.test(revision) || !assetFiles.includes(file)) return null;
   if (isMountedSource(team, repo)) {
-    const generated = file === 'styles.css' && revision === 'latest' ? join(sourcePath, 'dist', 'editor.css') : null;
-    const path = generated && existsSync(generated) ? generated : revision === 'latest' ? sourceFilePath(file) : releasePath(revision, file);
+    const root = mountedPath(team, repo);
+    const generated = file === 'styles.css' && revision === 'latest' ? join(root, 'dist', 'editor.css') : null;
+    const path = generated && existsSync(generated) ? generated : revision === 'latest' ? sourceFilePath(file, root) : releasePath(revision, file, root);
     try { return await readFile(path, 'utf8'); } catch { return null; }
   }
   const path = repoPath(team, repo);
@@ -190,19 +200,20 @@ async function nextVersion(path, kind) {
   const [major, minor] = versions.sort((a, b) => b[0] - a[0] || b[1] - a[1])[0] || [0, 0];
   return kind === 'major' ? `v${major + 1}.0` : `v${major || 1}.${minor + 1}`;
 }
-async function compileSource() {
+async function compileSource(path = sourcePath) {
   const cli = join(root, 'node_modules', '.bin', 'tailwindcss');
-  if (!existsSync(cli) || !existsSync(sourceFilePath('styles.css'))) return;
-  await mkdir(join(sourcePath, 'dist'), { recursive: true });
-  await exec(cli, ['-i', 'styles.css', '-o', 'dist/editor.css'], { cwd: sourcePath });
+  if (!existsSync(cli) || !existsSync(sourceFilePath('styles.css', path))) return;
+  await mkdir(join(path, 'dist'), { recursive: true });
+  await exec(cli, ['-i', 'styles.css', '-o', 'dist/editor.css'], { cwd: path });
 }
-async function readSourceFiles() {
-  return Object.fromEntries(await Promise.all(sourceFiles.map(async (file) => [file, existsSync(sourceFilePath(file)) ? await readFile(sourceFilePath(file), 'utf8') : ''])));
+async function readSourceFiles(path = sourcePath) {
+  return Object.fromEntries(await Promise.all(sourceFiles.map(async (file) => [file, existsSync(sourceFilePath(file, path)) ? await readFile(sourceFilePath(file, path), 'utf8') : ''])));
 }
-async function releaseSource(kind) {
-  const files = await readSourceFiles();
+async function releaseSource(team, repo, kind) {
+  const path = mountedPath(team, repo);
+  const files = await readSourceFiles(path);
   const revision = revisionFor(files);
-  const releases = join(sourcePath, '.wds', 'releases');
+  const releases = join(path, '.wds', 'releases');
   await mkdir(releases, { recursive: true });
   const entries = await readdir(releases, { withFileTypes: true });
   const versions = entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name.match(/^v(\d+)\.(\d+)$/)).filter(Boolean).map(([, major, minor]) => [Number(major), Number(minor)]);
@@ -211,12 +222,12 @@ async function releaseSource(kind) {
   const destination = join(releases, version);
   await mkdir(destination, { recursive: true });
   for (const file of sourceFiles) if (files[file]) await writeFile(join(destination, file), files[file]);
-  if (existsSync(join(sourcePath, 'dist', 'editor.css'))) await cp(join(sourcePath, 'dist', 'editor.css'), join(destination, 'styles.css'));
+  if (existsSync(join(path, 'dist', 'editor.css'))) await cp(join(path, 'dist', 'editor.css'), join(destination, 'styles.css'));
   await writeFile(join(destination, 'manifest.json'), JSON.stringify({ version, revision, files: sourceFiles }, null, 2));
   return { version, revision };
 }
 async function runSpecs(team, repo) {
-  const cwd = isMountedSource(team, repo) ? sourcePath : repoPath(team, repo);
+  const cwd = isMountedSource(team, repo) ? mountedPath(team, repo) : repoPath(team, repo);
   if (!existsSync(join(cwd, 'spec.mjs'))) return { code: 0, output: 'No spec.mjs found.' };
   try {
     const result = await exec(process.execPath, ['--test', 'spec.mjs'], { cwd });
@@ -239,7 +250,14 @@ if (!isMountedSource(sourceTeam, sourceRepo)) {
   await ensureRepo('acme-corp', 'system', baseline);
   await ensureRepo('acme-corp', 'buttons', sample);
 }
-await compileSource();
+if (existsSync(sourceTeamPath)) {
+  const entries = await readdir(sourceTeamPath, { withFileTypes: true });
+  for (const entry of entries.filter((item) => item.isDirectory() && valid(item.name))) {
+    if (isMountedSource(sourceTeam, entry.name)) await compileSource(mountedPath(sourceTeam, entry.name));
+  }
+} else {
+  await compileSource();
+}
 
 createServer(async (request, response) => {
   const url = new URL(request.url, `http://${request.headers.host}`);
@@ -250,7 +268,7 @@ createServer(async (request, response) => {
       const [,, team, repo] = parts;
       if (!valid(team, repo)) return reply(response, 400, { error: 'Invalid project' });
       if (isMountedSource(team, repo)) {
-        const files = await readSourceFiles();
+        const files = await readSourceFiles(mountedPath(team, repo));
         return reply(response, 200, { files, revision: revisionFor(files), sourceMode: 'filesystem' });
       }
       const path = repoPath(team, repo);
@@ -262,13 +280,14 @@ createServer(async (request, response) => {
       const { files, message = 'Update component source' } = await body(request);
       if (!valid(team, repo) || !files) return reply(response, 400, { error: 'Invalid source' });
       if (isMountedSource(team, repo)) {
+        const path = mountedPath(team, repo);
         for (const file of sourceFiles) {
-          if (typeof files[file] === 'string' && (files[file] || existsSync(sourceFilePath(file)))) {
-            await writeFile(sourceFilePath(file), files[file]);
+          if (typeof files[file] === 'string' && (files[file] || existsSync(sourceFilePath(file, path)))) {
+            await writeFile(sourceFilePath(file, path), files[file]);
           }
         }
-        await compileSource();
-        return reply(response, 200, { revision: revisionFor(await readSourceFiles()), sourceMode: 'filesystem' });
+        await compileSource(path);
+        return reply(response, 200, { revision: revisionFor(await readSourceFiles(path)), sourceMode: 'filesystem' });
       }
       const path = await ensureRepo(team, repo, files);
       for (const file of sourceFiles) if (typeof files[file] === 'string') await writeFile(join(path, file), files[file]);
@@ -282,7 +301,10 @@ createServer(async (request, response) => {
       const { kind } = await body(request);
       const path = repoPath(team, repo);
       if (!valid(team, repo) || !['major', 'minor'].includes(kind)) return reply(response, 400, { error: 'Invalid release' });
-      if (isMountedSource(team, repo)) return reply(response, 201, await releaseSource(kind));
+      if (isMountedSource(team, repo)) {
+        await compileSource(mountedPath(team, repo));
+        return reply(response, 201, await releaseSource(team, repo, kind));
+      }
       const version = await nextVersion(path, kind);
       await git(path, ['tag', '-a', version, '-m', `Release ${version}`]);
       return reply(response, 201, { version, revision: (await git(path, ['rev-parse', '--short', 'HEAD'])).stdout.trim() });

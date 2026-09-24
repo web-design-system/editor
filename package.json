@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build:css": "npx @tailwindcss/cli -i styles.css -o dist/editor.css",
+    "build:css": "npx @tailwindcss/cli -i styles.css -o dist/editor.css --minify",
     "test": "node --test spec.mjs"
   },
   "devDependencies": {

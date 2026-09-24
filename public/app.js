@@ -1,11 +1,12 @@
-const files = ['component.html', 'styles.css', 'buttons.mjs', 'stories.html', 'component.json', 'spec.mjs'];
-const state = { team: 'acme-corp', repo: 'buttons', active: 'component.html', files: {}, revision: '' };
+const files = ['component.html', 'styles.css', 'editor.mjs', 'buttons.mjs', 'stories.html', 'component.json', 'spec.mjs'];
+const state = { team: 'web-design-system', repo: 'editor', active: 'component.html', files: {}, revision: '', loaded: false };
 const $ = (selector) => document.querySelector(selector);
 const editor = $('#editor');
 
 function url(path) { return `/static/${state.team}/${state.repo}/latest/${path}`; }
 function renderTabs() {
-  $('#tabs').replaceChildren(...files.map((file) => {
+  const visibleFiles = files.filter((file) => file === state.active || state.files[file]);
+  $('#tabs').replaceChildren(...visibleFiles.map((file) => {
     const button = document.createElement('button');
     button.textContent = file;
     button.className = file === state.active ? 'active' : '';
@@ -31,10 +32,11 @@ async function loadProject(team, repo) {
   const response = await fetch(`/api/source/${team}/${repo}`);
   if (!response.ok) return;
   const payload = await response.json();
-  Object.assign(state, { team, repo, files: payload.files, revision: payload.revision, active: 'component.html' });
+  Object.assign(state, { team, repo, files: payload.files, revision: payload.revision, active: 'component.html', loaded: true });
   editor.value = state.files[state.active];
   $('#crumb-team').textContent = team; $('#crumb-repo').textContent = repo; $('#revision').textContent = payload.revision;
   renderTabs(); metadata(); refreshPreview();
+  $('#save-status').textContent = payload.sourceMode === 'filesystem' ? 'Loaded from mounted source' : 'Loaded from Git main';
 }
 async function loadProjects() {
   const projects = await (await fetch('/api/projects')).json();
@@ -45,11 +47,13 @@ async function loadProjects() {
     button.onclick = () => loadProject(project.team, project.repo).then(loadProjects);
     return button;
   }));
+  if (!state.loaded && projects[0]) await loadProject(projects[0].team, projects[0].repo);
 }
 async function commit() {
   state.files[state.active] = editor.value;
   $('#save-status').textContent = 'Committing source...';
   const response = await fetch(`/api/source/${state.team}/${state.repo}`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ files: state.files, message: `Update ${state.active}` }) });
+  if (!response.ok) { $('#save-status').textContent = 'Commit failed'; return; }
   const result = await response.json();
   state.revision = result.revision; $('#revision').textContent = result.revision;
   $('#save-status').textContent = `Committed ${result.revision}; latest updated`;

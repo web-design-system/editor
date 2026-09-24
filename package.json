@@ -5,5 +5,8 @@
   "scripts": {
     "start": "node server.mjs",
     "check": "node --check server.mjs && node --check public/app.js"
+  },
+  "dependencies": {
+    "@tailwindcss/cli": "^4.3.3"
   }
 }

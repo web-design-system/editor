@@ -1,17 +1,22 @@
 import { createServer } from 'node:http';
-import { mkdir, readFile, writeFile, readdir } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, readdir, cp } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join, normalize, extname } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { createHash } from 'node:crypto';
 
 const exec = promisify(execFile);
 const root = process.cwd();
 const publicDir = join(root, 'public');
 const reposDir = process.env.REPOS_PATH || join(root, 'data', 'repos');
+const volumeRoot = existsSync('/data/web-design-system') ? '/data' : '/data/cloud/volumes/wds.apphor.de/_data';
+const sourcePath = process.env.SOURCE_PATH || join(volumeRoot, 'web-design-system', 'editor');
+const sourceTeam = process.env.SOURCE_TEAM || 'web-design-system';
+const sourceRepo = process.env.SOURCE_REPO || 'editor';
 const port = Number(process.env.PORT || 4173);
 const safePart = /^[a-z0-9][a-z0-9._-]*$/;
-const sourceFiles = ['component.html', 'styles.css', 'buttons.mjs', 'stories.html', 'component.json', 'spec.mjs'];
+const sourceFiles = ['component.html', 'styles.css', 'editor.mjs', 'buttons.mjs', 'stories.html', 'component.json', 'spec.mjs'];
 
 const sample = {
   'component.html': `<template component="acme-button" shadow-dom="open">
@@ -111,6 +116,12 @@ const baseline = {
 
 function valid(...parts) { return parts.every((part) => safePart.test(part)); }
 function repoPath(team, repo) { return join(reposDir, team, repo); }
+function isMountedSource(team, repo) { return team === sourceTeam && repo === sourceRepo && existsSync(join(sourcePath, 'component.json')); }
+function sourceFilePath(file) { return join(sourcePath, file); }
+function releasePath(version, file) { return join(sourcePath, '.wds', 'releases', version, file); }
+function revisionFor(files) {
+  return createHash('sha256').update(sourceFiles.map((file) => files[file] || '').join('\0')).digest('hex').slice(0, 8);
+}
 function contentType(path) {
   return { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.json': 'application/json; charset=utf-8' }[extname(path)] || 'text/plain; charset=utf-8';
 }
@@ -137,6 +148,11 @@ async function ensureRepo(team, repo, files) {
   return path;
 }
 async function listRepos() {
+  if (isMountedSource(sourceTeam, sourceRepo)) {
+    const metadata = JSON.parse(await readFile(sourceFilePath('component.json'), 'utf8'));
+    const files = await readSourceFiles();
+    return [{ team: sourceTeam, repo: sourceRepo, ...metadata, revision: revisionFor(files), sourceMode: 'filesystem' }];
+  }
   if (!existsSync(reposDir)) return [];
   const teams = await readdir(reposDir, { withFileTypes: true });
   const projects = [];
@@ -154,6 +170,11 @@ async function listRepos() {
 }
 async function readRevision(team, repo, revision, file) {
   if (!valid(team, repo) || !safePart.test(revision) || !sourceFiles.includes(file) && !['tokens.css'].includes(file)) return null;
+  if (isMountedSource(team, repo)) {
+    const generated = file === 'styles.css' && revision === 'latest' ? join(sourcePath, 'dist', 'editor.css') : null;
+    const path = generated && existsSync(generated) ? generated : revision === 'latest' ? sourceFilePath(file) : releasePath(revision, file);
+    try { return await readFile(path, 'utf8'); } catch { return null; }
+  }
   const path = repoPath(team, repo);
   if (!existsSync(join(path, '.git'))) return null;
   try {
@@ -168,6 +189,31 @@ async function nextVersion(path, kind) {
   const [major, minor] = versions.sort((a, b) => b[0] - a[0] || b[1] - a[1])[0] || [0, 0];
   return kind === 'major' ? `v${major + 1}.0` : `v${major || 1}.${minor + 1}`;
 }
+async function compileSource() {
+  const cli = join(root, 'node_modules', '.bin', 'tailwindcss');
+  if (!existsSync(cli) || !existsSync(sourceFilePath('styles.css'))) return;
+  await mkdir(join(sourcePath, 'dist'), { recursive: true });
+  await exec(cli, ['-i', 'styles.css', '-o', 'dist/editor.css'], { cwd: sourcePath });
+}
+async function readSourceFiles() {
+  return Object.fromEntries(await Promise.all(sourceFiles.map(async (file) => [file, existsSync(sourceFilePath(file)) ? await readFile(sourceFilePath(file), 'utf8') : ''])));
+}
+async function releaseSource(kind) {
+  const files = await readSourceFiles();
+  const revision = revisionFor(files);
+  const releases = join(sourcePath, '.wds', 'releases');
+  await mkdir(releases, { recursive: true });
+  const entries = await readdir(releases, { withFileTypes: true });
+  const versions = entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name.match(/^v(\d+)\.(\d+)$/)).filter(Boolean).map(([, major, minor]) => [Number(major), Number(minor)]);
+  const [major, minor] = versions.sort((a, b) => b[0] - a[0] || b[1] - a[1])[0] || [0, 0];
+  const version = kind === 'major' ? `v${major + 1}.0` : `v${major || 1}.${minor + 1}`;
+  const destination = join(releases, version);
+  await mkdir(destination, { recursive: true });
+  for (const file of sourceFiles) if (files[file]) await writeFile(join(destination, file), files[file]);
+  if (existsSync(join(sourcePath, 'dist', 'editor.css'))) await cp(join(sourcePath, 'dist', 'editor.css'), join(destination, 'styles.css'));
+  await writeFile(join(destination, 'manifest.json'), JSON.stringify({ version, revision, files: sourceFiles }, null, 2));
+  return { version, revision };
+}
 async function serveStatic(request, response, pathname) {
   const local = normalize(pathname.replace(/^\//, ''));
   if (local.startsWith('..')) return reply(response, 403, { error: 'Forbidden' });
@@ -178,8 +224,11 @@ async function serveStatic(request, response, pathname) {
   } catch { reply(response, 404, 'Not found', 'text/plain'); }
 }
 
-await ensureRepo('acme-corp', 'system', baseline);
-await ensureRepo('acme-corp', 'buttons', sample);
+if (!isMountedSource(sourceTeam, sourceRepo)) {
+  await ensureRepo('acme-corp', 'system', baseline);
+  await ensureRepo('acme-corp', 'buttons', sample);
+}
+await compileSource();
 
 createServer(async (request, response) => {
   const url = new URL(request.url, `http://${request.headers.host}`);
@@ -189,14 +238,23 @@ createServer(async (request, response) => {
     if (request.method === 'GET' && parts[0] === 'api' && parts[1] === 'source') {
       const [,, team, repo] = parts;
       if (!valid(team, repo)) return reply(response, 400, { error: 'Invalid project' });
+      if (isMountedSource(team, repo)) {
+        const files = await readSourceFiles();
+        return reply(response, 200, { files, revision: revisionFor(files), sourceMode: 'filesystem' });
+      }
       const path = repoPath(team, repo);
       const files = Object.fromEntries(await Promise.all(sourceFiles.map(async (file) => [file, existsSync(join(path, file)) ? await readFile(join(path, file), 'utf8') : ''])));
-      return reply(response, 200, { files, revision: (await git(path, ['rev-parse', '--short', 'HEAD'])).stdout.trim() });
+      return reply(response, 200, { files, revision: (await git(path, ['rev-parse', '--short', 'HEAD'])).stdout.trim(), sourceMode: 'git' });
     }
     if (request.method === 'PUT' && parts[0] === 'api' && parts[1] === 'source') {
       const [,, team, repo] = parts;
       const { files, message = 'Update component source' } = await body(request);
       if (!valid(team, repo) || !files) return reply(response, 400, { error: 'Invalid source' });
+      if (isMountedSource(team, repo)) {
+        for (const file of sourceFiles) if (typeof files[file] === 'string') await writeFile(sourceFilePath(file), files[file]);
+        await compileSource();
+        return reply(response, 200, { revision: revisionFor(await readSourceFiles()), sourceMode: 'filesystem' });
+      }
       const path = await ensureRepo(team, repo, files);
       for (const file of sourceFiles) if (typeof files[file] === 'string') await writeFile(join(path, file), files[file]);
       await git(path, ['add', '.']);
@@ -209,6 +267,7 @@ createServer(async (request, response) => {
       const { kind } = await body(request);
       const path = repoPath(team, repo);
       if (!valid(team, repo) || !['major', 'minor'].includes(kind)) return reply(response, 400, { error: 'Invalid release' });
+      if (isMountedSource(team, repo)) return reply(response, 201, await releaseSource(kind));
       const version = await nextVersion(path, kind);
       await git(path, ['tag', '-a', version, '-m', `Release ${version}`]);
       return reply(response, 201, { version, revision: (await git(path, ['rev-parse', '--short', 'HEAD'])).stdout.trim() });

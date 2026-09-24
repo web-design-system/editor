@@ -17,7 +17,7 @@ const sourceRepo = process.env.SOURCE_REPO || 'editor';
 const sourceTeamPath = join(volumeRoot, sourceTeam);
 const port = Number(process.env.PORT || 4173);
 const safePart = /^[a-z0-9][a-z0-9._-]*$/;
-const sourceFiles = ['component.html', 'styles.css', 'editor.mjs', 'buttons.mjs', 'action-button.mjs', 'viewport-control.mjs', 'registry.mjs', 'editor-tabs.mjs', 'studio.mjs', 'inspector.mjs', 'preview.mjs', 'workbench.mjs', 'stories.html', 'component.json', 'spec.mjs'];
+const sourceFiles = ['component.html', 'styles.css', 'editor.mjs', 'buttons.mjs', 'action-button.mjs', 'viewport-control.mjs', 'registry.mjs', 'editor-tabs.mjs', 'studio.mjs', 'inspector.mjs', 'preview.mjs', 'workbench.mjs', 'nav-tab.mjs', 'range-input.mjs', 'repo-item.mjs', 'stories.html', 'component.json', 'spec.mjs'];
 const assetFiles = [...sourceFiles, 'manifest.json'];
 
 const sample = {

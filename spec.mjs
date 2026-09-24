@@ -13,6 +13,7 @@ test('keeps legacy WDS color and spacing definitions in Tailwind source', async 
   assert.match(source, /@utility wds-btn/);
   assert.match(source, /@utility wds-tabs__button/);
   assert.match(source, /@utility wds-editor__console/);
+  assert.match(source, /@utility wds-workbench__action/);
 });
 
 test('component explicitly loads its authored stylesheet and setup module', async () => {

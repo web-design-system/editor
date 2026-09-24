@@ -11,8 +11,8 @@
         <span slot="title">{{ team }}</span>
         <wds-action-button on-press="createComponent()">New component</wds-action-button>
         <nav class="mt-lg grid gap-xxs text-sm">
-          <button class="text-left font-bold text-white">{{ component }}</button>
-          <button class="wds-workbench__muted text-left">Baseline styles</button>
+          <wds-action-button tone="quiet">{{ component }}</wds-action-button>
+          <wds-action-button tone="quiet">Baseline styles</wds-action-button>
         </nav>
       </wds-panel>
     </aside>

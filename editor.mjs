@@ -16,8 +16,8 @@ export default function () {
     status.value = 'Unsaved changes';
   }
 
-  function setViewport(event) {
-    viewport.value = Number(event.target.value);
+  function setViewport(value) {
+    viewport.value = Number(value);
   }
 
   function commit() {

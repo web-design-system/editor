@@ -22,4 +22,7 @@ test('component explicitly loads its authored stylesheet and setup module', asyn
   assert.match(source, /href="\.\/styles\.css"/);
   assert.match(source, /src="\.\/editor\.mjs"/);
   assert.match(source, /shadow-dom="open"/);
+  assert.match(source, /action-button\/latest\/component\.html/);
+  assert.match(source, /panel\/latest\/component\.html/);
+  assert.match(source, /viewport-control\/latest\/component\.html/);
 });

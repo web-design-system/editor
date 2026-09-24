@@ -262,7 +262,11 @@ createServer(async (request, response) => {
       const { files, message = 'Update component source' } = await body(request);
       if (!valid(team, repo) || !files) return reply(response, 400, { error: 'Invalid source' });
       if (isMountedSource(team, repo)) {
-        for (const file of sourceFiles) if (typeof files[file] === 'string') await writeFile(sourceFilePath(file), files[file]);
+        for (const file of sourceFiles) {
+          if (typeof files[file] === 'string' && (files[file] || existsSync(sourceFilePath(file)))) {
+            await writeFile(sourceFilePath(file), files[file]);
+          }
+        }
         await compileSource();
         return reply(response, 200, { revision: revisionFor(await readSourceFiles()), sourceMode: 'filesystem' });
       }

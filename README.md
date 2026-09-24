@@ -153,7 +153,7 @@ AI is a phase-two authoring tool, not a central runtime dependency. It may later
 
 ## Development
 
-This project has no application dependencies. pnpm is used for dependency operations and the production image retains only production dependencies.
+The workbench UI is composed from Li3 components loaded from the mounted design-system source. pnpm is used for dependency operations and the production image retains only production dependencies.
 
 ```sh
 pnpm start
@@ -177,10 +177,12 @@ Mount `/data` in deployment so authored Git repositories persist across containe
 Implemented now:
 
 - Dark three-pane editor shell with project registry, source tabs, design inspector, and live styleguide canvas.
+- Topbar, registry, studio, editor tabs, inspector, preview, action button, panel, viewport control, and workbench components are independently authored in the mounted design-system source.
 - Local Git repository creation for sample `acme-corp/system` and `acme-corp/buttons` repositories.
 - Commit-to-`latest` source updates and Git tag creation for major/minor releases.
 - Public static component/styleguide asset serving.
 - Li3 sample component with explicit baseline CSS and separate ESM setup module.
+- Mounted component source is compiled through the Tailwind 4 CLI with minified output served as `styles.css`.
 - Resizable preview width and breakpoint shortcuts.
 - Production Docker build and HTTP smoke test.
 

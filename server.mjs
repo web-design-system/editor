@@ -17,6 +17,7 @@ const sourceRepo = process.env.SOURCE_REPO || 'editor';
 const port = Number(process.env.PORT || 4173);
 const safePart = /^[a-z0-9][a-z0-9._-]*$/;
 const sourceFiles = ['component.html', 'styles.css', 'editor.mjs', 'buttons.mjs', 'stories.html', 'component.json', 'spec.mjs'];
+const assetFiles = [...sourceFiles, 'manifest.json'];
 
 const sample = {
   'component.html': `<template component="acme-button" shadow-dom="open">
@@ -169,7 +170,7 @@ async function listRepos() {
   return projects;
 }
 async function readRevision(team, repo, revision, file) {
-  if (!valid(team, repo) || !safePart.test(revision) || !sourceFiles.includes(file) && !['tokens.css'].includes(file)) return null;
+  if (!valid(team, repo) || !safePart.test(revision) || !assetFiles.includes(file)) return null;
   if (isMountedSource(team, repo)) {
     const generated = file === 'styles.css' && revision === 'latest' ? join(sourcePath, 'dist', 'editor.css') : null;
     const path = generated && existsSync(generated) ? generated : revision === 'latest' ? sourceFilePath(file) : releasePath(revision, file);
@@ -213,6 +214,16 @@ async function releaseSource(kind) {
   if (existsSync(join(sourcePath, 'dist', 'editor.css'))) await cp(join(sourcePath, 'dist', 'editor.css'), join(destination, 'styles.css'));
   await writeFile(join(destination, 'manifest.json'), JSON.stringify({ version, revision, files: sourceFiles }, null, 2));
   return { version, revision };
+}
+async function runSpecs(team, repo) {
+  const cwd = isMountedSource(team, repo) ? sourcePath : repoPath(team, repo);
+  if (!existsSync(join(cwd, 'spec.mjs'))) return { code: 0, output: 'No spec.mjs found.' };
+  try {
+    const result = await exec(process.execPath, ['--test', 'spec.mjs'], { cwd });
+    return { code: 0, output: `${result.stdout}${result.stderr}`.trim() };
+  } catch (error) {
+    return { code: error.code || 1, output: `${error.stdout || ''}${error.stderr || error.message}`.trim() };
+  }
 }
 async function serveStatic(request, response, pathname) {
   const local = normalize(pathname.replace(/^\//, ''));
@@ -271,6 +282,11 @@ createServer(async (request, response) => {
       const version = await nextVersion(path, kind);
       await git(path, ['tag', '-a', version, '-m', `Release ${version}`]);
       return reply(response, 201, { version, revision: (await git(path, ['rev-parse', '--short', 'HEAD'])).stdout.trim() });
+    }
+    if (request.method === 'POST' && parts[0] === 'api' && parts[1] === 'test') {
+      const [,, team, repo] = parts;
+      if (!valid(team, repo)) return reply(response, 400, { error: 'Invalid project' });
+      return reply(response, 200, await runSpecs(team, repo));
     }
     if (request.method === 'GET' && parts[0] === 'static' && parts.length === 5) {
       const [, team, repo, revision, file] = parts;

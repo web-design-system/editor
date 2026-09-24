@@ -59,6 +59,14 @@ async function commit() {
   $('#save-status').textContent = `Committed ${result.revision}; latest updated`;
   metadata(); refreshPreview(); loadProjects();
 }
+async function runTests() {
+  $('#save-status').textContent = 'Running spec...';
+  const response = await fetch(`/api/test/${state.team}/${state.repo}`, { method: 'POST' });
+  const result = await response.json();
+  $('#test-output').textContent = result.output || 'No output';
+  $('#test-output').className = result.code ? 'failed' : 'passed';
+  $('#save-status').textContent = result.code ? `Spec failed with code ${result.code}` : 'Spec passed';
+}
 function setupViewport() {
   const range = $('#viewport'); const frame = $('#frame');
   const points = [['sm', 640], ['md', 768], ['lg', 1024]];
@@ -67,6 +75,7 @@ function setupViewport() {
   $('#breakpoints').replaceChildren(...points.map(([name, width]) => { const button = document.createElement('button'); button.textContent = `${name} ${width}`; button.onclick = () => { range.value = width; update(); }; return button; }));
 }
 $('#commit').onclick = commit;
+$('#run-tests').onclick = runTests;
 editor.addEventListener('keydown', (event) => { if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); commit(); } });
 $('#release').onclick = () => $('#release-dialog').showModal();
 $('#release-dialog').addEventListener('close', async () => {

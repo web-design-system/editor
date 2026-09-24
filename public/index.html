@@ -22,7 +22,7 @@
       <section class="studio">
         <header class="studio-bar">
           <div><span id="crumb-team">acme-corp</span> / <strong id="crumb-repo">buttons</strong> <code id="revision">...</code></div>
-          <div class="actions"><button id="commit" class="outline">Commit to latest</button><button id="release" class="primary">Release</button></div>
+          <div class="actions"><button id="run-tests" class="outline">Run spec</button><button id="commit" class="outline">Commit to latest</button><button id="release" class="primary">Release</button></div>
         </header>
         <div class="editor-tabs" id="tabs"></div>
         <textarea id="editor" spellcheck="false" aria-label="Source editor"></textarea>
@@ -32,6 +32,7 @@
         <div class="pane-title"><h2>Design inspector</h2><p id="description">Loading metadata</p></div>
         <dl id="metadata"></dl>
         <section class="import-list"><h3>Release contract</h3><p>Every external CSS, HTML component, and ESM URL remains explicit in source.</p><a id="component-url" target="preview">Open latest component</a><a id="styleguide-url" target="preview">Open latest styleguide</a></section>
+        <section class="test-panel"><h3>Spec output</h3><pre id="test-output">No run yet.</pre></section>
       </aside>
       <section class="preview">
         <header class="preview-bar"><span>LIVE STYLEGUIDE</span><div id="breakpoints" class="breakpoints"></div><span id="width-readout">960 px</span></header>

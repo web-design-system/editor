@@ -110,7 +110,7 @@
 
 /* The new workbench is separate from the legacy editor component API. */
 @utility wds-workbench {
-  @apply grid min-h-[42rem] grid-cols-[14rem_minmax(0,1fr)_16rem] overflow-hidden rounded-xl border border-slate-700 bg-slate-950 text-slate-100 shadow-2xl;
+  @apply grid min-h-[42rem] grid-cols-[minmax(0,1fr)_16rem] overflow-hidden rounded-xl border border-slate-700 bg-slate-950 text-slate-100 shadow-2xl;
 }
 
 @utility wds-workbench__sidebar {

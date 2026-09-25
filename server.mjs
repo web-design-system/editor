@@ -17,7 +17,7 @@ const sourceRepo = process.env.SOURCE_REPO || 'editor';
 const sourceTeamPath = join(volumeRoot, sourceTeam);
 const port = Number(process.env.PORT || 4173);
 const safePart = /^[a-z0-9][a-z0-9._-]*$/;
-const sourceFiles = ['component.html', 'styles.css', 'editor.mjs', 'buttons.mjs', 'action-button.mjs', 'viewport-control.mjs', 'registry.mjs', 'editor-tabs.mjs', 'studio.mjs', 'inspector.mjs', 'preview.mjs', 'workbench.mjs', 'nav-tab.mjs', 'range-input.mjs', 'repo-item.mjs', 'stories.html', 'component.json', 'spec.mjs'];
+const sourceFiles = ['component.html', 'styles.css', 'editor.mjs', 'buttons.mjs', 'action-button.mjs', 'viewport-control.mjs', 'registry.mjs', 'editor-tabs.mjs', 'studio.mjs', 'inspector.mjs', 'preview.mjs', 'workbench.mjs', 'topbar.mjs', 'repo-switcher.mjs', 'mode-toggle.mjs', 'nav-tab.mjs', 'range-input.mjs', 'repo-item.mjs', 'stories.html', 'component.json', 'spec.mjs'];
 const assetFiles = [...sourceFiles, 'manifest.json'];
 
 const sample = {
@@ -236,6 +236,13 @@ async function runSpecs(team, repo) {
     return { code: error.code || 1, output: `${error.stdout || ''}${error.stderr || error.message}`.trim() };
   }
 }
+async function componentPreview(team, repo, revision) {
+  const source = await readRevision(team, repo, revision, 'component.html');
+  const name = source?.match(/component=["']([^"']+)["']/)?.[1];
+  if (!name) return null;
+  const base = `/static/${team}/${repo}/${revision}`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><script type="importmap">{"imports":{"@li3/":"https://cdn.li3.dev/@li3/"}}</script><script type="module">import '@li3/web';</script><link rel="component" href="${base}/component.html"></head><body><template app><${name}></${name}></template></body></html>`;
+}
 async function serveStatic(request, response, pathname) {
   const local = normalize(pathname.replace(/^\//, ''));
   if (local.startsWith('..')) return reply(response, 403, { error: 'Forbidden' });
@@ -316,6 +323,10 @@ createServer(async (request, response) => {
     }
     if (request.method === 'GET' && parts[0] === 'static' && parts.length === 5) {
       const [, team, repo, revision, file] = parts;
+      if (file === 'component.html' && url.searchParams.get('view') === 'component') {
+        const preview = await componentPreview(team, repo, revision);
+        if (preview) { response.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': revision === 'latest' ? 'no-store' : 'public, max-age=31536000, immutable' }); return response.end(preview); }
+      }
       const asset = await readRevision(team, repo, revision, file);
       if (asset === null) return reply(response, 404, 'Not found', 'text/plain');
       response.writeHead(200, { 'content-type': contentType(file), 'cache-control': revision === 'latest' ? 'no-store' : 'public, max-age=31536000, immutable' });

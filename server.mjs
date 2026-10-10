@@ -12,8 +12,8 @@ const root = process.cwd();
 const publicDir = join(root, "public");
 const gitApi = process.env.GIT_API_URL?.replace(/\/$/, "");
 const gitToken = process.env.GIT_API_TOKEN;
-const gitAuthorName = process.env.GIT_AUTHOR_NAME;
-const gitAuthorEmail = process.env.GIT_AUTHOR_EMAIL;
+const gitAuthorName = "Design System";
+const gitAuthorEmail = "system@wds.local";
 const unsandboxedSpecsEnabled = process.env.WDS_ENABLE_UNSANDBOXED_SPECS === "true";
 const remoteCache = await mkdtemp(join(tmpdir(), "wds-next-remote-repos-"));
 process.once("exit", () => rmSync(remoteCache, { recursive: true, force: true }));
@@ -356,11 +356,6 @@ function remoteRequired() {
   }
 }
 function configureGitAuthor(path) {
-  if (!gitAuthorName || !gitAuthorEmail) {
-    const error = new Error("GIT_AUTHOR_NAME and GIT_AUTHOR_EMAIL are required to create Git commits.");
-    error.status = 503;
-    throw error;
-  }
   return Promise.all([
     git(path, ["config", "user.name", gitAuthorName]),
     git(path, ["config", "user.email", gitAuthorEmail]),

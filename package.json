@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "build": "echo true",
     "start": "node server.mjs",
     "check": "node --check server.mjs"
   },

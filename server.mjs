@@ -430,7 +430,8 @@ async function remoteRepo(team, repo, create = false) {
   const path = join(remoteCache, team, repo);
   await mkdir(join(remoteCache, team), { recursive: true });
   const url = `${gitApi}/git/${encodeURIComponent(team)}/${encodeURIComponent(repo)}.git`;
-  if (!existsSync(join(path, ".git"))) {
+  const freshCheckout = !existsSync(join(path, ".git"));
+  if (freshCheckout) {
     if (exists && entries.some((entry) => entry.team === team && entry.repo === repo)) {
       await git(remoteCache, ["clone", url, path], true);
     } else {
@@ -449,44 +450,60 @@ async function remoteRepo(team, repo, create = false) {
       .then(() => true)
       .catch(() => false);
     if (remoteMain) {
-      const dirty = (await git(path, ["status", "--porcelain"])).stdout;
-      if (dirty.trim()) {
-        throw new Error("Repository cache has uncommitted changes; refusing to overwrite them.");
-      }
-      const hasLocalHead = await git(path, ["rev-parse", "--verify", "HEAD"])
-        .then(() => true)
-        .catch(() => false);
-      if (!hasLocalHead) {
+      if (freshCheckout) {
+        // The Git API can advertise master as HEAD even when WDS stores its canonical branch on main.
         await git(path, ["checkout", "-B", "main", "origin/main"]);
       } else {
-        const [localHead, remoteHead] = await Promise.all([
-          git(path, ["rev-parse", "HEAD"]).then(({ stdout }) => stdout.trim()),
-          git(path, ["rev-parse", "refs/remotes/origin/main"]).then(({ stdout }) => stdout.trim()),
-        ]);
-        if (localHead === remoteHead) {
-          const branch = (await git(path, ["branch", "--show-current"])).stdout.trim();
-          if (branch !== "main") {
-            await git(path, ["checkout", "-B", "main", "origin/main"]);
-          }
+        const dirty = (await git(path, ["status", "--porcelain"])).stdout;
+        if (dirty.trim()) {
+          throw new Error("Repository cache has uncommitted changes; refusing to overwrite them.");
+        }
+        const hasLocalHead = await git(path, ["rev-parse", "--verify", "HEAD"])
+          .then(() => true)
+          .catch(() => false);
+        if (!hasLocalHead) {
+          await git(path, ["checkout", "-B", "main", "origin/main"]);
         } else {
-          const localBehind = await git(path, ["merge-base", "--is-ancestor", "HEAD", "origin/main"])
-            .then(() => true)
-            .catch(() => false);
-          if (localBehind) {
-            await git(path, ["checkout", "-B", "main", "origin/main"]);
+          const [localHead, remoteHead] = await Promise.all([
+            git(path, ["rev-parse", "HEAD"]).then(({ stdout }) => stdout.trim()),
+            git(path, ["rev-parse", "refs/remotes/origin/main"]).then(({ stdout }) => stdout.trim()),
+          ]);
+          if (localHead === remoteHead) {
+            const branch = (await git(path, ["branch", "--show-current"])).stdout.trim();
+            if (branch !== "main") {
+              await git(path, ["checkout", "-B", "main", "origin/main"]);
+            }
           } else {
-            const localAhead = await git(path, ["merge-base", "--is-ancestor", "origin/main", "HEAD"])
+            const localBehind = await git(path, ["merge-base", "--is-ancestor", "HEAD", "origin/main"])
               .then(() => true)
               .catch(() => false);
-            if (!localAhead) {
-              throw new Error("Local and remote main branches diverged; refusing to discard either history.");
+            if (localBehind) {
+              await git(path, ["checkout", "-B", "main", "origin/main"]);
+            } else {
+              const localAhead = await git(path, ["merge-base", "--is-ancestor", "origin/main", "HEAD"])
+                .then(() => true)
+                .catch(() => false);
+              if (!localAhead) {
+                throw new Error("Local and remote main branches diverged; refusing to discard either history.");
+              }
             }
           }
         }
       }
     } else {
       const remoteBranches = (await git(path, ["for-each-ref", "--format=%(refname)", "refs/remotes/origin"])).stdout;
-      if (remoteBranches.trim()) {
+      if (remoteBranches.includes("refs/remotes/origin/master")) {
+        // Promote the Git API's initial master branch without discarding its history.
+        const hasLocalHead = await git(path, ["rev-parse", "--verify", "HEAD"])
+          .then(() => true)
+          .catch(() => false);
+        if (!hasLocalHead || freshCheckout) {
+          await git(path, ["checkout", "-B", "main", "origin/master"]);
+          await git(path, ["push", "-u", "origin", "main"], true);
+        } else {
+          throw new Error("Repository has a master branch but no main branch; refusing to discard its history.");
+        }
+      } else if (remoteBranches.trim()) {
         throw new Error("WDS Git repositories must use the main branch.");
       }
     }

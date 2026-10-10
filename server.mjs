@@ -944,6 +944,7 @@ createServer(async (request, response) => {
         await git(path, ["add", "."]);
         const status = (await git(path, ["status", "--porcelain"])).stdout;
         if (status.trim()) {
+          await configureGitAuthor(path);
           await git(path, ["commit", "-m", message]);
         }
         await git(path, ["push", "origin", "main"], true);

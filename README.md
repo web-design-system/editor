@@ -120,18 +120,17 @@ The component HTML is the consumer entrypoint. The styleguide is a separate gene
 
 ## Authentication And Teams
 
-The production service will integrate OIDC with `https://auth.api.apphor.de/`, which supports authorization-code flow with PKCE and RS256 identity tokens.
-
-- Any authenticated user can create a team.
-- A team owns all its baseline and component repositories.
-- Team members have equal v1 permissions: create/delete repositories, commit, release, and create invitations.
-- Invitations are shared as copyable, single-use links. The service does not send email or messages.
-
-The prototype currently has no authentication or authorization enforcement.
+The service uses OIDC authorization-code flow with PKCE through `https://auth.api.apphor.de/` in production. Editor APIs require an authenticated OIDC session and an explicit subject allowlist. Team membership, per-team authorization, repository deletion, and invitations are not implemented yet.
 
 ## Persistence And Runtime
 
-Source repositories live on a Docker-mounted path under `/data`. The application currently defaults to `data/repos` locally; set `REPOS_PATH` to use a mounted production path.
+Git-managed repositories are stored by the Git API at `https://git.api.apphor.de`. Set `GIT_API_TOKEN` to an opaque OIDC access token with repository read/write scopes. The application lists organizations and repositories through the API and reads/writes repository history over Smart HTTP. Git credentials are supplied through a temporary askpass helper and environment variable, never embedded in remote URLs or command arguments. Set `GIT_API_URL` only when using a compatible API endpoint. Git operations fail clearly when the token is missing; no local Git fallback is used. A private per-process clone cache is kept under the system temporary directory and removed on exit.
+
+Before enabling repository APIs, configure `OIDC_ISSUER` (production: `https://auth.api.apphor.de`), `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET` (when using a confidential client), `OIDC_REDIRECT_URI` (registered callback URL), and `WDS_ALLOWED_SUBJECTS` (comma-separated OIDC `sub` values). Start sign-in at `/api/oidc/login` and sign out at `/api/oidc/logout`. Project listing, source reads/writes, releases, and test execution require a signed-in, allowlisted user. Static artifacts remain public. All allowlisted users share the permissions of the configured Git API token; do not allowlist untrusted users until per-team authorization is implemented. Spec execution is disabled by default. `WDS_ENABLE_UNSANDBOXED_SPECS=true` opts into running specs with Node.js as the application account, with the environment secrets removed and a 30-second timeout; filesystem and network access are not sandboxed, so enable it only for trusted code or an isolated deployment.
+
+Existing repositories under the former local `data/repos` or `REPOS_PATH` storage are not automatically imported. Keep those directories as backups and migrate their Git history to the API before switching users over.
+
+The mounted source configured with `SOURCE_PATH` remains filesystem-backed and bypasses remote Git storage, including its compile/release behavior.
 
 The planned metadata store is the d0 SQLite API at `https://wds-test.db.apphor.de/api`. It will own users, teams, invitations, repository records, sessions, releases, build records, and public share metadata. Git remains the authoritative source and revision store.
 

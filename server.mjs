@@ -10,15 +10,18 @@ import { tmpdir } from "node:os";
 const exec = promisify(execFile);
 const root = process.cwd();
 const publicDir = join(root, "public");
-const gitApi = (process.env.GIT_API_URL || "https://git.api.apphor.de").replace(/\/$/, "");
+const gitApi = process.env.GIT_API_URL?.replace(/\/$/, "");
 const gitToken = process.env.GIT_API_TOKEN;
+const gitAuthorName = process.env.GIT_AUTHOR_NAME;
+const gitAuthorEmail = process.env.GIT_AUTHOR_EMAIL;
 const unsandboxedSpecsEnabled = process.env.WDS_ENABLE_UNSANDBOXED_SPECS === "true";
 const remoteCache = await mkdtemp(join(tmpdir(), "wds-next-remote-repos-"));
 process.once("exit", () => rmSync(remoteCache, { recursive: true, force: true }));
-const volumeRoot = existsSync("/data/web-design-system") ? "/data" : "/data/cloud/volumes/wds.apphor.de/_data";
-const sourcePath = process.env.SOURCE_PATH || join(volumeRoot, "web-design-system", "editor");
-const sourceTeam = process.env.SOURCE_TEAM || "web-design-system";
-const sourceTeamPath = join(volumeRoot, sourceTeam);
+const sourceTeam = process.env.SOURCE_TEAM;
+const sourceTeamPath = process.env.SOURCE_TEAM_PATH;
+if (Boolean(sourceTeam) !== Boolean(sourceTeamPath)) {
+  throw new Error("Configure SOURCE_TEAM and SOURCE_TEAM_PATH together, or leave both unset.");
+}
 const port = Number(process.env.PORT || 4173);
 const safePart = /^[a-z0-9][a-z0-9._-]*$/;
 const sourceFiles = [
@@ -41,6 +44,7 @@ const sourceFiles = [
   "range-input.mjs",
   "repo-item.mjs",
   "share-qr.mjs",
+  "user-card.mjs",
   "stories.html",
   "component.json",
   "spec.mjs",
@@ -294,16 +298,16 @@ async function withRepoLock(team, repo, operation) {
   }
 }
 function mountedPath(team, repo) {
-  return team === sourceTeam && valid(repo) ? join(sourceTeamPath, repo) : null;
+  return sourceTeamPath && team === sourceTeam && valid(repo) ? join(sourceTeamPath, repo) : null;
 }
 function isMountedSource(team, repo) {
   const path = mountedPath(team, repo);
   return Boolean(path && existsSync(join(path, "component.json")));
 }
-function sourceFilePath(file, path = sourcePath) {
+function sourceFilePath(file, path) {
   return join(path, file);
 }
-function releasePath(version, file, path = sourcePath) {
+function releasePath(version, file, path) {
   return join(path, ".wds", "releases", version, file);
 }
 function revisionFor(files) {
@@ -338,6 +342,11 @@ async function git(cwd, args, remote = false) {
   return exec("git", ["-C", cwd, ...args], { env });
 }
 function remoteRequired() {
+  if (!gitApi) {
+    const error = new Error("GIT_API_URL is required for Git-managed repositories.");
+    error.status = 503;
+    throw error;
+  }
   if (!gitToken) {
     const error = new Error(
       "GIT_API_TOKEN is required for Git-managed repositories; configure the opaque OIDC access token.",
@@ -345,6 +354,17 @@ function remoteRequired() {
     error.status = 503;
     throw error;
   }
+}
+function configureGitAuthor(path) {
+  if (!gitAuthorName || !gitAuthorEmail) {
+    const error = new Error("GIT_AUTHOR_NAME and GIT_AUTHOR_EMAIL are required to create Git commits.");
+    error.status = 503;
+    throw error;
+  }
+  return Promise.all([
+    git(path, ["config", "user.name", gitAuthorName]),
+    git(path, ["config", "user.email", gitAuthorEmail]),
+  ]);
 }
 async function api(path, options = {}) {
   remoteRequired();
@@ -422,8 +442,6 @@ async function remoteRepo(team, repo, create = false) {
       await mkdir(path, { recursive: true });
       await git(path, ["init", "--initial-branch=main"]);
     }
-    await git(path, ["config", "user.name", "WDS Prototype"]);
-    await git(path, ["config", "user.email", "prototype@wds.apphor.de"]);
     await git(path, ["remote", "set-url", "origin", url]).catch(async () => {
       await git(path, ["remote", "add", "origin", url]);
     });
@@ -504,8 +522,7 @@ async function ensureRepo(team, repo, files) {
       await writeFile(join(path, file), files[file]);
     }
   }
-  await git(path, ["config", "user.name", "WDS Prototype"]);
-  await git(path, ["config", "user.email", "prototype@wds.apphor.de"]);
+  await configureGitAuthor(path);
   await git(path, ["add", "."]);
   await git(path, ["commit", "-m", "Initial component source"]);
   await git(path, ["push", "-u", "origin", "main"], true);
@@ -513,7 +530,7 @@ async function ensureRepo(team, repo, files) {
 }
 async function listRepos() {
   const projects = [];
-  if (existsSync(sourceTeamPath)) {
+  if (sourceTeamPath && existsSync(sourceTeamPath)) {
     const entries = await readdir(sourceTeamPath, { withFileTypes: true });
     for (const entry of entries.filter((item) => item.isDirectory() && valid(item.name))) {
       if (!isMountedSource(sourceTeam, entry.name)) {
@@ -605,7 +622,10 @@ async function nextVersion(path, kind) {
   const [major, minor] = versions.sort((a, b) => b[0] - a[0] || b[1] - a[1])[0] || [0, 0];
   return kind === "major" ? `v${major + 1}.0` : `v${major || 1}.${minor + 1}`;
 }
-async function compileSource(path = sourcePath) {
+async function compileSource(path) {
+  if (!path) {
+    return;
+  }
   const cli = join(root, "node_modules", ".bin", "tailwindcss");
   if (!existsSync(cli) || !existsSync(sourceFilePath("styles.css", path))) {
     return;
@@ -613,7 +633,7 @@ async function compileSource(path = sourcePath) {
   await mkdir(join(path, "dist"), { recursive: true });
   await exec(cli, ["-i", "styles.css", "-o", "dist/editor.css", "--minify"], { cwd: path });
 }
-async function readSourceFiles(path = sourcePath) {
+async function readSourceFiles(path) {
   return Object.fromEntries(
     await Promise.all(
       sourceFiles.map(async (file) => [
@@ -728,15 +748,13 @@ async function serveStatic(request, response, pathname) {
 }
 
 // Git-managed projects are initialized on demand in the remote store; never create local shadow repos.
-if (existsSync(sourceTeamPath)) {
+if (sourceTeamPath && existsSync(sourceTeamPath)) {
   const entries = await readdir(sourceTeamPath, { withFileTypes: true });
   for (const entry of entries.filter((item) => item.isDirectory() && valid(item.name))) {
     if (isMountedSource(sourceTeam, entry.name)) {
       await compileSource(mountedPath(sourceTeam, entry.name));
     }
   }
-} else {
-  await compileSource();
 }
 
 createServer(async (request, response) => {

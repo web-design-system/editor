@@ -13,13 +13,11 @@ test("landing page lists teams and design systems without depending on component
   assert.match(html, /Teams own design systems/);
   assert.match(html, /Git organization slug/);
   assert.match(app, /fetch\("\/api\/teams"/);
-  assert.match(app, /fetch\("\/api\/projects"/);
-  assert.match(app, /project\.type === "design-system"/);
+  assert.match(app, /fetch\("\/api\/design-systems"/);
   assert.match(app, /\/\?team=\$\{encodeURIComponent\(system\.org \|\| system\.team\)\}&amp;repo=/);
   assert.match(app, /\/api\/oidc\/me/);
   assert.match(app, /\/api\/oidc\/login/);
   assert.match(app, /fetch\("\/api\/teams", \{/);
-  assert.match(app, /fetch\("\/api\/projects", \{/);
   assert.match(app, /teamForm\.addEventListener\("submit"/);
   assert.match(app, /systemForm\.addEventListener\("submit"/);
   assert.match(app, /Sign-in could not be completed/);

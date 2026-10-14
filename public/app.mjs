@@ -129,42 +129,31 @@ async function loadWorkspace() {
   }
   document.querySelector("#creation-controls").hidden = false;
   try {
-    const [response, teamsResponse, systemsResponse] = await Promise.all([
-      fetch("/api/projects", { credentials: "same-origin" }),
+    const [teamsResponse, systemsResponse] = await Promise.all([
       fetch("/api/teams", { credentials: "same-origin" }),
       fetch("/api/design-systems", { credentials: "same-origin" }),
     ]);
-    if (response.status === 401) {
+    if (teamsResponse.status === 401 || systemsResponse.status === 401) {
       setNotice("Your session has expired.", true);
       return;
     }
-    if (!response.ok) {
-      const data = await response.json().catch(() => ({}));
-      setNotice(data.error || `Could not load teams (HTTP ${response.status}).`);
+    if (!teamsResponse.ok || !systemsResponse.ok) {
+      const data = await responseData(teamsResponse.ok ? systemsResponse : teamsResponse);
+      setNotice(data.error || "Could not load teams and design systems.");
       teamList.innerHTML = '<span class="section-note">Teams are unavailable.</span>';
       systemGrid.innerHTML = '<div class="empty">Could not load design systems. Please try again.</div>';
       return;
     }
-    const projects = await response.json();
-    const teamData = teamsResponse.ok ? await teamsResponse.json() : { teams: [] };
+    const teamData = await teamsResponse.json();
+    const registered = await systemsResponse.json();
     teams = Array.isArray(teamData.teams) ? teamData.teams : [];
-    systems = Array.isArray(projects) ? projects.filter((project) => project.type === "design-system") : [];
-    if (systemsResponse.ok) {
-      const registered = await systemsResponse.json();
-      for (const system of registered.designSystems || []) {
-        const existing = systems.find((item) => item.team === system.git_org && item.repo === system.foundation_repo);
-        if (existing) {
-          systems.splice(systems.indexOf(existing), 1);
-        }
-        systems.push({
-          team: teams.find((item) => item.id === system.team_id)?.slug || system.git_org,
-          org: system.git_org,
-          repo: system.foundation_repo,
-          name: system.name,
-          type: "design-system",
-        });
-      }
-    }
+    systems = (registered.designSystems || []).map((system) => ({
+      team: teams.find((item) => item.id === system.team_id)?.slug || system.git_org,
+      org: system.git_org,
+      repo: system.foundation_repo,
+      name: system.name,
+      type: "design-system",
+    }));
     renderTeams();
     renderSystems();
   } catch {
@@ -177,32 +166,23 @@ async function responseData(response) {
   return response.json().catch(() => ({}));
 }
 async function refreshWorkspace() {
-  const [projectsResponse, teamsResponse, systemsResponse] = await Promise.all([
-    fetch("/api/projects", { credentials: "same-origin" }),
+  const [teamsResponse, systemsResponse] = await Promise.all([
     fetch("/api/teams", { credentials: "same-origin" }),
     fetch("/api/design-systems", { credentials: "same-origin" }),
   ]);
-  const projects = await responseData(projectsResponse);
   const teamData = await responseData(teamsResponse);
   const registered = await responseData(systemsResponse);
-  if (!projectsResponse.ok || !teamsResponse.ok || !systemsResponse.ok) {
-    throw new Error(projects.error || teamData.error || "Could not refresh teams and design systems.");
-  }
-  systems = Array.isArray(projects) ? projects.filter((project) => project.type === "design-system") : [];
-  for (const system of registered.designSystems || []) {
-    const existing = systems.find((item) => item.team === system.git_org && item.repo === system.foundation_repo);
-    if (existing) {
-      systems.splice(systems.indexOf(existing), 1);
-    }
-    systems.push({
-      team: teamData.teams.find((item) => item.id === system.team_id)?.slug || system.git_org,
-      org: system.git_org,
-      repo: system.foundation_repo,
-      name: system.name,
-      type: "design-system",
-    });
+  if (!teamsResponse.ok || !systemsResponse.ok) {
+    throw new Error(teamData.error || registered.error || "Could not refresh teams and design systems.");
   }
   teams = Array.isArray(teamData.teams) ? teamData.teams : [];
+  systems = (registered.designSystems || []).map((system) => ({
+    team: teams.find((item) => item.id === system.team_id)?.slug || system.git_org,
+    org: system.git_org,
+    repo: system.foundation_repo,
+    name: system.name,
+    type: "design-system",
+  }));
   renderTeams();
   renderSystems();
 }

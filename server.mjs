@@ -46,25 +46,10 @@ const excludedPaths = new Set([".git", "node_modules", ".wds", "dist"]);
 const oidcIssuer = process.env.OIDC_ISSUER;
 const oidcClientId = process.env.OIDC_CLIENT_ID;
 const oidcClientSecret = process.env.OIDC_CLIENT_SECRET;
-const oidcRedirectUri =
-  process.env.OIDC_REDIRECT_URI ||
-  (() => {
-    if (!oidcClientId) {
-      return null;
-    }
-    try {
-      const clientOrigin = new URL(`https://${oidcClientId}`);
-      if (clientOrigin.hostname !== oidcClientId || clientOrigin.pathname !== "/") {
-        return null;
-      }
-      return new URL("/auth/callback", clientOrigin).href;
-    } catch {
-      return null;
-    }
-  })();
+const oidcRedirectUri = process.env.OIDC_REDIRECT_URI;
 const oidcCallbackPath = (() => {
   try {
-    return oidcRedirectUri ? new URL(oidcRedirectUri).pathname : null;
+    return oidcRedirectUri ? new URL(oidcRedirectUri).pathname : "/auth/callback";
   } catch {
     return null;
   }
@@ -85,6 +70,27 @@ let authInitialization = null;
 
 function generateSessionId() {
   return randomBytes(32).toString("base64url");
+}
+
+function getOidcRedirectUri(request) {
+  if (oidcRedirectUri) {
+    return oidcRedirectUri;
+  }
+  const host = request.headers.host;
+  const forwardedProtocol = request.headers["x-forwarded-proto"]?.split(",")[0].trim().toLowerCase();
+  const protocol = forwardedProtocol || (request.socket.encrypted ? "https" : "http");
+  if (!host || !["http", "https"].includes(protocol)) {
+    return null;
+  }
+  try {
+    const origin = new URL(`${protocol}://${host}`);
+    if (origin.host !== host || origin.pathname !== "/") {
+      return null;
+    }
+    return new URL(oidcCallbackPath || "/auth/callback", origin).href;
+  } catch {
+    return null;
+  }
 }
 
 function checkSession(request) {
@@ -145,7 +151,7 @@ async function ensureAuthClient() {
 }
 
 async function createAuthClient() {
-  if (!oidcClientId || !oidcIssuer || !oidcRedirectUri) {
+  if (!oidcClientId || !oidcIssuer) {
     console.warn("OIDC_ISSUER and OIDC_CLIENT_ID must be set; OIDC auth will be disabled");
     return null;
   }
@@ -158,7 +164,7 @@ async function createAuthClient() {
       ? { execute: [oidc.allowInsecureRequests] }
       : undefined,
   );
-  if (!oidcCallbackPath || !["https:", "http:"].includes(new URL(oidcRedirectUri).protocol)) {
+  if (oidcRedirectUri && (!oidcCallbackPath || !["https:", "http:"].includes(new URL(oidcRedirectUri).protocol))) {
     throw new Error("OIDC redirect URI must be an absolute HTTP(S) URL");
   }
   return config;
@@ -1210,7 +1216,10 @@ createServer(async (request, response) => {
     if (!authReady || !authClient) {
       return reply(response, 503, { error: "OIDC auth not configured" });
     }
-    const redirectUri = oidcRedirectUri;
+    const redirectUri = getOidcRedirectUri(request);
+    if (!redirectUri) {
+      return reply(response, 400, { error: "Could not determine the OIDC redirect URI" });
+    }
     const state = oidc.randomState();
     const nonce = oidc.randomNonce();
     const codeVerifier = oidc.randomPKCECodeVerifier();

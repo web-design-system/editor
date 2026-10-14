@@ -85,12 +85,12 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
         }
         const form = new URLSearchParams(raw);
         assert.equal(form.get("code_verifier")?.length, 43);
-        assert.equal(form.get("client_id"), "local-client.test");
+        assert.equal(form.get("client_id"), "local-client");
         assert.equal(form.get("client_secret"), "local-secret");
         const header = Buffer.from(JSON.stringify({ alg: "RS256", kid: "integration-key" })).toString("base64url");
         const claims = {
           iss: oidcIssuer,
-          aud: "local-client.test",
+          aud: "local-client",
           sub: "integration-user",
           iat: Math.floor(Date.now() / 1000),
           exp: Math.floor(Date.now() / 1000) + 600,
@@ -238,7 +238,7 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
         ...process.env,
         PORT: String(appPort),
         OIDC_ISSUER: oidcIssuer,
-        OIDC_CLIENT_ID: "local-client.test",
+        OIDC_CLIENT_ID: "local-client",
         OIDC_CLIENT_SECRET: "local-secret",
         GIT_API_URL: gitApiUrl,
         GIT_API_TOKEN: "local-test-only",
@@ -268,13 +268,16 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
 
     const login = await fetch(`${base}/api/oidc/login`, {
       redirect: "manual",
-      headers: { origin: "https://attacker.example", host: "attacker.example" },
+      headers: {
+        origin: "https://attacker.example",
+        "x-forwarded-proto": "https",
+      },
     });
     assert.equal(login.status, 302, appErrors);
     const stateCookie = login.headers.get("set-cookie").split(";")[0];
     const authorize = new URL(login.headers.get("location"));
-    assert.equal(authorize.searchParams.get("client_id"), "local-client.test");
-    assert.equal(authorize.searchParams.get("redirect_uri"), "https://local-client.test/auth/callback");
+    assert.equal(authorize.searchParams.get("client_id"), "local-client");
+    assert.equal(authorize.searchParams.get("redirect_uri"), `https://127.0.0.1:${appPort}/auth/callback`);
     assert.equal(authorize.searchParams.get("code_challenge_method"), "S256");
     assert.ok(authorize.searchParams.get("nonce"));
     const authorizationDone = await fetch(`${oidcIssuer}/authorize?${authorize.searchParams}`, { redirect: "manual" });

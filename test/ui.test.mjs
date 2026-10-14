@@ -13,6 +13,7 @@ test("landing page lists teams and design systems without depending on component
   assert.match(app, /\/\?team=\$\{encodeURIComponent\(system\.team\)\}&amp;repo=/);
   assert.match(app, /\/api\/oidc\/me/);
   assert.match(app, /\/api\/oidc\/login/);
+  assert.match(app, /Sign-in could not be completed/);
   assert.doesNotMatch(html, /<wds-[a-z-]+/);
 });
 

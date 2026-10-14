@@ -104,7 +104,13 @@ async function loadWorkspace() {
   const authenticated = await loadUser();
   if (!authenticated) {
     landing.hidden = false;
-    setNotice("Sign in to browse design systems in this workspace.", true);
+    const authError = new URLSearchParams(location.search).get("auth_error") === "1";
+    setNotice(
+      authError
+        ? "Sign-in could not be completed. Please try again."
+        : "Sign in to browse design systems in this workspace.",
+      true,
+    );
     teamList.innerHTML = '<span class="section-note">Sign in to load teams.</span>';
     systemGrid.innerHTML = '<div class="empty">Your design systems will appear here after sign-in.</div>';
     return;

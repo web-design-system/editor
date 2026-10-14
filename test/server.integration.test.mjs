@@ -45,6 +45,8 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
     const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
     const jwk = publicKey.export({ format: "jwk" });
     Object.assign(jwk, { kid: "integration-key", use: "sig", alg: "RS256" });
+    let expectedNonce;
+    let userinfoSubject = "integration-user";
     oidcServer = createServer(async (req, res) => {
       const url = new URL(req.url, `http://${req.headers.host}`);
       const json = (body) => {
@@ -52,13 +54,27 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
         res.end(JSON.stringify(body));
       };
       if (url.pathname === "/.well-known/openid-configuration") {
-        return json({ issuer: oidcIssuer, jwks_uri: `${oidcIssuer}/jwks` });
+        return json({
+          issuer: oidcIssuer,
+          authorization_endpoint: `${oidcIssuer}/authorize`,
+          token_endpoint: `${oidcIssuer}/token`,
+          userinfo_endpoint: `${oidcIssuer}/userinfo`,
+          jwks_uri: `${oidcIssuer}/jwks`,
+          response_types_supported: ["code"],
+          subject_types_supported: ["public"],
+          id_token_signing_alg_values_supported: ["RS256"],
+          token_endpoint_auth_methods_supported: ["client_secret_post", "none"],
+          code_challenge_methods_supported: ["S256"],
+        });
       }
       if (url.pathname === "/jwks") {
         return json({ keys: [jwk] });
       }
       if (url.pathname === "/authorize") {
-        res.writeHead(302, { location: `/authorize-done?state=${url.searchParams.get("state")}` });
+        expectedNonce = url.searchParams.get("nonce");
+        res.writeHead(302, {
+          location: `/authorize-done?state=${url.searchParams.get("state")}&nonce=${url.searchParams.get("nonce")}`,
+        });
         res.end();
         return;
       }
@@ -69,23 +85,30 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
         }
         const form = new URLSearchParams(raw);
         assert.equal(form.get("code_verifier")?.length, 43);
+        assert.equal(form.get("client_id"), "local-client");
+        assert.equal(form.get("client_secret"), "local-secret");
         const header = Buffer.from(JSON.stringify({ alg: "RS256", kid: "integration-key" })).toString("base64url");
-        const payload = Buffer.from(
-          JSON.stringify({
-            iss: oidcIssuer,
-            aud: "local-client",
-            sub: "integration-user",
-            exp: Math.floor(Date.now() / 1000) + 600,
-          }),
-        ).toString("base64url");
+        const claims = {
+          iss: oidcIssuer,
+          aud: "local-client",
+          sub: "integration-user",
+          iat: Math.floor(Date.now() / 1000),
+          exp: Math.floor(Date.now() / 1000) + 600,
+        };
+        if (form.get("code") !== "missing-nonce") {
+          claims.nonce = form.get("code") === "bad-nonce" ? "wrong-nonce" : expectedNonce;
+        }
+        const payload = Buffer.from(JSON.stringify(claims)).toString("base64url");
         const input = `${header}.${payload}`;
         return json({
           id_token: `${input}.${sign("RSA-SHA256", Buffer.from(input), privateKey).toString("base64url")}`,
           access_token: "local-access-token",
+          token_type: "Bearer",
+          expires_in: 3600,
         });
       }
       if (url.pathname === "/userinfo") {
-        return json({ sub: "integration-user", name: "Integration User" });
+        return json({ sub: userinfoSubject, name: "Integration User" });
       }
       res.writeHead(404);
       res.end();
@@ -217,6 +240,7 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
         OIDC_ISSUER: oidcIssuer,
         OIDC_CLIENT_ID: "local-client",
         OIDC_CLIENT_SECRET: "local-secret",
+        OIDC_REDIRECT_URI: `http://127.0.0.1:${appPort}/api/oidc/callback`,
         GIT_API_URL: gitApiUrl,
         GIT_API_TOKEN: "local-test-only",
         WDS_ALLOWED_SUBJECTS: "integration-user",
@@ -243,20 +267,86 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
     }
     assert.equal(ready, true, `WDS server did not become ready: ${appErrors}`);
 
-    const login = await fetch(`${base}/api/oidc/login`, { redirect: "manual" });
-    assert.equal(login.status, 302);
+    const login = await fetch(`${base}/api/oidc/login`, {
+      redirect: "manual",
+      headers: { origin: "https://attacker.example", host: "attacker.example" },
+    });
+    assert.equal(login.status, 302, appErrors);
     const stateCookie = login.headers.get("set-cookie").split(";")[0];
     const authorize = new URL(login.headers.get("location"));
+    assert.equal(authorize.searchParams.get("redirect_uri"), `http://127.0.0.1:${appPort}/api/oidc/callback`);
+    assert.equal(authorize.searchParams.get("code_challenge_method"), "S256");
+    assert.ok(authorize.searchParams.get("nonce"));
     const authorizationDone = await fetch(`${oidcIssuer}/authorize?${authorize.searchParams}`, { redirect: "manual" });
     const callback = new URL(authorizationDone.headers.get("location"), oidcIssuer);
+    const badState = await fetch(`${base}/api/oidc/callback?code=local-code&state=wrong`, {
+      headers: { cookie: stateCookie },
+      redirect: "manual",
+    });
+    assert.equal(badState.status, 400);
+    const malformedState = await fetch(`${base}/api/oidc/callback?code=local-code&state=x%29%5B`, {
+      redirect: "manual",
+    });
+    assert.equal(malformedState.status, 400);
+    const missingState = await fetch(`${base}/api/oidc/callback?error=access_denied`, { redirect: "manual" });
+    assert.equal(missingState.status, 400);
     const authResult = await fetch(
       `${base}/api/oidc/callback?code=local-code&state=${callback.searchParams.get("state")}`,
       { headers: { cookie: stateCookie }, redirect: "manual" },
     );
     assert.equal(authResult.status, 302);
     const responseCookies = authResult.headers.getSetCookie?.() || [authResult.headers.get("set-cookie")];
-    const sessionCookie = responseCookies.find((cookie) => cookie.startsWith("wds-session=")).split(";")[0];
+    const sessionSetCookie = responseCookies.find((cookie) => cookie?.startsWith("wds-session="));
+    assert.ok(sessionSetCookie, appErrors);
+    const sessionCookie = sessionSetCookie.split(";")[0];
     const headers = { cookie: sessionCookie, "content-type": "application/json" };
+    assert.deepEqual(await (await fetch(`${base}/api/oidc/me`, { headers })).json(), {
+      authenticated: true,
+      user: { sub: "integration-user", name: "Integration User" },
+    });
+    const replay = await fetch(
+      `${base}/api/oidc/callback?code=local-code&state=${callback.searchParams.get("state")}`,
+      { headers: { cookie: stateCookie }, redirect: "manual" },
+    );
+    assert.equal(replay.status, 400);
+    const deniedLogin = await fetch(`${base}/api/oidc/login`, { redirect: "manual" });
+    const deniedCookie = deniedLogin.headers.get("set-cookie").split(";")[0];
+    const deniedAuthorization = new URL(deniedLogin.headers.get("location"));
+    const deniedState = deniedAuthorization.searchParams.get("state");
+    const deniedCallback = await fetch(`${base}/api/oidc/callback?error=access_denied&state=${deniedState}`, {
+      headers: { cookie: deniedCookie },
+      redirect: "manual",
+    });
+    assert.equal(deniedCallback.status, 302);
+    assert.match(deniedCallback.headers.get("location"), /auth_error=1/);
+    const missingNonceLogin = await fetch(`${base}/api/oidc/login`, { redirect: "manual" });
+    const missingNonceCookie = missingNonceLogin.headers.get("set-cookie").split(";")[0];
+    const missingNonceAuthorization = new URL(missingNonceLogin.headers.get("location"));
+    const missingNonceRedirect = await fetch(`${oidcIssuer}/authorize?${missingNonceAuthorization.searchParams}`, {
+      redirect: "manual",
+    });
+    const missingNonceState = new URL(missingNonceRedirect.headers.get("location"), oidcIssuer).searchParams.get(
+      "state",
+    );
+    const missingNonceCallback = await fetch(
+      `${base}/api/oidc/callback?code=missing-nonce&state=${missingNonceState}`,
+      { headers: { cookie: missingNonceCookie }, redirect: "manual" },
+    );
+    assert.match(missingNonceCallback.headers.get("location"), /auth_error=1/);
+    userinfoSubject = "different-user";
+    const mismatchLogin = await fetch(`${base}/api/oidc/login`, { redirect: "manual" });
+    const mismatchCookie = mismatchLogin.headers.get("set-cookie").split(";")[0];
+    const mismatchAuthorization = new URL(mismatchLogin.headers.get("location"));
+    const mismatchRedirect = await fetch(`${oidcIssuer}/authorize?${mismatchAuthorization.searchParams}`, {
+      redirect: "manual",
+    });
+    const mismatchState = new URL(mismatchRedirect.headers.get("location"), oidcIssuer).searchParams.get("state");
+    const mismatchCallback = await fetch(`${base}/api/oidc/callback?code=mismatch&state=${mismatchState}`, {
+      headers: { cookie: mismatchCookie },
+      redirect: "manual",
+    });
+    assert.match(mismatchCallback.headers.get("location"), /auth_error=1/);
+    userinfoSubject = "integration-user";
     const invalid = await fetch(`${base}/api/projects`, {
       method: "POST",
       headers,

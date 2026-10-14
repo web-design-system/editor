@@ -4,8 +4,9 @@ import { existsSync, lstatSync, rmSync } from "node:fs";
 import { dirname, join, normalize, extname, relative, resolve, sep } from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { createHash, createPublicKey, randomBytes, verify as verifySignature } from "node:crypto";
+import { randomBytes, createHash } from "node:crypto";
 import { tmpdir } from "node:os";
+import * as oidc from "openid-client";
 
 const exec = promisify(execFile);
 const root = process.cwd();
@@ -111,6 +112,10 @@ async function ensureAuthClient() {
       } catch (err) {
         console.error("Failed to initialize OIDC auth client:", err.message);
         authReady = false;
+      } finally {
+        if (!authReady) {
+          authInitialization = null;
+        }
       }
     })();
   }
@@ -118,153 +123,20 @@ async function ensureAuthClient() {
 }
 
 async function createAuthClient() {
-  if (!oidcClientId || !oidcIssuer) {
-    console.warn("OIDC_ISSUER and OIDC_CLIENT_ID must be set; OIDC auth will be disabled");
+  if (!oidcClientId || !oidcIssuer || !oidcRedirectUri) {
+    console.warn("OIDC_ISSUER, OIDC_CLIENT_ID, and OIDC_REDIRECT_URI must be set; OIDC auth will be disabled");
     return null;
   }
-  const discoveryResponse = await fetch(new URL("/.well-known/openid-configuration", oidcIssuer));
-  if (!discoveryResponse.ok) {
-    throw new Error(`Could not load OIDC discovery document (${discoveryResponse.status})`);
-  }
-  const discovery = await discoveryResponse.json();
-  if (discovery.issuer !== oidcIssuer || typeof discovery.jwks_uri !== "string") {
-    throw new Error("OIDC discovery issuer or JWKS URI is invalid");
-  }
-  let signingKeys = null;
-
-  async function getSigningKeys(refresh = false) {
-    if (!refresh && signingKeys) {
-      return signingKeys;
-    }
-    const response = await fetch(discovery.jwks_uri);
-    if (!response.ok) {
-      throw new Error(`Could not load OIDC signing keys (${response.status})`);
-    }
-    const data = await response.json();
-    if (!Array.isArray(data.keys)) {
-      throw new Error("OIDC JWKS response did not contain signing keys");
-    }
-    signingKeys = data.keys;
-    return signingKeys;
-  }
-
-  async function createAuthorizationRequest({ redirectUri }) {
-    const state = randomBytes(32).toString("base64url");
-    const codeVerifier = randomBytes(32).toString("base64url");
-    const url = new URL("/authorize", oidcIssuer);
-    url.searchParams.set("response_type", "code");
-    url.searchParams.set("client_id", oidcClientId);
-    url.searchParams.set("redirect_uri", redirectUri);
-    url.searchParams.set("state", state);
-    url.searchParams.set("scope", "openid profile email");
-    url.searchParams.set("code_challenge", createHash("sha256").update(codeVerifier).digest("base64url"));
-    url.searchParams.set("code_challenge_method", "S256");
-    return { url: String(url), state, codeVerifier };
-  }
-
-  async function exchangeCode({ code, codeVerifier, redirectUri }) {
-    const form = new URLSearchParams({
-      grant_type: "authorization_code",
-      code,
-      client_id: oidcClientId,
-      redirect_uri: redirectUri,
-      code_verifier: codeVerifier,
-    });
-    if (oidcClientSecret) {
-      form.set("client_secret", oidcClientSecret);
-    }
-    const response = await fetch(new URL("/token", oidcIssuer), {
-      method: "POST",
-      headers: {
-        "content-type": "application/x-www-form-urlencoded",
-      },
-      body: form,
-    });
-    if (!response.ok) {
-      const detail = await response.text();
-      throw new Error(`Could not exchange authorization code: ${response.status} ${detail}`);
-    }
-    return response.json();
-  }
-
-  async function verifyToken(token) {
-    const jwtParts = token.split(".");
-    if (jwtParts.length !== 3) {
-      throw new Error("Invalid JWT");
-    }
-    try {
-      const header = JSON.parse(Buffer.from(jwtParts[0], "base64url").toString("utf8"));
-      const payload = JSON.parse(Buffer.from(jwtParts[1], "base64url").toString("utf8"));
-      if (header.alg !== "RS256" || typeof header.kid !== "string") {
-        throw new Error("Unsupported JWT algorithm");
-      }
-      if (payload.iss !== oidcIssuer) {
-        throw new Error("Invalid issuer");
-      }
-      const audiences = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
-      if (!audiences.includes(oidcClientId)) {
-        throw new Error("Invalid audience");
-      }
-      if (audiences.length > 1 && payload.azp !== oidcClientId) {
-        throw new Error("Invalid authorized party");
-      }
-      if (typeof payload.sub !== "string") {
-        throw new Error("Invalid subject");
-      }
-      const now = Math.floor(Date.now() / 1000);
-      if (typeof payload.exp !== "number" || payload.exp <= now) {
-        throw new Error("Expired JWT");
-      }
-      if (typeof payload.nbf === "number" && payload.nbf > now) {
-        throw new Error("JWT not yet active");
-      }
-      let keys = await getSigningKeys();
-      let jwk = keys.find(
-        (key) =>
-          key.kid === header.kid &&
-          key.kty === "RSA" &&
-          (!key.use || key.use === "sig") &&
-          (!key.alg || key.alg === "RS256"),
-      );
-      if (!jwk) {
-        keys = await getSigningKeys(true);
-        jwk = keys.find(
-          (key) =>
-            key.kid === header.kid &&
-            key.kty === "RSA" &&
-            (!key.use || key.use === "sig") &&
-            (!key.alg || key.alg === "RS256"),
-        );
-      }
-      if (!jwk) {
-        throw new Error("Unknown signing key");
-      }
-      const signingInput = Buffer.from(`${jwtParts[0]}.${jwtParts[1]}`);
-      const signature = Buffer.from(jwtParts[2], "base64url");
-      if (!verifySignature("RSA-SHA256", signingInput, createPublicKey({ key: jwk, format: "jwk" }), signature)) {
-        throw new Error("Invalid JWT signature");
-      }
-      return payload;
-    } catch {
-      throw new Error("Invalid JWT");
-    }
-  }
-
-  async function getProfile(accessToken, subject) {
-    const response = await fetch(new URL("/userinfo", oidcIssuer), {
-      headers: { Authorization: `Bearer ${accessToken}`, "X-Auth-Audience": oidcClientId },
-    });
-    if (!response.ok) {
-      throw new Error(`Could not load profile: ${response.status}`);
-    }
-    const profile = await response.json();
-    if (profile.sub !== subject) {
-      throw new Error("OIDC userinfo subject did not match the verified token");
-    }
-    return profile;
-  }
-
-  return { createAuthorizationRequest, exchangeCode, verifyToken, getProfile };
+  const config = await oidc.discovery(
+    new URL(oidcIssuer),
+    oidcClientId,
+    oidcClientSecret ? { client_secret: oidcClientSecret } : undefined,
+    oidcClientSecret ? oidc.ClientSecretPost(oidcClientSecret) : oidc.None(),
+    new URL(oidcIssuer).protocol === "http:" && ["127.0.0.1", "localhost", "::1"].includes(new URL(oidcIssuer).hostname)
+      ? { execute: [oidc.allowInsecureRequests] }
+      : undefined,
+  );
+  return config;
 }
 
 function valid(...parts) {
@@ -1313,33 +1185,49 @@ createServer(async (request, response) => {
     if (!authReady || !authClient) {
       return reply(response, 503, { error: "OIDC auth not configured" });
     }
-    const origin = request.headers.origin || `https://${request.headers.host}`;
-    const redirectUri = oidcRedirectUri || new URL("/api/oidc/callback", origin).toString();
-    const authResult = await authClient.createAuthorizationRequest({ redirectUri });
+    const redirectUri = oidcRedirectUri;
+    const state = oidc.randomState();
+    const nonce = oidc.randomNonce();
+    const codeVerifier = oidc.randomPKCECodeVerifier();
+    const codeChallenge = await oidc.calculatePKCECodeChallenge(codeVerifier);
+    const authUrl = oidc.buildAuthorizationUrl(authClient, {
+      redirect_uri: redirectUri,
+      scope: "openid profile email",
+      state,
+      nonce,
+      code_challenge: codeChallenge,
+      code_challenge_method: "S256",
+    });
     for (const [id, value] of sessions) {
       if (value.expires <= Date.now()) {
         sessions.delete(id);
       }
     }
-    sessions.set(authResult.state, {
-      verifier: authResult.codeVerifier,
+    sessions.set(state, {
+      verifier: codeVerifier,
+      nonce,
       redirectUri,
       expires: Date.now() + 5 * 60 * 1000,
     });
     response.writeHead(302, {
-      Location: authResult.url,
-      "Set-Cookie": `wds-oidc-state=${authResult.state}; Path=/api/oidc/callback; Max-Age=300; HttpOnly; Secure; SameSite=Lax`,
+      Location: authUrl.href,
+      "Set-Cookie": `wds-oidc-state-${state}=${state}; Path=/api/oidc/callback; Max-Age=300; HttpOnly; Secure; SameSite=Lax`,
     });
     response.end();
     return;
   }
   if (url.pathname === "/api/oidc/callback") {
     const code = url.searchParams.get("code");
+    const providerError = url.searchParams.get("error");
     const state = url.searchParams.get("state");
-    const stateCookie = request.headers.cookie?.match(/(?:^|;\s*)wds-oidc-state=([^;]+)/)?.[1];
-    const expiredStateCookie = "wds-oidc-state=; Path=/api/oidc/callback; Max-Age=0; HttpOnly; Secure; SameSite=Lax";
-    if (!code || !state) {
-      response.setHeader("Set-Cookie", expiredStateCookie);
+    const validState = typeof state === "string" && /^[A-Za-z0-9_-]{43}$/.test(state);
+    const stateCookie = validState
+      ? request.headers.cookie?.match(new RegExp(`(?:^|;\\s*)wds-oidc-state-${state}=([^;]+)`))?.[1]
+      : undefined;
+    const expiredStateCookie = validState
+      ? `wds-oidc-state-${state}=; Path=/api/oidc/callback; Max-Age=0; HttpOnly; Secure; SameSite=Lax`
+      : undefined;
+    if (!validState) {
       return reply(response, 400, { error: "Missing code or state" });
     }
     if (!stateCookie || stateCookie !== state) {
@@ -1353,21 +1241,31 @@ createServer(async (request, response) => {
       return reply(response, 400, { error: "Invalid state" });
     }
     sessions.delete(state);
+    if (providerError || !code) {
+      response.writeHead(302, { Location: "/?auth_error=1", "Set-Cookie": expiredStateCookie });
+      response.end();
+      return;
+    }
+    let oidcPhase = "discovery";
     try {
       await ensureAuthClient();
       if (!authReady || !authClient) {
         return reply(response, 503, { error: "OIDC auth not configured" });
       }
-      const tokenData = await authClient.exchangeCode({
-        code,
-        codeVerifier: sessionData.verifier,
-        redirectUri: sessionData.redirectUri,
+      const callbackUrl = new URL(sessionData.redirectUri);
+      callbackUrl.search = url.search;
+      oidcPhase = "token exchange and ID token verification";
+      const tokenData = await oidc.authorizationCodeGrant(authClient, callbackUrl, {
+        pkceCodeVerifier: sessionData.verifier,
+        expectedState: state,
+        expectedNonce: sessionData.nonce,
       });
-      if (typeof tokenData.id_token !== "string" || typeof tokenData.access_token !== "string") {
-        throw new Error("OIDC token response is missing an ID token or access token");
+      const claims = tokenData.claims();
+      if (!claims?.sub || !tokenData.access_token) {
+        throw new Error("OIDC response did not include required claims");
       }
-      const claims = await authClient.verifyToken(tokenData.id_token);
-      const profile = await authClient.getProfile(tokenData.access_token, claims.sub);
+      oidcPhase = "userinfo";
+      const profile = await oidc.fetchUserInfo(authClient, tokenData.access_token, claims.sub);
       const sessionId = generateSessionId();
       sessions.set(sessionId, {
         user: profile,
@@ -1385,7 +1283,7 @@ createServer(async (request, response) => {
       response.end();
       return;
     } catch (err) {
-      console.error("OIDC callback error:", err);
+      console.error("OIDC callback failed:", oidcPhase, err?.name || "validation or exchange error");
       response.writeHead(302, { Location: "/?auth_error=1", "Set-Cookie": expiredStateCookie });
       response.end();
       return;
@@ -1401,10 +1299,7 @@ createServer(async (request, response) => {
       }
     }
     response.writeHead(302, {
-      "Set-Cookie": [
-        "wds-session=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax",
-        "wds-oidc-state=; Path=/api/oidc/callback; Max-Age=0; HttpOnly; Secure; SameSite=Lax",
-      ],
+      "Set-Cookie": ["wds-session=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax"],
       Location: "/",
     });
     response.end();

@@ -9,6 +9,7 @@
     "test": "node --test test/*.test.mjs"
   },
   "dependencies": {
-    "@tailwindcss/cli": "^4.3.3"
+    "@tailwindcss/cli": "^4.3.3",
+    "openid-client": "^6.8.8"
   }
 }

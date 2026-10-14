@@ -3,15 +3,63 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>WDS / Component Workbench</title>
-    <script type="importmap">
-      { "imports": { "@li3/": "https://cdn.li3.dev/@li3/" } }
-    </script>
-    <script type="module">import '@li3/web';</script>
-    <link rel="stylesheet" href="/static/web-design-system/reset/latest/styles.css" />
-    <link rel="component" href="/static/web-design-system/workbench/latest/component.html" />
+    <meta name="theme-color" content="#f7f8fb" />
+    <title>WDS · Design systems</title>
+    <link rel="stylesheet" href="/app.css" />
   </head>
   <body>
-    <template app><wds-workbench></wds-workbench></template>
+    <div class="shell" id="landing">
+      <header class="header">
+        <a class="brand" href="/" aria-label="WDS home"
+          ><span class="brand-mark">W</span><span class="brand-name">Workbench</span></a
+        >
+        <div class="user-card" id="user-card" aria-live="polite">
+          <span class="user-avatar">·</span
+          ><span class="user-copy"
+            ><span class="user-name">Loading account…</span><span class="user-label">Design systems</span></span
+          >
+        </div>
+      </header>
+      <main class="main">
+        <p class="eyebrow">Design systems</p>
+        <h1>Your workspace</h1>
+        <p class="intro">
+          Choose a design system available through this WDS workspace to open its work area, or select a team to narrow
+          the list.
+        </p>
+        <section class="section" aria-labelledby="teams-title">
+          <div class="section-heading">
+            <h2 id="teams-title">Teams</h2>
+            <span class="section-note" id="team-summary"></span>
+          </div>
+          <div class="team-list" id="team-list"><span class="loading">Loading teams…</span></div>
+        </section>
+        <section class="section" aria-labelledby="systems-title">
+          <div class="section-heading">
+            <h2 id="systems-title">Design systems</h2>
+            <span class="section-note" id="system-summary"></span>
+          </div>
+          <div class="system-grid" id="system-grid"><span class="loading">Loading design systems…</span></div>
+        </section>
+        <p class="notice" id="notice" hidden></p>
+      </main>
+    </div>
+    <div class="workspace" id="workspace">
+      <header class="header">
+        <a class="brand" href="/" aria-label="WDS home"
+          ><span class="brand-mark">W</span><span class="brand-name">Workbench</span></a
+        >
+        <a class="back-link" href="/" aria-label="Back to design systems">← <span>All design systems</span></a>
+        <span class="workspace-name" id="workspace-name"></span>
+        <div class="user-card" id="workspace-user-card" aria-live="polite">
+          <span class="user-avatar">·</span
+          ><span class="user-copy"
+            ><span class="user-name">Loading account…</span><span class="user-label">Design systems</span></span
+          >
+        </div>
+      </header>
+      <main class="work-area" aria-label="Design system workspace"></main>
+    </div>
+    <script type="module" src="/app.mjs"></script>
   </body>
 </html>

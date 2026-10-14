@@ -17,7 +17,7 @@ Teams use GitHub-style lowercase slugs, such as `acme-corp/buttons`. The custom-
 
 ## Source Format
 
-The initial component source contract is deliberately small:
+The initial component scaffold is deliberately small:
 
 ```text
 component.html
@@ -54,9 +54,15 @@ Components are Li3 HTML files. They may use templates, custom elements, Shadow D
 
 The baseline version is explicit in the CSS link or CSS `@import`, never hidden in metadata. This prevents a baseline change from silently altering a released component.
 
-Components may import CSS, Li3 component HTML, ESM modules, or assets from any URL in v1. For example, an authored module may import `markdown-it` directly from a CDN. The future compiler manifest will inventory every discovered dependency, but v1 does not restrict or bundle them.
+Components may import external CSS, Li3 component HTML, ESM modules, or assets by absolute URL. Relative styles, modules, and assets are allowed only within that component's own repository; WDS validates these paths and rejects imports that escape the component boundary, including symlink traversal. A dependency on another WDS component must use its absolute published URL, for example `/static/acme-corp/icons/latest/component.html`.
 
-Baseline repositories use the same approach, normally with this source shape:
+The editor discovers supported project files from that repository on each request instead of relying on a server-side filename list. Nested HTML, CSS, JavaScript, JSON, and SVG source files are editable; supported images and fonts are served as assets. Discovery never follows symlinks and excludes hidden paths, Git metadata, generated output, dependencies, and release internals. Static asset requests are confined to the selected repository and revision.
+
+Design-system repositories use the same Git-backed source model but are not components. They hold shared token/value files (for example `tokens.css` or `colors.css`), are published as standalone assets, and are not passed through the component CSS compiler or added to a component's build output. Components reference these files through absolute published URLs such as `/static/acme-corp/foundation/latest/tokens.css`.
+
+The Workbench's component stylesheets reference `/static/web-design-system/foundation/latest/styles.css`. That shared project must be created and published before the Workbench's shared tokens/utilities are available. Other systems can choose their own baseline repository and URL.
+
+Baseline repositories use this source shape:
 
 ```text
 styles.css
@@ -86,8 +92,9 @@ All authors work on `main`; branches, pull requests, locks, and real-time collab
 
 - Unsaved editor state is private and is never published.
 - A commit creates a Git revision on `main`.
-- Each commit updates the public mutable `latest` artifact.
-- A release manually tags the current committed revision.
+- A commit updates only editable source; it never changes public output.
+- **Publish latest** builds the committed source and updates the public mutable `latest` artifact.
+- A release builds the committed source, publishes an immutable versioned artifact, and tags its source revision.
 - Tagged releases are immutable and cannot be deleted or hidden.
 
 Only major and minor releases are supported. The system selects versions from the latest tag:
@@ -95,32 +102,42 @@ Only major and minor releases are supported. The system selects versions from th
 - Major release: `v2.0`
 - Minor release: `v1.2`
 
-No release is created automatically for a new repository. New repositories expose only `latest` until an author releases a tag.
+No release is created automatically for a new repository. An author must publish once before `latest` is available; a versioned artifact is available after a release.
+
+## Creating A Design System
+
+An authenticated, allowlisted editor can use **New design system** in the workbench to create a project without leaving the interface. The team field is a Git organization slug; the repository field is a lowercase project slug. WDS creates the organization when needed, creates the Git repository, and pushes a first `main` commit containing a shared `styles.css` plus project metadata. A design-system repository is not a component: it has no component markup, story, or spec. Its stylesheet can hold versioned design tokens shared by components.
+
+For example, a component may import a released token stylesheet with `@import url("/static/acme-corp/foundation/v1.0/styles.css");`. This is an explicit public versioned asset reference; relative imports stay inside the current component repository and cannot traverse into sibling repositories or server files.
+
+The new project is selected in the workbench immediately, with only its shared stylesheet available in the source editor. Commit saves source; **Publish latest** makes the shared files available at their public URLs. The design-system file is served as authored and is not compiled into a component stylesheet. Release creates an immutable versioned artifact. The configured Git API token must have permission to create organizations and repositories for the selected team, as well as read and write Git data.
 
 ## Public Artifact URLs
 
 Static assets are served by the editor service in v1. They can later move unchanged to `cdn.apphor.de`.
 
 ```text
-/static/acme-corp/buttons/latest/buttons.html
-/static/acme-corp/buttons/latest/buttons.mjs
-/static/acme-corp/buttons/latest/buttons.css
-/static/acme-corp/buttons/latest/styleguide.html
+/static/acme-corp/buttons/latest/component.html
+/static/acme-corp/buttons/latest/styles.css
+/static/acme-corp/buttons/latest/stories.html
 
-/static/acme-corp/buttons/v1.5/buttons.html
-/static/acme-corp/buttons/v1.5/buttons.mjs
-/static/acme-corp/buttons/v1.5/buttons.css
-/static/acme-corp/buttons/v1.5/styleguide.html
+/static/acme-corp/buttons/v1.5/component.html
+/static/acme-corp/buttons/v1.5/styles.css
+/static/acme-corp/buttons/v1.5/stories.html
 /static/acme-corp/buttons/v1.5/manifest.json
 ```
 
-`latest` resolves to the latest committed source and is public with non-cacheable responses. Tagged URLs resolve to immutable Git revisions and can be cached indefinitely.
+`latest` resolves only to the most recently published build and is public with non-cacheable responses. A source commit does not change it. Versioned URLs resolve only to published immutable artifacts and can be cached indefinitely. A missing artifact returns 404; static routes never fall back to editable source.
 
-The component HTML is the consumer entrypoint. The styleguide is a separate generated/public entrypoint that loads the exact same component version. A future `manifest.json` will record the Git commit, tag, compiler version, source asset hashes, and resolved dependency URLs.
+Git stores published output on the `wds-artifacts` branch, separate from editable `main` source. Mounted projects persist output under `.wds/artifacts`. Both use the same artifact-only static URL contract.
+
+The component HTML is the consumer entrypoint. `stories.html` is published with the same artifact and can be used as the styleguide. Each artifact's `manifest.json` records its source revision, project type, and published file inventory.
 
 ## Authentication And Teams
 
 The service uses OIDC authorization-code flow with PKCE through `https://auth.api.apphor.de/` in production. Editor APIs require an authenticated OIDC session and an explicit subject allowlist. Team membership, per-team authorization, repository deletion, and invitations are not implemented yet.
+
+The landing page at `/` lists design systems and teams returned through the configured Git API connection. Opening a design system navigates to `/?team=<team>&repo=<repo>`, where the Workbench is currently an intentionally blank workspace shell with the account control in its header. The Git API currently supplies organizations visible to the configured service token; WDS cannot yet distinguish organizations personally owned by the signed-in user from other organizations available to that token. `/api/teams` exposes that organization list to authenticated, allowlisted editors.
 
 ## Persistence And Runtime
 
@@ -144,7 +161,7 @@ The intended next test runner mounts the committed source in WebContainer and ru
 
 ## CSS Compilation
 
-Tailwind is an optional future compiler adapter, not the component model. The v1 prototype publishes authored CSS and explicitly declared CSS imports unchanged. If added, Tailwind 4 should use its CSS-first `@import` and `@theme` model with no arbitrary plugins initially.
+Component CSS is compiled with Tailwind 4 when published. Absolute published design-system URLs are retained as external CSS imports; design-system projects are published unchanged and are not compiled. Tailwind uses the CSS-first `@import` and `@theme` model with no arbitrary plugins initially.
 
 ## AI Assistance
 
@@ -175,13 +192,14 @@ Mount `/data` in deployment so authored Git repositories persist across containe
 
 Implemented now:
 
-- Dark three-pane editor shell with project registry, source tabs, design inspector, and live styleguide canvas.
-- Topbar, registry, studio, editor tabs, inspector, preview, action button, panel, viewport control, and workbench components are independently authored in the mounted design-system source.
-- Local Git repository creation for sample `acme-corp/system` and `acme-corp/buttons` repositories.
-- Commit-to-`latest` source updates and Git tag creation for major/minor releases.
-- Public static component/styleguide asset serving.
+- Multi-team landing page with team filters and design-system cards; opened systems currently show a blank workbench shell.
+- Individual topbar, registry, studio, editor tabs, inspector, preview, action button, panel, viewport control, and workbench components remain independently authored in design-system source for gradual reintroduction.
+- Git API-backed source commits, explicit publication to mutable `latest`, and immutable major/minor releases.
+- Public static serving from published artifacts only; source commits do not change public output.
+- Component CSS compilation during publish; design-system styles are published separately without component compilation.
+- Per-request source discovery and repository-boundary validation for relative imports/assets.
 - Li3 sample component with explicit baseline CSS and separate ESM setup module.
-- Mounted component source is compiled through the Tailwind 4 CLI with minified output served as `styles.css`.
+- Published component stylesheets are compiled through the Tailwind 4 CLI and served as `styles.css`.
 - Resizable preview width and breakpoint shortcuts.
 - Production Docker build and HTTP smoke test.
 

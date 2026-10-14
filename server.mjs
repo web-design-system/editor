@@ -1,7 +1,7 @@
 import { createServer } from "node:http";
-import { mkdir, readFile, writeFile, readdir, cp, mkdtemp, rm } from "node:fs/promises";
-import { existsSync, rmSync } from "node:fs";
-import { join, normalize, extname, relative, sep } from "node:path";
+import { mkdir, readFile, writeFile, readdir, cp, mkdtemp, rm, lstat } from "node:fs/promises";
+import { existsSync, lstatSync, rmSync } from "node:fs";
+import { dirname, join, normalize, extname, relative, resolve, sep } from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { createHash, createPublicKey, randomBytes, verify as verifySignature } from "node:crypto";
@@ -24,32 +24,23 @@ if (Boolean(sourceTeam) !== Boolean(sourceTeamPath)) {
 }
 const port = Number(process.env.PORT || 4173);
 const safePart = /^[a-z0-9][a-z0-9._-]*$/;
-const sourceFiles = [
-  "component.html",
-  "styles.css",
-  "editor.mjs",
-  "buttons.mjs",
-  "action-button.mjs",
-  "viewport-control.mjs",
-  "registry.mjs",
-  "editor-tabs.mjs",
-  "studio.mjs",
-  "inspector.mjs",
-  "preview.mjs",
-  "workbench.mjs",
-  "topbar.mjs",
-  "repo-switcher.mjs",
-  "mode-toggle.mjs",
-  "nav-tab.mjs",
-  "range-input.mjs",
-  "repo-item.mjs",
-  "share-qr.mjs",
-  "user-card.mjs",
-  "stories.html",
-  "component.json",
-  "spec.mjs",
-];
-const assetFiles = [...sourceFiles, "manifest.json"];
+const sourceExtensions = new Set([".html", ".css", ".mjs", ".js", ".json", ".svg"]);
+const assetExtensions = new Set([
+  ...sourceExtensions,
+  ".avif",
+  ".bmp",
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".gif",
+  ".webp",
+  ".ico",
+  ".woff",
+  ".woff2",
+  ".ttf",
+  ".otf",
+]);
+const excludedPaths = new Set([".git", "node_modules", ".wds", "dist"]);
 // OIDC Authentication Configuration
 const oidcIssuer = process.env.OIDC_ISSUER;
 const oidcClientId = process.env.OIDC_CLIENT_ID;
@@ -302,19 +293,217 @@ function mountedPath(team, repo) {
 }
 function isMountedSource(team, repo) {
   const path = mountedPath(team, repo);
-  return Boolean(path && existsSync(join(path, "component.json")));
+  return Boolean(path && (existsSync(join(path, "component.json")) || existsSync(join(path, "design-system.json"))));
 }
-function sourceFilePath(file, path) {
-  return join(path, file);
+async function isDesignSystemProject(path) {
+  try {
+    const metadata = JSON.parse(await readFile(join(path, "design-system.json"), "utf8"));
+    return metadata.type === "design-system";
+  } catch {
+    return false;
+  }
 }
-function releasePath(version, file, path) {
-  return join(path, ".wds", "releases", version, file);
+function safeFile(file, extensions = assetExtensions) {
+  if (typeof file !== "string" || !file || file.startsWith("/") || file.includes("\\") || /%2f|%5c|%2e/i.test(file)) {
+    return false;
+  }
+  const parts = file.split("/");
+  return (
+    parts.every(
+      (part) =>
+        /^[A-Za-z0-9][A-Za-z0-9._ -]*$/.test(part) &&
+        part !== "." &&
+        part !== ".." &&
+        !part.endsWith(" ") &&
+        !part.startsWith(".") &&
+        !excludedPaths.has(part),
+    ) && extensions.has(extname(file).toLowerCase())
+  );
+}
+async function discoverFiles(path, extensions = sourceExtensions) {
+  const result = {};
+  const rootInfo = await lstat(path);
+  if (!rootInfo.isDirectory() || rootInfo.isSymbolicLink()) {
+    return result;
+  }
+  async function walk(dir, prefix = "") {
+    for (const entry of await readdir(dir, { withFileTypes: true })) {
+      const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+      if (entry.name.startsWith(".") || excludedPaths.has(entry.name)) {
+        continue;
+      }
+      if (entry.isDirectory()) {
+        await walk(join(dir, entry.name), rel);
+      } else if (entry.isFile() && safeFile(rel, extensions)) {
+        try {
+          const content = await readSafeFile(path, rel, "utf8");
+          if (content !== null) {
+            result[rel] = content;
+          }
+        } catch (error) {
+          if (error.code !== "ENOENT") {
+            throw error;
+          }
+        }
+      }
+    }
+  }
+  await walk(path);
+  return Object.fromEntries(Object.entries(result).sort(([a], [b]) => a.localeCompare(b)));
+}
+async function discoverAssets(path) {
+  const result = {};
+  const rootInfo = await lstat(path);
+  if (!rootInfo.isDirectory() || rootInfo.isSymbolicLink()) {
+    return result;
+  }
+  async function walk(dir, prefix = "") {
+    for (const entry of await readdir(dir, { withFileTypes: true })) {
+      const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+      if (entry.name.startsWith(".") || excludedPaths.has(entry.name)) {
+        continue;
+      }
+      if (entry.isDirectory()) {
+        await walk(join(dir, entry.name), rel);
+      } else if (entry.isFile() && safeFile(rel, assetExtensions)) {
+        try {
+          const content = await readSafeFile(path, rel);
+          if (content !== null) {
+            result[rel] = content;
+          }
+        } catch (error) {
+          if (error.code !== "ENOENT") {
+            throw error;
+          }
+        }
+      }
+    }
+  }
+  await walk(path);
+  return Object.fromEntries(Object.entries(result).sort(([a], [b]) => a.localeCompare(b)));
+}
+async function readSafeFile(rootPath, file, encoding) {
+  if (!safeFile(file)) {
+    return null;
+  }
+  let current = rootPath;
+  const rootInfo = await lstat(rootPath);
+  if (!rootInfo.isDirectory() || rootInfo.isSymbolicLink()) {
+    return null;
+  }
+  const parts = file.split("/");
+  for (let index = 0; index < parts.length; index += 1) {
+    current = join(current, parts[index]);
+    const info = await lstat(current);
+    if (info.isSymbolicLink()) {
+      return null;
+    }
+    if (index < parts.length - 1 && !info.isDirectory()) {
+      return null;
+    }
+    if (index === parts.length - 1 && !info.isFile()) {
+      return null;
+    }
+  }
+  return encoding ? readFile(current, encoding) : readFile(current);
+}
+async function writeSafeFile(rootPath, file, content, extensions = sourceExtensions) {
+  if (!safeFile(file, extensions)) {
+    const error = new Error("Invalid source file path.");
+    error.status = 400;
+    throw error;
+  }
+  const rootInfo = await lstat(rootPath);
+  if (!rootInfo.isDirectory() || rootInfo.isSymbolicLink()) {
+    throw new Error("Source repository path is not a regular directory.");
+  }
+  const parts = file.split("/");
+  let current = rootPath;
+  for (const part of parts.slice(0, -1)) {
+    current = join(current, part);
+    try {
+      const info = await lstat(current);
+      if (info.isSymbolicLink() || !info.isDirectory()) {
+        const error = new Error("Source path cannot traverse non-directory entries.");
+        error.status = 400;
+        throw error;
+      }
+    } catch (error) {
+      if (error.code !== "ENOENT") {
+        throw error;
+      }
+      await mkdir(current);
+    }
+  }
+  const target = join(current, parts.at(-1));
+  try {
+    const info = await lstat(target);
+    if (info.isSymbolicLink() || !info.isFile()) {
+      const error = new Error("Source path must refer to a regular file.");
+      error.status = 400;
+      throw error;
+    }
+  } catch (error) {
+    if (error.code !== "ENOENT") {
+      throw error;
+    }
+  }
+  await writeFile(target, content);
+}
+async function ensureSafeDirectories(rootPath, directories) {
+  const rootInfo = await lstat(rootPath);
+  if (!rootInfo.isDirectory() || rootInfo.isSymbolicLink()) {
+    throw new Error("Project path is not a regular directory.");
+  }
+  let current = rootPath;
+  for (const directory of directories) {
+    current = join(current, directory);
+    try {
+      await mkdir(current);
+    } catch (error) {
+      if (error.code !== "EEXIST") {
+        throw error;
+      }
+    }
+    const info = await lstat(current);
+    if (!info.isDirectory() || info.isSymbolicLink()) {
+      throw new Error("Project path contains a non-directory entry.");
+    }
+  }
+  return current;
+}
+async function assertNoSymlinkPath(rootPath, file) {
+  let current = rootPath;
+  const parts = file.split("/");
+  for (const [index, part] of parts.entries()) {
+    current = join(current, part);
+    let info;
+    try {
+      info = await lstat(current);
+    } catch (error) {
+      if (error.code === "ENOENT") {
+        return;
+      }
+      throw error;
+    }
+    if (info.isSymbolicLink() || (index < parts.length - 1 && !info.isDirectory())) {
+      const error = new Error("CSS imports cannot traverse symlinks or non-directory entries.");
+      error.status = 400;
+      throw error;
+    }
+    if (index === parts.length - 1 && !info.isFile()) {
+      const error = new Error("CSS imports must target regular files.");
+      error.status = 400;
+      throw error;
+    }
+  }
 }
 function revisionFor(files) {
-  return createHash("sha256")
-    .update(sourceFiles.map((file) => files[file] || "").join("\0"))
-    .digest("hex")
-    .slice(0, 8);
+  const hash = createHash("sha256");
+  for (const [file, content] of Object.entries(files).sort(([a], [b]) => a.localeCompare(b))) {
+    hash.update(file).update("\0").update(content).update("\0");
+  }
+  return hash.digest("hex").slice(0, 8);
 }
 function contentType(path) {
   return (
@@ -324,10 +513,23 @@ function contentType(path) {
       ".mjs": "text/javascript; charset=utf-8",
       ".js": "text/javascript; charset=utf-8",
       ".json": "application/json; charset=utf-8",
-    }[extname(path)] || "text/plain; charset=utf-8"
+      ".svg": "image/svg+xml",
+      ".avif": "image/avif",
+      ".bmp": "image/bmp",
+      ".png": "image/png",
+      ".jpg": "image/jpeg",
+      ".jpeg": "image/jpeg",
+      ".gif": "image/gif",
+      ".webp": "image/webp",
+      ".ico": "image/x-icon",
+      ".woff": "font/woff",
+      ".woff2": "font/woff2",
+      ".ttf": "font/ttf",
+      ".otf": "font/otf",
+    }[extname(path).toLowerCase()] || "text/plain; charset=utf-8"
   );
 }
-async function git(cwd, args, remote = false) {
+async function git(cwd, args, remote = false, encoding = "utf8") {
   const env =
     remote && gitToken
       ? { ...process.env, GIT_TERMINAL_PROMPT: "0", GIT_ASKPASS_REQUIRE: "force", WDS_GIT_TOKEN: gitToken }
@@ -339,7 +541,7 @@ async function git(cwd, args, remote = false) {
     });
     env.GIT_ASKPASS = helper;
   }
-  return exec("git", ["-C", cwd, ...args], { env });
+  return exec("git", ["-C", cwd, ...args], { env, encoding });
 }
 function remoteRequired() {
   if (!gitApi) {
@@ -394,6 +596,13 @@ async function remoteRepositories() {
     }
   }
   return result.filter((entry) => entry.repo);
+}
+async function remoteTeams() {
+  const orgResponse = await api("/api/v1/orgs");
+  const orgs = Array.isArray(orgResponse) ? orgResponse : orgResponse.orgs || orgResponse.organizations || [];
+  return orgs
+    .map((item) => (typeof item === "string" ? item : item.slug || item.org))
+    .filter((org) => typeof org === "string" && valid(org));
 }
 async function remoteRepo(team, repo, create = false) {
   remoteRequired();
@@ -512,10 +721,30 @@ async function remoteRepo(team, repo, create = false) {
 }
 async function body(request) {
   const chunks = [];
+  const maxBytes = 2 * 1024 * 1024;
+  let bytes = 0;
+  let tooLarge = false;
   for await (const chunk of request) {
-    chunks.push(chunk);
+    bytes += chunk.length;
+    if (bytes > maxBytes) {
+      tooLarge = true;
+      chunks.length = 0;
+    } else if (!tooLarge) {
+      chunks.push(chunk);
+    }
   }
-  return JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}");
+  if (tooLarge) {
+    const error = new Error("Request body exceeds the 2 MiB limit.");
+    error.status = 413;
+    throw error;
+  }
+  try {
+    return JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}");
+  } catch {
+    const error = new Error("Request body must contain valid JSON.");
+    error.status = 400;
+    throw error;
+  }
 }
 function reply(response, status, data, type = "application/json; charset=utf-8") {
   response.writeHead(status, { "content-type": type, "cache-control": "no-store" });
@@ -527,11 +756,18 @@ async function ensureRepo(team, repo, files) {
     .then(() => true)
     .catch(() => false);
   if (hasCommit) {
-    return path;
+    const projectMetadata = await Promise.any(
+      ["component.json", "design-system.json"].map((file) => git(path, ["cat-file", "-e", `HEAD:${file}`])),
+    )
+      .then(() => true)
+      .catch(() => false);
+    if (projectMetadata) {
+      return path;
+    }
   }
-  for (const file of sourceFiles) {
-    if (typeof files[file] === "string") {
-      await writeFile(join(path, file), files[file]);
+  for (const file of Object.keys(files)) {
+    if (safeFile(file, sourceExtensions) && typeof files[file] === "string") {
+      await writeSafeFile(path, file, files[file]);
     }
   }
   await configureGitAuthor(path);
@@ -539,6 +775,42 @@ async function ensureRepo(team, repo, files) {
   await git(path, ["commit", "-m", "Initial component source"]);
   await git(path, ["push", "-u", "origin", "main"], true);
   return path;
+}
+
+function blankProjectFiles(repo, name, description) {
+  const tag = `ds-${repo}`;
+  return {
+    "component.html": `<template component="${tag}" shadow-dom="open">\n  <link rel="stylesheet" href="./styles.css" />\n  <slot></slot>\n</template>\n`,
+    "styles.css": "",
+    "stories.html": `<!doctype html>\n<html lang="en">\n  <head>\n    <meta charset="utf-8" />\n    <script type="importmap">{ "imports": { "@li3/": "https://cdn.li3.dev/@li3/" } }</script>\n    <script type="module">import '@li3/web';</script>\n    <link rel="component" href="./component.html" />\n  </head>\n  <body>\n    <template app>\n      <main><h1>${name}</h1><${tag}></${tag}></main>\n    </template>\n  </body>\n</html>\n`,
+    "component.json": `${JSON.stringify({ name, description }, null, 2)}\n`,
+    "spec.mjs":
+      "import test from 'node:test';\nimport assert from 'node:assert/strict';\n\ntest('component source is ready for specifications', () => {\n  assert.ok(true);\n});\n",
+  };
+}
+function blankDesignSystemFiles(name, description) {
+  return {
+    "design-system.json": `${JSON.stringify({ type: "design-system", name, description }, null, 2)}\n`,
+    "styles.css": `/* Shared design tokens for ${name}. */\n`,
+  };
+}
+async function projectMetadata(path, ref = "refs/remotes/origin/main") {
+  for (const [file, type] of [
+    ["component.json", "component"],
+    ["design-system.json", "design-system"],
+  ]) {
+    try {
+      const { stdout } = await git(path, ["show", `${ref}:${file}`]);
+      const metadata = JSON.parse(stdout);
+      if (type === "design-system" && metadata.type !== "design-system") {
+        continue;
+      }
+      return { ...metadata, type };
+    } catch {
+      // Try the other supported project kind.
+    }
+  }
+  return null;
 }
 async function listRepos() {
   const projects = [];
@@ -549,13 +821,21 @@ async function listRepos() {
         continue;
       }
       const path = mountedPath(sourceTeam, entry.name);
-      const metadata = JSON.parse(await readFile(join(path, "component.json"), "utf8"));
-      const files = await readSourceFiles(path);
+      let metadata;
+      try {
+        metadata = JSON.parse(await readFile(join(path, "component.json"), "utf8"));
+        metadata.type = "component";
+      } catch {
+        metadata = JSON.parse(await readFile(join(path, "design-system.json"), "utf8"));
+        if (metadata.type !== "design-system") {
+          continue;
+        }
+      }
       projects.push({
         team: sourceTeam,
         repo: entry.name,
         ...metadata,
-        revision: revisionFor(files),
+        revision: revisionFor(await discoverAssets(path)),
         sourceMode: "filesystem",
       });
     }
@@ -568,8 +848,10 @@ async function listRepos() {
           return;
         }
         try {
-          const { stdout } = await git(path, ["show", "refs/remotes/origin/main:component.json"]);
-          const metadata = JSON.parse(stdout);
+          const metadata = await projectMetadata(path);
+          if (!metadata) {
+            return;
+          }
           if (!projects.some((project) => project.team === team && project.repo === repo)) {
             projects.push({
               team,
@@ -589,20 +871,25 @@ async function listRepos() {
   return projects;
 }
 async function readRevision(team, repo, revision, file) {
-  if (!valid(team, repo) || !safePart.test(revision) || !assetFiles.includes(file)) {
+  if (
+    !valid(team, repo) ||
+    !(revision === "latest" || /^[a-f0-9]{4,40}$/.test(revision) || /^v\d+\.\d+$/.test(revision)) ||
+    !safeFile(file)
+  ) {
     return null;
   }
   if (isMountedSource(team, repo)) {
     const root = mountedPath(team, repo);
-    const generated = file === "styles.css" && revision === "latest" ? join(root, "dist", "editor.css") : null;
-    const path =
-      generated && existsSync(generated)
-        ? generated
-        : revision === "latest"
-          ? sourceFilePath(file, root)
-          : releasePath(revision, file, root);
+    const sourceRoot =
+      revision === "latest"
+        ? join(root, ".wds", "artifacts", "latest")
+        : join(root, ".wds", "artifacts", "releases", revision);
     try {
-      return await readFile(path, "utf8");
+      return await readSafeFile(
+        sourceRoot,
+        file,
+        sourceExtensions.has(extname(file).toLowerCase()) ? "utf8" : undefined,
+      );
     } catch {
       return null;
     }
@@ -614,8 +901,18 @@ async function readRevision(team, repo, revision, file) {
       return null;
     }
     try {
-      const ref = revision === "latest" ? "refs/remotes/origin/main" : revision;
-      const { stdout } = await git(path, ["show", `${ref}:${file}`]);
+      const ref = revision === "latest" ? "refs/remotes/origin/wds-artifacts" : `refs/remotes/origin/wds-artifacts`;
+      const artifactPath = revision === "latest" ? `latest/${file}` : `releases/${revision}/${file}`;
+      const mode = (await git(path, ["ls-tree", "-r", ref, "--", artifactPath])).stdout.split(" ", 1)[0];
+      if (!mode.startsWith("100")) {
+        return null;
+      }
+      const { stdout } = await git(
+        path,
+        ["show", `${ref}:${artifactPath}`],
+        false,
+        sourceExtensions.has(extname(file).toLowerCase()) ? "utf8" : "buffer",
+      );
       return stdout;
     } catch {
       return null;
@@ -631,59 +928,302 @@ async function nextVersion(path, kind) {
     .map((tag) => tag.match(/^v(\d+)\.(\d+)$/))
     .filter(Boolean)
     .map(([, major, minor]) => [Number(major), Number(minor)]);
-  const [major, minor] = versions.sort((a, b) => b[0] - a[0] || b[1] - a[1])[0] || [0, 0];
+  if (versions.length === 0) {
+    return "v1.0";
+  }
+  const [major, minor] = versions.sort((a, b) => b[0] - a[0] || b[1] - a[1])[0];
   return kind === "major" ? `v${major + 1}.0` : `v${major || 1}.${minor + 1}`;
 }
-async function compileSource(path) {
-  if (!path) {
-    return;
-  }
-  const cli = join(root, "node_modules", ".bin", "tailwindcss");
-  if (!existsSync(cli) || !existsSync(sourceFilePath("styles.css", path))) {
-    return;
-  }
-  await mkdir(join(path, "dist"), { recursive: true });
-  await exec(cli, ["-i", "styles.css", "-o", "dist/editor.css", "--minify"], { cwd: path });
-}
-async function readSourceFiles(path) {
-  return Object.fromEntries(
-    await Promise.all(
-      sourceFiles.map(async (file) => [
-        file,
-        existsSync(sourceFilePath(file, path)) ? await readFile(sourceFilePath(file, path), "utf8") : "",
-      ]),
-    ),
-  );
-}
-async function releaseSource(team, repo, kind) {
-  const path = mountedPath(team, repo);
-  const files = await readSourceFiles(path);
-  const revision = revisionFor(files);
-  const releases = join(path, ".wds", "releases");
-  await mkdir(releases, { recursive: true });
-  const entries = await readdir(releases, { withFileTypes: true });
-  const versions = entries
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => entry.name.match(/^v(\d+)\.(\d+)$/))
-    .filter(Boolean)
-    .map(([, major, minor]) => [Number(major), Number(minor)]);
-  const [major, minor] = versions.sort((a, b) => b[0] - a[0] || b[1] - a[1])[0] || [0, 0];
-  const version = kind === "major" ? `v${major + 1}.0` : `v${major || 1}.${minor + 1}`;
-  const destination = join(releases, version);
-  await mkdir(destination, { recursive: true });
-  for (const file of sourceFiles) {
-    if (files[file]) {
-      await writeFile(join(destination, file), files[file]);
+async function validateCssImports(path, files) {
+  let browserImportsFound = false;
+  for (const [file, value] of Object.entries(files)) {
+    if (extname(file).toLowerCase() !== ".css") {
+      continue;
+    }
+    const source = Buffer.isBuffer(value) ? value.toString("utf8") : value;
+    const withoutComments = source.replace(/\/\*[\s\S]*?\*\//g, "");
+    const imports = [...withoutComments.matchAll(/@import\b([^;]*)(?:;|$)/gi)];
+    const importTokens = [...withoutComments.matchAll(/@import\b/gi)];
+    if (imports.length !== importTokens.length) {
+      const error = new Error("CSS imports could not be safely parsed.");
+      error.status = 400;
+      throw error;
+    }
+    for (const [, prelude] of imports) {
+      const parsed = prelude.match(/^\s*(?:url\(\s*(?:"([^"]*)"|'([^']*)'|([^\s)]+))\s*\)|"([^"]*)"|'([^']*)')/i);
+      if (!parsed || /@import\b/i.test(prelude.slice(parsed[0].length))) {
+        const error = new Error("CSS import could not be safely parsed.");
+        error.status = 400;
+        throw error;
+      }
+      const specifier = parsed.slice(1).find((value) => value !== undefined);
+      if (/^(?:[a-z][a-z0-9+.-]*:|\/\/|#)/i.test(specifier)) {
+        browserImportsFound = true;
+        continue;
+      }
+      if (specifier.startsWith("/")) {
+        if (!specifier.startsWith("/static/")) {
+          const error = new Error("CSS imports must stay within this project or use a versioned /static/ asset URL.");
+          error.status = 400;
+          throw error;
+        }
+        browserImportsFound = true;
+        continue;
+      }
+      if (!specifier.startsWith(".")) {
+        browserImportsFound = true;
+        continue;
+      }
+      let localSpecifier;
+      try {
+        localSpecifier = decodeURIComponent(specifier.split(/[?#]/, 1)[0]);
+      } catch {
+        const error = new Error("CSS import path is invalid.");
+        error.status = 400;
+        throw error;
+      }
+      const target = resolve(path, file.includes("/") ? file.slice(0, file.lastIndexOf("/")) : ".", localSpecifier);
+      const targetRelative = relative(path, target);
+      if (
+        targetRelative.startsWith("..") ||
+        targetRelative === "" ||
+        targetRelative.startsWith(sep) ||
+        !safeFile(targetRelative.split(sep).join("/"), new Set([".css"]))
+      ) {
+        const error = new Error("CSS imports must target supported stylesheets within the current project repository.");
+        error.status = 400;
+        throw error;
+      }
+      await assertNoSymlinkPath(path, targetRelative.split(sep).join("/"));
     }
   }
-  if (existsSync(join(path, "dist", "editor.css"))) {
-    await cp(join(path, "dist", "editor.css"), join(destination, "styles.css"));
+  return browserImportsFound;
+}
+async function validateRelativeReferences(path, files) {
+  const references = [];
+  for (const [file, value] of Object.entries(files)) {
+    const extension = extname(file).toLowerCase();
+    const content = Buffer.isBuffer(value) ? value.toString("utf8") : value;
+    if (extension === ".html") {
+      for (const [, specifier] of content.matchAll(/\b(?:href|src)\s*=\s*["']([^"']+)["']/gi)) {
+        references.push([file, specifier]);
+      }
+    } else if (extension === ".css") {
+      const cssWithoutComments = content.replace(/\/\*[\s\S]*?\*\//g, "");
+      for (const match of cssWithoutComments.matchAll(/url\(\s*(?:"([^"]*)"|'([^']*)'|([^)]*))\s*\)/gi)) {
+        references.push([
+          file,
+          match
+            .slice(1)
+            .find((item) => item !== undefined)
+            .trim(),
+        ]);
+      }
+    } else if (extension === ".mjs" || extension === ".js") {
+      const dynamicImports = [...content.matchAll(/\bimport\s*\(([^)]*)\)/g)];
+      const literalImport = /^\s*(?:"[^"\\]*(?:\\.[^"\\]*)*"|'[^'\\]*(?:\\.[^'\\]*)*')\s*$/;
+      if (dynamicImports.some(([, expression]) => !literalImport.test(expression))) {
+        const error = new Error("Dynamic imports must use literal paths so component boundaries can be validated.");
+        error.status = 400;
+        throw error;
+      }
+      const imports =
+        /\bimport\s*(?:\(\s*)?["']([^"']+)["']|\bfrom\s*["']([^"']+)["']|\brequire\(\s*["']([^"']+)["']\s*\)|\bnew\s+URL\(\s*["']([^"']+)["']\s*,\s*import\.meta\.url\s*\)/g;
+      for (const match of content.matchAll(imports)) {
+        references.push([file, match.slice(1).find(Boolean)]);
+      }
+    }
   }
-  await writeFile(
-    join(destination, "manifest.json"),
-    JSON.stringify({ version, revision, files: sourceFiles }, null, 2),
-  );
-  return { version, revision };
+  for (const [importer, specifier] of references) {
+    if (/^(?:[a-z][a-z0-9+.-]*:|\/\/|#|\/|var\()/i.test(specifier)) {
+      continue;
+    }
+    if (
+      (extname(importer).toLowerCase() === ".mjs" || extname(importer).toLowerCase() === ".js") &&
+      !specifier.startsWith(".")
+    ) {
+      continue;
+    }
+    let decoded;
+    try {
+      decoded = decodeURIComponent(specifier.split(/[?#]/, 1)[0]);
+    } catch {
+      const error = new Error("Relative component reference is invalid.");
+      error.status = 400;
+      throw error;
+    }
+    const target = resolve(path, dirname(importer), decoded);
+    const targetRelative = relative(path, target);
+    const relativeFile = targetRelative.split(sep).join("/");
+    if (
+      targetRelative.startsWith("..") ||
+      targetRelative === "" ||
+      targetRelative.startsWith(sep) ||
+      !safeFile(relativeFile, assetExtensions)
+    ) {
+      const error = new Error("Relative imports and assets must remain inside the current component repository.");
+      error.status = 400;
+      throw error;
+    }
+    await assertNoSymlinkPath(path, relativeFile);
+  }
+}
+async function readSourceFiles(path) {
+  return discoverFiles(path, sourceExtensions);
+}
+async function publishSnapshot(path, team, repo, version = null) {
+  const isMounted = isMountedSource(team, repo);
+  const files = await discoverAssets(path);
+  const isDesignSystem = await isDesignSystemProject(path);
+  await validateRelativeReferences(path, files);
+  const sourceRevision = isMounted ? revisionFor(files) : (await git(path, ["rev-parse", "HEAD"])).stdout.trim();
+  const stage = await mkdtemp(join(tmpdir(), "wds-publish-"));
+  try {
+    const artifactPath = join(stage, "latest");
+    await mkdir(artifactPath);
+    for (const [file, content] of Object.entries(files)) {
+      if (
+        file === "spec.mjs" ||
+        file === "component.json" ||
+        file === "design-system.json" ||
+        file === "package.json" ||
+        file.endsWith(".lock")
+      ) {
+        continue;
+      }
+      await writeSafeFile(artifactPath, file, content, assetExtensions);
+    }
+    if (!isDesignSystem && files["styles.css"] !== undefined) {
+      const tailwind = join(root, "node_modules", ".bin", "tailwindcss");
+      if (!existsSync(tailwind)) {
+        const error = new Error("Tailwind CSS compiler is unavailable; refusing to publish uncompiled component CSS.");
+        error.status = 503;
+        throw error;
+      }
+      await validateCssImports(
+        path,
+        Object.fromEntries(Object.entries(files).filter(([file]) => extname(file) === ".css")),
+      );
+      await exec(tailwind, ["-i", "styles.css", "-o", "editor.css", "--minify"], { cwd: artifactPath });
+      const generated = await readFile(join(artifactPath, "editor.css"));
+      await rm(join(artifactPath, "editor.css"));
+      await rm(join(artifactPath, "styles.css"));
+      await writeFile(join(artifactPath, "styles.css"), generated);
+    }
+    const inventory = await discoverAssets(artifactPath);
+    const artifactNames = Object.keys(inventory).sort();
+    await writeFile(
+      join(artifactPath, "manifest.json"),
+      `${JSON.stringify({ revision: sourceRevision, type: isDesignSystem ? "design-system" : "component", files: artifactNames }, null, 2)}\n`,
+    );
+    if (isMounted) {
+      const destination = await ensureSafeDirectories(path, [".wds", "artifacts"]);
+      const releases = version ? await ensureSafeDirectories(path, [".wds", "artifacts", "releases"]) : null;
+      const versionDirectory = version ? join(releases, version) : null;
+      if (versionDirectory) {
+        try {
+          await lstat(versionDirectory);
+          const error = new Error(`Published release ${version} already exists.`);
+          error.status = 409;
+          throw error;
+        } catch (error) {
+          if (error.code !== "ENOENT") {
+            throw error;
+          }
+        }
+      }
+      const tempLatest = join(destination, `.latest-${randomBytes(6).toString("hex")}`);
+      const tempVersion = version ? join(releases, `.${version}-${randomBytes(6).toString("hex")}`) : null;
+      await cp(artifactPath, tempLatest, { recursive: true });
+      if (tempVersion) {
+        await cp(artifactPath, tempVersion, { recursive: true });
+      }
+      const previousLatest = join(destination, `.previous-${randomBytes(6).toString("hex")}`);
+      let movedPrevious = false;
+      let movedVersion = false;
+      try {
+        await (await import("node:fs/promises")).rename(join(destination, "latest"), previousLatest);
+        movedPrevious = true;
+      } catch (error) {
+        if (error.code !== "ENOENT") {
+          throw error;
+        }
+      }
+      try {
+        if (tempVersion) {
+          await (await import("node:fs/promises")).rename(tempVersion, versionDirectory);
+          movedVersion = true;
+        }
+        await (await import("node:fs/promises")).rename(tempLatest, join(destination, "latest"));
+      } catch (error) {
+        if (movedVersion) {
+          await rm(versionDirectory, { recursive: true, force: true });
+        }
+        if (movedPrevious) {
+          await (
+            await import("node:fs/promises")
+          )
+            .rename(previousLatest, join(destination, "latest"))
+            .catch(() => undefined);
+        }
+        await rm(tempLatest, { recursive: true, force: true });
+        if (tempVersion) {
+          await rm(tempVersion, { recursive: true, force: true });
+        }
+        throw error;
+      }
+      if (movedPrevious) {
+        await rm(previousLatest, { recursive: true, force: true });
+      }
+    } else {
+      const artifactRepo = join(stage, "artifact-repo");
+      await mkdir(artifactRepo);
+      await git(artifactRepo, ["init", "--initial-branch=main"]);
+      await git(artifactRepo, ["remote", "add", "origin", `${gitApi}/git/${team}/${repo}.git`]);
+      await git(
+        artifactRepo,
+        ["fetch", "origin", "refs/heads/wds-artifacts:refs/remotes/origin/wds-artifacts"],
+        true,
+      ).catch((error) => {
+        if (!/couldn't find remote ref|not our ref/i.test(error.stderr || "")) {
+          throw error;
+        }
+      });
+      const existingArtifacts = await git(artifactRepo, ["rev-parse", "--verify", "refs/remotes/origin/wds-artifacts"])
+        .then(() => true)
+        .catch(() => false);
+      if (existingArtifacts) {
+        await git(artifactRepo, ["checkout", "-B", "wds-artifacts", "refs/remotes/origin/wds-artifacts"]);
+      } else {
+        await git(artifactRepo, ["checkout", "--orphan", "wds-artifacts"]);
+      }
+      await rm(join(artifactRepo, "latest"), { recursive: true, force: true });
+      await cp(artifactPath, join(artifactRepo, "latest"), { recursive: true });
+      if (version) {
+        const releases = await ensureSafeDirectories(artifactRepo, ["releases"]);
+        const versionDirectory = join(releases, version);
+        try {
+          await lstat(versionDirectory);
+          const error = new Error(`Published release ${version} already exists.`);
+          error.status = 409;
+          throw error;
+        } catch (error) {
+          if (error.code !== "ENOENT") {
+            throw error;
+          }
+        }
+        await mkdir(join(artifactRepo, "releases"), { recursive: true });
+        await cp(artifactPath, versionDirectory, { recursive: true });
+      }
+      await configureGitAuthor(artifactRepo);
+      await git(artifactRepo, ["add", "-A"]);
+      await git(artifactRepo, ["commit", "-m", version ? `Publish ${version}` : "Publish latest"]);
+      await git(artifactRepo, ["push", "origin", "wds-artifacts"], true);
+    }
+    return { revision: sourceRevision, ...(version ? { version } : {}) };
+  } finally {
+    await rm(stage, { recursive: true, force: true });
+  }
 }
 async function runSpecs(team, repo) {
   if (!unsandboxedSpecsEnabled) {
@@ -712,7 +1252,11 @@ async function runSpecs(team, repo) {
         recursive: true,
         filter: (source) => {
           const parts = relative(sourceCwd, source).split(sep);
-          return !parts.includes(".git") && !parts.includes("node_modules");
+          try {
+            return !parts.includes(".git") && !parts.includes("node_modules") && !lstatSync(source).isSymbolicLink();
+          } catch {
+            return false;
+          }
         },
       });
       return true;
@@ -756,16 +1300,6 @@ async function serveStatic(request, response, pathname) {
     response.end(file);
   } catch {
     reply(response, 404, "Not found", "text/plain");
-  }
-}
-
-// Git-managed projects are initialized on demand in the remote store; never create local shadow repos.
-if (sourceTeamPath && existsSync(sourceTeamPath)) {
-  const entries = await readdir(sourceTeamPath, { withFileTypes: true });
-  for (const entry of entries.filter((item) => item.isDirectory() && valid(item.name))) {
-    if (isMountedSource(sourceTeam, entry.name)) {
-      await compileSource(mountedPath(sourceTeam, entry.name));
-    }
   }
 }
 
@@ -885,11 +1419,59 @@ createServer(async (request, response) => {
   }
 
   try {
+    if (request.method === "POST" && url.pathname === "/api/projects") {
+      if (!requireEditorAccess(request, response)) {
+        return;
+      }
+      const input = await body(request);
+      const { team, repo, description = "", type = "component" } = input || {};
+      if (
+        typeof team !== "string" ||
+        team.length > 100 ||
+        typeof repo !== "string" ||
+        repo.length > 100 ||
+        !valid(team, repo) ||
+        !["component", "design-system"].includes(type) ||
+        typeof description !== "string" ||
+        description.length > 500
+      ) {
+        return reply(response, 400, { error: "Invalid project" });
+      }
+      return await withRepoLock(team, repo, async () => {
+        if ((mountedPath(team, repo) && existsSync(mountedPath(team, repo))) || (await remoteRepo(team, repo))) {
+          return reply(response, 409, { error: "Project already exists" });
+        }
+        const name = repo;
+        const files =
+          type === "design-system"
+            ? blankDesignSystemFiles(name, description)
+            : blankProjectFiles(repo, name, description);
+        const path = await ensureRepo(team, repo, files);
+        const revision = (await git(path, ["rev-parse", "--short", "HEAD"])).stdout.trim();
+        return reply(response, 201, {
+          project: { team, repo, name, description, type, revision, sourceMode: "git" },
+        });
+      });
+    }
     if (request.method === "GET" && url.pathname === "/api/projects") {
       if (!requireEditorAccess(request, response)) {
         return;
       }
       return reply(response, 200, await listRepos());
+    }
+    if (request.method === "GET" && url.pathname === "/api/teams") {
+      if (!requireEditorAccess(request, response)) {
+        return;
+      }
+      const teams = new Set(sourceTeam && sourceTeamPath ? [sourceTeam] : []);
+      if (gitToken) {
+        for (const team of await remoteTeams()) {
+          teams.add(team);
+        }
+      } else if (!teams.size) {
+        remoteRequired();
+      }
+      return reply(response, 200, { teams: [...teams].sort((a, b) => a.localeCompare(b)) });
     }
     if (request.method === "GET" && parts[0] === "api" && parts[1] === "source") {
       if (!requireEditorAccess(request, response)) {
@@ -901,22 +1483,31 @@ createServer(async (request, response) => {
       }
       if (isMountedSource(team, repo)) {
         const files = await readSourceFiles(mountedPath(team, repo));
-        return reply(response, 200, { files, revision: revisionFor(files), sourceMode: "filesystem" });
+        return reply(response, 200, {
+          files,
+          revision: revisionFor(await discoverAssets(mountedPath(team, repo))),
+          sourceMode: "filesystem",
+        });
       }
       return await withRepoLock(team, repo, async () => {
         const path = await remoteRepo(team, repo);
         if (!path) {
           return reply(response, 404, { error: "Project not found" });
         }
+        const tree = (await git(path, ["ls-tree", "-r", "-z", "refs/remotes/origin/main"])).stdout
+          .split("\0")
+          .flatMap((entry) => {
+            const separator = entry.indexOf("\t");
+            if (separator < 0) {
+              return [];
+            }
+            const mode = entry.slice(0, separator).split(" ", 1)[0];
+            const file = entry.slice(separator + 1);
+            return mode.startsWith("100") && safeFile(file, sourceExtensions) ? [file] : [];
+          });
         const files = Object.fromEntries(
           await Promise.all(
-            sourceFiles.map(async (file) => {
-              try {
-                return [file, (await git(path, ["show", `refs/remotes/origin/main:${file}`])).stdout];
-              } catch {
-                return [file, ""];
-              }
-            }),
+            tree.map(async (file) => [file, (await git(path, ["show", `refs/remotes/origin/main:${file}`])).stdout]),
           ),
         );
         return reply(response, 200, {
@@ -932,26 +1523,73 @@ createServer(async (request, response) => {
       }
       const [, , team, repo] = parts;
       const { files, message = "Update component source" } = await body(request);
-      if (!valid(team, repo) || !files) {
+      if (
+        !valid(team, repo) ||
+        !files ||
+        typeof files !== "object" ||
+        Array.isArray(files) ||
+        Object.entries(files).some(
+          ([file, content]) => !safeFile(file, sourceExtensions) || typeof content !== "string",
+        )
+      ) {
         return reply(response, 400, { error: "Invalid source" });
       }
       if (isMountedSource(team, repo)) {
         const path = mountedPath(team, repo);
-        for (const file of sourceFiles) {
-          if (typeof files[file] === "string" && (files[file] || existsSync(sourceFilePath(file, path)))) {
-            await writeFile(sourceFilePath(file, path), files[file]);
+        const currentFiles = await readSourceFiles(path);
+        const proposedFiles = { ...currentFiles, ...files };
+        await validateRelativeReferences(path, proposedFiles);
+        await validateCssImports(
+          path,
+          Object.fromEntries(Object.entries(proposedFiles).filter(([file]) => extname(file).toLowerCase() === ".css")),
+        );
+        for (const [file, content] of Object.entries(files)) {
+          if (!safeFile(file, sourceExtensions) || typeof content !== "string") {
+            continue;
           }
+          await writeSafeFile(path, file, content);
         }
-        await compileSource(path);
-        return reply(response, 200, { revision: revisionFor(await readSourceFiles(path)), sourceMode: "filesystem" });
+        return reply(response, 200, {
+          revision: revisionFor(await discoverAssets(path)),
+          sourceMode: "filesystem",
+        });
       }
       return await withRepoLock(team, repo, async () => {
         const path = await ensureRepo(team, repo, files);
-        await git(path, ["push", "origin", "main"], true);
-        for (const file of sourceFiles) {
-          if (typeof files[file] === "string") {
-            await writeFile(join(path, file), files[file]);
+        const localHead = (await git(path, ["rev-parse", "HEAD"])).stdout.trim();
+        const remoteHead = (await git(path, ["rev-parse", "refs/remotes/origin/main"])).stdout.trim();
+        if (localHead !== remoteHead) {
+          const error = new Error("Local main has unpublished commits; refusing to publish them with this update.");
+          error.status = 409;
+          throw error;
+        }
+        const tree = (await git(path, ["ls-tree", "-r", "-z", "refs/remotes/origin/main"])).stdout
+          .split("\0")
+          .flatMap((entry) => {
+            const separator = entry.indexOf("\t");
+            if (separator < 0) {
+              return [];
+            }
+            const mode = entry.slice(0, separator).split(" ", 1)[0];
+            const file = entry.slice(separator + 1);
+            return mode.startsWith("100") && safeFile(file, sourceExtensions) ? [file] : [];
+          });
+        const currentFiles = Object.fromEntries(
+          await Promise.all(
+            tree.map(async (file) => [file, (await git(path, ["show", `refs/remotes/origin/main:${file}`])).stdout]),
+          ),
+        );
+        const proposedFiles = { ...currentFiles, ...files };
+        await validateRelativeReferences(path, proposedFiles);
+        await validateCssImports(
+          path,
+          Object.fromEntries(Object.entries(proposedFiles).filter(([file]) => extname(file).toLowerCase() === ".css")),
+        );
+        for (const [file, content] of Object.entries(files)) {
+          if (!safeFile(file, sourceExtensions) || typeof content !== "string") {
+            continue;
           }
+          await writeSafeFile(path, file, content);
         }
         await git(path, ["add", "."]);
         const status = (await git(path, ["status", "--porcelain"])).stdout;
@@ -962,6 +1600,7 @@ createServer(async (request, response) => {
         await git(path, ["push", "origin", "main"], true);
         return reply(response, 200, {
           revision: (await git(path, ["rev-parse", "--short", "HEAD"])).stdout.trim(),
+          sourceMode: "git",
         });
       });
     }
@@ -971,12 +1610,22 @@ createServer(async (request, response) => {
       }
       const [, , team, repo] = parts;
       const { kind } = await body(request);
-      if (!valid(team, repo) || !["major", "minor"].includes(kind)) {
+      if (parts.length !== 4 || !valid(team, repo) || !["major", "minor"].includes(kind)) {
         return reply(response, 400, { error: "Invalid release" });
       }
       if (isMountedSource(team, repo)) {
-        await compileSource(mountedPath(team, repo));
-        return reply(response, 201, await releaseSource(team, repo, kind));
+        const path = mountedPath(team, repo);
+        const releases = join(path, ".wds", "artifacts", "releases");
+        const entries = await readdir(releases, { withFileTypes: true }).catch(() => []);
+        const versions = entries
+          .map(({ name }) => name.match(/^v(\d+)\.(\d+)$/))
+          .filter(Boolean)
+          .map(([, a, b]) => [Number(a), Number(b)]);
+        const [major, minor] = versions.sort((a, b) => b[0] - a[0] || b[1] - a[1])[0] || [0, 0];
+        const version =
+          versions.length === 0 ? "v1.0" : kind === "major" ? `v${major + 1}.0` : `v${major || 1}.${minor + 1}`;
+        const published = await publishSnapshot(path, team, repo, version);
+        return reply(response, 201, { version, revision: published.revision });
       }
       return await withRepoLock(team, repo, async () => {
         const path = await remoteRepo(team, repo);
@@ -991,12 +1640,37 @@ createServer(async (request, response) => {
           throw error;
         }
         const version = await nextVersion(path, kind);
+        const result = await publishSnapshot(path, team, repo, version);
         await git(path, ["tag", "-a", version, "-m", `Release ${version}`]);
         await git(path, ["push", "origin", version], true);
-        return reply(response, 201, {
-          version,
-          revision: (await git(path, ["rev-parse", "--short", "HEAD"])).stdout.trim(),
-        });
+        return reply(response, 201, { version, revision: result.revision });
+      });
+    }
+    if (request.method === "POST" && parts[0] === "api" && parts[1] === "publish") {
+      if (!requireEditorAccess(request, response)) {
+        return;
+      }
+      const [, , team, repo] = parts;
+      if (parts.length !== 4 || !valid(team, repo)) {
+        return reply(response, 400, { error: "Invalid project" });
+      }
+      return await withRepoLock(team, repo, async () => {
+        const path = isMountedSource(team, repo) ? mountedPath(team, repo) : await remoteRepo(team, repo);
+        if (!path) {
+          return reply(response, 404, { error: "Project not found" });
+        }
+        if (!isMountedSource(team, repo)) {
+          const localHead = (await git(path, ["rev-parse", "HEAD"])).stdout.trim();
+          const remoteHead = (await git(path, ["rev-parse", "refs/remotes/origin/main"])).stdout.trim();
+          const dirty = (await git(path, ["status", "--porcelain"])).stdout.trim();
+          if (localHead !== remoteHead || dirty) {
+            const error = new Error("Commit and push source changes before publishing.");
+            error.status = 409;
+            throw error;
+          }
+        }
+        const result = await publishSnapshot(path, team, repo);
+        return reply(response, 200, result);
       });
     }
     if (request.method === "POST" && parts[0] === "api" && parts[1] === "test") {
@@ -1004,13 +1678,29 @@ createServer(async (request, response) => {
         return;
       }
       const [, , team, repo] = parts;
-      if (!valid(team, repo)) {
+      if (parts.length !== 4 || !valid(team, repo)) {
         return reply(response, 400, { error: "Invalid project" });
       }
       return reply(response, 200, await runSpecs(team, repo));
     }
-    if (request.method === "GET" && parts[0] === "static" && parts.length === 5) {
-      const [, team, repo, revision, file] = parts;
+    if (request.method === "GET" && parts[0] === "static" && parts.length >= 5) {
+      const [, team, repo, revision, ...fileParts] = parts;
+      if (fileParts.some((part) => /%2f|%5c|%2e/i.test(part))) {
+        return reply(response, 404, "Not found", "text/plain");
+      }
+      let decodedParts;
+      try {
+        decodedParts = fileParts.map(decodeURIComponent);
+      } catch {
+        decodedParts = [];
+      }
+      if (decodedParts.some((part) => part.includes("/") || part.includes("\\"))) {
+        return reply(response, 404, "Not found", "text/plain");
+      }
+      const file = decodedParts.join("/");
+      if (!safeFile(file)) {
+        return reply(response, 404, "Not found", "text/plain");
+      }
       if (file === "component.html" && url.searchParams.get("view") === "component") {
         const preview = await componentPreview(team, repo, revision);
         if (preview) {

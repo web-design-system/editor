@@ -39,4 +39,9 @@ test("workbench exposes project source and authoring workflows", async () => {
   assert.match(app, /Draft preview \(sandboxed, no component scripts\)/);
   assert.match(app, /api\/publish/);
   assert.match(app, /component-create/);
+  assert.match(app, /designSystem: \{ team, repo, revision: "latest" \}/);
+  assert.match(app, /published tokens\.css at the latest revision/);
+  assert.match(app, /tokens-editor/);
+  assert.match(app, /save-tokens/);
+  assert.match(app, /publish-tokens/);
 });

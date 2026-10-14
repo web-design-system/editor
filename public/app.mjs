@@ -290,8 +290,34 @@ async function loadWorkbench(team, repo) {
   status.textContent = `${project.type === "component" ? "Team component" : "Design system"} · ${source.revision} · ${source.sourceMode}`;
   if (project.type === "design-system") {
     const components = projects.filter((item) => item.team === team && item.type === "component");
-    area.innerHTML = `<h1>${escapeHtml(project.name || repo)}</h1><p>Team-level repositories are siblings. Components can import this baseline once it is published; association does not create ownership.</p><h2>Shared stylesheet</h2><pre class="source-facts"></pre><h2>Team components</h2><div class="component-list">${components.map((item) => `<a href="/?team=${encodeURIComponent(team)}&amp;repo=${encodeURIComponent(item.repo)}">${escapeHtml(item.name || item.repo)} · ${escapeHtml(item.repo)}</a>`).join("") || "<p>No components yet.</p>"}</div><form id="component-create" class="creation-form"><h2>Add a component</h2><label>Repository slug<input name="repo" required maxlength="100" pattern="[a-z0-9][a-z0-9._\\-]*"></label><label>Name<input name="name" maxlength="100"></label><label>Description<textarea name="description" rows="2" maxlength="500"></textarea></label><button>Create component</button></form><p role="status" id="create-status"></p>`;
+    area.innerHTML = `<h1>${escapeHtml(project.name || repo)}</h1><p>New components will depend on this system’s published tokens.css at the latest revision.</p><h2>Shared tokens.css</h2><pre class="source-facts"></pre><section class="creation-form"><label>Tokens source<textarea id="tokens-editor" spellcheck="false" aria-label="Design system tokens"></textarea></label><label>Commit message<input id="tokens-message" value="Update design tokens" maxlength="200"></label><button type="button" id="save-tokens">Save token commit</button><button type="button" id="publish-tokens">Publish tokens latest</button><p id="token-status" role="status"></p></section><h2>Team components</h2><div class="component-list">${components.map((item) => `<a href="/?team=${encodeURIComponent(team)}&amp;repo=${encodeURIComponent(item.repo)}">${escapeHtml(item.name || item.repo)} · ${escapeHtml(item.repo)}</a>`).join("") || "<p>No components yet.</p>"}</div><form id="component-create" class="creation-form"><h2>Add a component</h2><label>Repository slug<input name="repo" required maxlength="100" pattern="[a-z0-9][a-z0-9._\\-]*"></label><label>Name<input name="name" maxlength="100"></label><label>Description<textarea name="description" rows="2" maxlength="500"></textarea></label><button>Create component</button></form><p role="status" id="create-status"></p>`;
     area.querySelector("pre").textContent = source.files["styles.css"] || "(No shared stylesheet yet)";
+    const tokensEditor = area.querySelector("#tokens-editor");
+    const tokenStatus = area.querySelector("#token-status");
+    tokensEditor.value = source.files["tokens.css"] || "";
+    area.querySelector("#save-tokens").addEventListener("click", async () => {
+      const response = await fetch(`/api/source/${encodeURIComponent(team)}/${encodeURIComponent(repo)}`, {
+        method: "PUT",
+        credentials: "same-origin",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          files: { "tokens.css": tokensEditor.value },
+          message: area.querySelector("#tokens-message").value.trim() || "Update design tokens",
+        }),
+      });
+      const data = await responseData(response);
+      tokenStatus.textContent = response.ok ? `Committed ${data.revision}.` : data.error || "Could not save tokens.";
+    });
+    area.querySelector("#publish-tokens").addEventListener("click", async () => {
+      const response = await fetch(`/api/publish/${encodeURIComponent(team)}/${encodeURIComponent(repo)}`, {
+        method: "POST",
+        credentials: "same-origin",
+      });
+      const data = await responseData(response);
+      tokenStatus.textContent = response.ok
+        ? `Published tokens revision ${data.revision}.`
+        : data.error || "Could not publish tokens.";
+    });
     area.querySelector("#component-create").addEventListener("submit", async (event) => {
       event.preventDefault();
       const values = Object.fromEntries(new FormData(event.currentTarget));
@@ -305,6 +331,7 @@ async function loadWorkbench(team, repo) {
           name: values.name || values.repo,
           description: values.description,
           type: "component",
+          designSystem: { team, repo, revision: "latest" },
         }),
       });
       const data = await responseData(response);
@@ -325,7 +352,7 @@ async function loadWorkbench(team, repo) {
   if (source.files["component.mjs"] !== undefined) {
     files["component.mjs"] = source.files["component.mjs"];
   }
-  area.innerHTML = `<h1>${escapeHtml(project.name || repo)} <small>Draft workbench</small></h1><p>Team-level component${project.designSystem ? ` · baseline ${escapeHtml(project.designSystem)}` : ""}. Published styles may import a design system separately.</p><div class="editor-layout"><section><h2>Draft preview (sandboxed, no component scripts)</h2><iframe title="Draft component preview" sandbox="" id="draft-preview"></iframe><fieldset><legend>Selected target: template root <code>data-wds-editable</code></legend><label>Padding<select data-utility="padding"><option value="">none</option><option>p-2</option><option>p-4</option><option>p-6</option><option>p-8</option></select></label><label>Margin<select data-utility="margin"><option value="">none</option><option>m-2</option><option>m-4</option><option>mt-4</option><option>mb-4</option><option>mx-auto</option></select></label><label>Background<select data-utility="background"><option value="">none</option><option>bg-indigo-600</option><option>bg-blue-600</option><option>bg-slate-900</option><option>bg-white</option></select></label><label>Text color<select data-utility="text"><option value="">none</option><option>text-white</option><option>text-slate-900</option><option>text-indigo-700</option></select></label><label>Custom Tailwind v4 utility<input id="custom-utility" placeholder="rounded-lg" maxlength="80"></label><button type="button" id="apply-utility">Apply utility</button><p id="selected-classes"></p></fieldset></section><section><h2>Source editor</h2><label><input type="checkbox" id="enable-module" ${files["component.mjs"] !== undefined ? "checked" : ""}> Add/use component.mjs (module source is not executed in Draft preview)</label><label>File<select id="source-file"><option>component.html</option><option>styles.css</option><option ${files["component.mjs"] === undefined ? "disabled" : ""}>component.mjs</option></select></label><textarea id="source-editor" spellcheck="false" aria-label="Component source"></textarea><label>Commit message<input id="commit-message" value="Update component source" maxlength="200"></label><button id="save-source">Save commit</button> <button id="refresh-history">Refresh history</button><p id="save-status" role="status"></p><h2>Commit history</h2><ol id="history-list"></ol><h2>Publish public latest</h2><p>Publishing updates public CDN artifacts separately from committed source.</p><button id="publish-source">Publish latest</button><div id="publish-result" role="status"></div></section></div>`;
+  area.innerHTML = `<h1>${escapeHtml(project.name || repo)} <small>Draft workbench</small></h1><p>Team-level component${project.designSystem ? ` · baseline ${escapeHtml(project.designSystem)}` : ""}. Dependency URL: /static/${escapeHtml(project.designSystem?.team || "")}/${escapeHtml(project.designSystem?.repo || "")}/${escapeHtml(project.designSystem?.revision || "latest")}/tokens.css</p><div class="editor-layout"><section><h2>Draft preview (sandboxed, no component scripts)</h2><iframe title="Draft component preview" sandbox="" id="draft-preview"></iframe><fieldset><legend>Selected target: template root <code>data-wds-editable</code></legend><label>Padding<select data-utility="padding"><option value="">none</option><option>p-2</option><option>p-4</option><option>p-6</option><option>p-8</option></select></label><label>Margin<select data-utility="margin"><option value="">none</option><option>m-2</option><option>m-4</option><option>mt-4</option><option>mb-4</option><option>mx-auto</option></select></label><label>Background<select data-utility="background"><option value="">none</option><option>bg-indigo-600</option><option>bg-blue-600</option><option>bg-slate-900</option><option>bg-white</option></select></label><label>Text color<select data-utility="text"><option value="">none</option><option>text-white</option><option>text-slate-900</option><option>text-indigo-700</option></select></label><label>Custom Tailwind v4 utility<input id="custom-utility" placeholder="rounded-lg" maxlength="80"></label><button type="button" id="apply-utility">Apply utility</button><p id="selected-classes"></p></fieldset></section><section><h2>Source editor</h2><label><input type="checkbox" id="enable-module" ${files["component.mjs"] !== undefined ? "checked" : ""}> Add/use component.mjs (module source is not executed in Draft preview)</label><label>File<select id="source-file"><option>component.html</option><option>styles.css</option><option ${files["component.mjs"] === undefined ? "disabled" : ""}>component.mjs</option></select></label><textarea id="source-editor" spellcheck="false" aria-label="Component source"></textarea><label>Commit message<input id="commit-message" value="Update component source" maxlength="200"></label><button id="save-source">Save commit</button> <button id="refresh-history">Refresh history</button><p id="save-status" role="status"></p><h2>Commit history</h2><ol id="history-list"></ol><h2>Publish public latest</h2><p>Publishing updates public CDN artifacts separately from committed source.</p><button id="publish-source">Publish latest</button><div id="publish-result" role="status"></div></section></div>`;
   const editor = area.querySelector("#source-editor");
   const fileSelect = area.querySelector("#source-file");
   const updateEditor = () => {

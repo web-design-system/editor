@@ -28,12 +28,13 @@ component.json
 spec.mjs
 ```
 
-`component.json` contains only the component name and description. Dependencies remain in the source files where browsers and authors can inspect them directly.
+`component.json` contains the component name, description, and a required `designSystem: { "team", "repo", "revision" }` dependency. Revision is `latest` or an immutable `vN.N` release.
 
 ```json
 {
   "name": "acme-button",
-  "description": "A reusable primary action control."
+  "description": "A reusable primary action control.",
+  "designSystem": { "team": "acme-corp", "repo": "foundation", "revision": "v1.2" }
 }
 ```
 
@@ -41,7 +42,7 @@ Components are Li3 HTML files. They may use templates, custom elements, Shadow D
 
 ```html
 <template component="acme-button" shadow-dom="open">
-  <link rel="stylesheet" href="/static/acme-corp/system/v1.2/styles.css" />
+  <link rel="stylesheet" href="/static/acme-corp/foundation/v1.2/tokens.css" />
   <link rel="stylesheet" href="./buttons.css" />
 
   <button class="button" type="button" on-click="press()">
@@ -52,15 +53,15 @@ Components are Li3 HTML files. They may use templates, custom elements, Shadow D
 </template>
 ```
 
-The baseline version is explicit in the CSS link or CSS `@import`, never hidden in metadata. This prevents a baseline change from silently altering a released component.
+Design systems own and publish `tokens.css` as their central token contract. It documents color, spacing, and breakpoint custom properties and may include Tailwind v4 `@theme` definitions. `styles.css` may import `./tokens.css` for compatibility. Components must import exactly `/static/<team>/<repo>/<revision>/tokens.css`, matching their metadata; `@import "tailwindcss"` is permitted as the local build directive. Other external CSS imports are rejected. Publish the design system first. Existing components must be migrated by adding the dependency metadata, adding the exact token import, and publishing only after the selected revision has published `tokens.css`.
 
-Components may import external CSS, Li3 component HTML, ESM modules, or assets by absolute URL. Relative styles, modules, and assets are allowed only within that component's own repository; WDS validates these paths and rejects imports that escape the component boundary, including symlink traversal. A dependency on another WDS component must use its absolute published URL, for example `/static/acme-corp/icons/latest/component.html`.
+Component stylesheets may use only their declared design system's published `tokens.css` as a cross-repository CSS import. Relative styles, modules, and assets are allowed only within that component's own repository; WDS validates these paths and rejects imports that escape the component boundary, including symlink traversal. A dependency on another WDS component must use its absolute published URL, for example `/static/acme-corp/icons/latest/component.html`.
 
 The editor discovers supported project files from that repository on each request instead of relying on a server-side filename list. Nested HTML, CSS, JavaScript, JSON, and SVG source files are editable; supported images and fonts are served as assets. Discovery never follows symlinks and excludes hidden paths, Git metadata, generated output, dependencies, and release internals. Static asset requests are confined to the selected repository and revision.
 
 Design-system repositories use the same Git-backed source model but are not components. They hold shared token/value files (for example `tokens.css` or `colors.css`), are published as standalone assets, and are not passed through the component CSS compiler or added to a component's build output. Components reference these files through absolute published URLs such as `/static/acme-corp/foundation/latest/tokens.css`.
 
-The Workbench's component stylesheets reference `/static/web-design-system/foundation/latest/styles.css`. That shared project must be created and published before the Workbench's shared tokens/utilities are available. Other systems can choose their own baseline repository and URL.
+The Workbench's component stylesheets reference `/static/web-design-system/foundation/latest/tokens.css`. That shared project must be created and published before the Workbench's shared tokens/utilities are available. Other systems can choose their own baseline repository and URL.
 
 Baseline repositories use this source shape:
 

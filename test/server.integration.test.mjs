@@ -42,6 +42,8 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
     const imageBytes = Buffer.from([0, 1, 2, 3, 255, 128]);
     await mkdir(bareRoot);
     await mkdir(mountedRoot);
+    await mkdir(join(bareRoot, "broken-team"));
+    await writeFile(join(bareRoot, "broken-team", "broken-repo.git"), "not a Git repository\n");
     const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
     const jwk = publicKey.export({ format: "jwk" });
     Object.assign(jwk, { kid: "integration-key", use: "sig", alg: "RS256" });
@@ -390,10 +392,57 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
       body: JSON.stringify({ team: "test-team", repo: "too-large", description: "x".repeat(2 * 1024 * 1024) }),
     });
     assert.equal(oversized.status, 413);
+    const unassociatedComponent = await fetch(`${base}/api/projects`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ team: "test-team", repo: "unassociated", type: "component" }),
+    });
+    assert.equal(unassociatedComponent.status, 400);
+    const invalidSystemComponent = await fetch(`${base}/api/projects`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        team: "test-team",
+        repo: "bad-system",
+        type: "component",
+        designSystem: { team: "test-team", repo: "not-a-system", revision: "latest" },
+      }),
+    });
+    assert.equal(invalidSystemComponent.status, 400);
+    const createFoundation = await fetch(`${base}/api/projects`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        team: "test-team",
+        repo: "foundation",
+        type: "design-system",
+        description: "Shared tokens",
+      }),
+    });
+    assert.equal(createFoundation.status, 201, await createFoundation.text());
+    const beforeTokenPublish = await fetch(`${base}/api/projects`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        team: "test-team",
+        repo: "before-token-publish",
+        type: "component",
+        designSystem: { team: "test-team", repo: "foundation", revision: "latest" },
+      }),
+    });
+    assert.equal(beforeTokenPublish.status, 400);
+    const foundationPublish = await fetch(`${base}/api/publish/test-team/foundation`, { method: "POST", headers });
+    assert.equal(foundationPublish.status, 200, await foundationPublish.text());
+    assert.equal((await fetch(`${base}/static/test-team/foundation/latest/tokens.css`)).status, 200);
     const create = await fetch(`${base}/api/projects`, {
       method: "POST",
       headers,
-      body: JSON.stringify({ team: "test-team", repo: "sample-project", description: "integration" }),
+      body: JSON.stringify({
+        team: "test-team",
+        repo: "sample-project",
+        description: "integration",
+        designSystem: { team: "test-team", repo: "foundation", revision: "latest" },
+      }),
     });
     const createdProject = await create.json();
     assert.equal(create.status, 201, JSON.stringify(createdProject));
@@ -402,23 +451,34 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
     const duplicate = await fetch(`${base}/api/projects`, {
       method: "POST",
       headers,
-      body: JSON.stringify({ team: "test-team", repo: "sample-project" }),
+      body: JSON.stringify({
+        team: "test-team",
+        repo: "sample-project",
+        designSystem: { team: "test-team", repo: "foundation", revision: "latest" },
+      }),
     });
     assert.equal(duplicate.status, 409);
     const listing = await fetch(`${base}/api/projects`, { headers });
     assert.deepEqual(
       (await listing.json()).map(({ team, repo }) => ({ team, repo })),
-      [{ team: "test-team", repo: "sample-project" }],
+      [
+        { team: "test-team", repo: "foundation" },
+        { team: "test-team", repo: "sample-project" },
+      ],
     );
     const teamListing = await fetch(`${base}/api/teams`, { headers });
-    assert.deepEqual((await teamListing.json()).teams, ["mounted-team", "new-team", "test-team"]);
+    assert.deepEqual((await teamListing.json()).teams, ["broken-team", "mounted-team", "new-team", "test-team"]);
     const sourceUrl = `${base}/api/source/test-team/sample-project`;
     const sourceBefore = await (await fetch(sourceUrl, { headers })).json();
     assert.equal(sourceBefore.sourceMode, "git");
     assert.equal((await fetch(`${base}/static/test-team/sample-project/latest/component.html`)).status, 404);
     assert.match(sourceBefore.files["component.html"], /component="ds-sample-project"/);
     assert.match(sourceBefore.files["component.html"], /data-wds-editable class="p-4 bg-indigo-600 text-white"/);
-    assert.equal(sourceBefore.files["styles.css"], '@import "tailwindcss";\n');
+    assert.equal(
+      sourceBefore.files["styles.css"],
+      '@import url("/static/test-team/foundation/latest/tokens.css");\n@import "tailwindcss";\n',
+    );
+    assert.match(sourceBefore.files["component.json"], /"designSystem"/);
     assert.match(sourceBefore.files["stories.html"], /import '@li3\/web'/);
     assert.match(sourceBefore.files["component.json"], /"description": "integration"/);
     const changed = {
@@ -452,10 +512,33 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
     assert.equal(blockedGitImport.status, 400);
     const afterBlockedGitImport = await (await fetch(sourceUrl, { headers })).json();
     assert.equal(afterBlockedGitImport.files["styles.css"], sourceAfter.files["styles.css"]);
+    const blockedExternalImport = await fetch(sourceUrl, {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({
+        files: { ...sourceAfter.files, "styles.css": '@import url("https://example.test/tokens.css");' },
+        message: "Reject remote stylesheet",
+      }),
+    });
+    assert.equal(blockedExternalImport.status, 400);
+    const mismatchedTokens = await fetch(sourceUrl, {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({
+        files: {
+          ...sourceAfter.files,
+          "styles.css": '@import url("/static/test-team/other-system/latest/tokens.css");\n@import "tailwindcss";\n',
+        },
+        message: "Use mismatched tokens",
+      }),
+    });
+    assert.equal(mismatchedTokens.status, 200);
+    const mismatchedPublish = await fetch(`${base}/api/publish/test-team/sample-project`, { method: "POST", headers });
+    assert.equal(mismatchedPublish.status, 400);
     const nestedFiles = {
       ...sourceAfter.files,
       "styles.css":
-        '@import url("/static/test-team/sample-system/latest/styles.css");\n@import "tailwindcss";\n.dynamic { color: teal; }\n',
+        '@import url("/static/test-team/foundation/latest/tokens.css");\n@import "tailwindcss";\n.dynamic { color: teal; }\n',
       "themes/nested.css": ".dynamic { color: teal; }\n",
       "examples/demo.html": "<main>New nested page</main>\n",
       "images/new.svg": '<svg xmlns="http://www.w3.org/2000/svg"><title>Fresh</title></svg>',
@@ -493,7 +576,7 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
     assert.match(publishedPreview.headers.get("content-security-policy"), /connect-src 'none'/);
     const publishedStyles = await (await fetch(`${base}/static/test-team/sample-project/latest/styles.css`)).text();
     assert.notEqual(publishedStyles, nestedSource.files["styles.css"]);
-    assert.match(publishedStyles, /@import\s+["']\/static\/test-team\/sample-system\/latest\/styles\.css["']/);
+    assert.match(publishedStyles, /@import\s+["']\/static\/test-team\/foundation\/latest\/tokens\.css["']/);
     assert.doesNotMatch(publishedStyles, /--ds-color-accent/);
     const newerSource = {
       ...nestedSource.files,
@@ -557,6 +640,7 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
         "Design System <system@wds.local>",
         "Design System <system@wds.local>",
         "Design System <system@wds.local>",
+        "Design System <system@wds.local>",
         "Git API <git-api@example.test>",
       ].join("\n"),
     );
@@ -588,13 +672,16 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
         .map(({ repo, type }) => ({ repo, type }))
         .sort((a, b) => a.repo.localeCompare(b.repo)),
       [
+        { repo: "foundation", type: "design-system" },
         { repo: "sample-project", type: "component" },
         { repo: "sample-system", type: "design-system" },
       ],
     );
     const systemUrl = `${base}/api/source/test-team/sample-system`;
     const systemSource = await (await fetch(systemUrl, { headers })).json();
-    assert.deepEqual(Object.keys(systemSource.files).sort(), ["design-system.json", "styles.css"]);
+    assert.deepEqual(Object.keys(systemSource.files).sort(), ["design-system.json", "styles.css", "tokens.css"]);
+    assert.match(systemSource.files["styles.css"], /@import "\.\/tokens\.css"/);
+    assert.match(systemSource.files["tokens.css"], /--color-primary/);
     assert.match(systemSource.files["design-system.json"], /"name": "Shared Foundation"/);
     assert.equal(systemSource.files["component.html"], undefined);
     const tokenStyles = ":root { --ds-color-accent: #15b8a6; }\n";
@@ -622,11 +709,34 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
     const versionedStyles = await fetch(`${base}/static/test-team/sample-system/${releaseData.version}/styles.css`);
     assert.equal(versionedStyles.status, 200);
     assert.equal(await versionedStyles.text(), tokenStyles);
+    const mountedFoundationPath = join(mountedRoot, "foundation");
+    await mkdir(mountedFoundationPath);
+    await writeFile(
+      join(mountedFoundationPath, "design-system.json"),
+      JSON.stringify({ type: "design-system", name: "Mounted Foundation" }),
+    );
+    await writeFile(join(mountedFoundationPath, "tokens.css"), ":root { --mounted-color: navy; }\n");
+    await writeFile(join(mountedFoundationPath, "styles.css"), '@import "./tokens.css";\n');
+    const publishMountedFoundation = await fetch(`${base}/api/publish/mounted-team/foundation`, {
+      method: "POST",
+      headers,
+      body: "{}",
+    });
+    assert.equal(publishMountedFoundation.status, 200, await publishMountedFoundation.text());
     const mountedProjectPath = join(mountedRoot, "mounted-widget");
     await mkdir(mountedProjectPath);
-    await writeFile(join(mountedProjectPath, "component.json"), JSON.stringify({ name: "mounted-widget" }));
+    await writeFile(
+      join(mountedProjectPath, "component.json"),
+      JSON.stringify({
+        name: "mounted-widget",
+        designSystem: { team: "mounted-team", repo: "foundation", revision: "latest" },
+      }),
+    );
     await writeFile(join(mountedProjectPath, "component.html"), "<main>Mounted</main>\n");
-    await writeFile(join(mountedProjectPath, "styles.css"), ".mounted { color: navy; }\n");
+    await writeFile(
+      join(mountedProjectPath, "styles.css"),
+      '@import url("/static/mounted-team/foundation/latest/tokens.css");\n@import "tailwindcss";\n.mounted { color: navy; }\n',
+    );
     const outsidePath = join(temp, "outside.css");
     await writeFile(outsidePath, ".outside { color: red; }\n");
     await symlink(temp, join(mountedProjectPath, "linked"), "dir");
@@ -750,7 +860,7 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
       headers,
       body: "{}",
     });
-    assert.equal(publishMounted.status, 200);
+    assert.equal(publishMounted.status, 200, await publishMounted.text());
     const mountedArtifact = await fetch(`${base}/static/mounted-team/mounted-widget/latest/component.html`);
     assert.equal(mountedArtifact.status, 200);
     assert.equal(await mountedArtifact.text(), mountedAfterUpdate.files["component.html"]);

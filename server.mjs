@@ -492,7 +492,13 @@ async function remoteRepositories() {
     if (!org) {
       continue;
     }
-    const response = await api(`/api/v1/orgs/${encodeURIComponent(org)}/repos`);
+    let response;
+    try {
+      response = await api(`/api/v1/orgs/${encodeURIComponent(org)}/repos`);
+    } catch (error) {
+      console.warn(`Skipping inaccessible Git organization ${org}:`, error.message);
+      continue;
+    }
     const repos = Array.isArray(response) ? response : response.repos || response.repositories || [];
     for (const entry of repos) {
       result.push({ team: org, repo: typeof entry === "string" ? entry : entry.repo || entry.slug || entry.name });
@@ -680,13 +686,13 @@ async function ensureRepo(team, repo, files) {
   return path;
 }
 
-function blankProjectFiles(repo, name, description) {
+function blankProjectFiles(repo, name, description, designSystem) {
   const tag = `ds-${repo}`;
   return {
     "component.html": `<template component="${tag}" shadow-dom="open">\n  <link rel="stylesheet" href="./styles.css" />\n  <div data-wds-editable class="p-4 bg-indigo-600 text-white"><slot></slot></div>\n</template>\n`,
-    "styles.css": '@import "tailwindcss";\n',
+    "styles.css": `@import url("/static/${designSystem.team}/${designSystem.repo}/${designSystem.revision}/tokens.css");\n@import "tailwindcss";\n`,
     "stories.html": `<!doctype html>\n<html lang="en">\n  <head>\n    <meta charset="utf-8" />\n    <script type="importmap">{ "imports": { "@li3/": "https://cdn.li3.dev/@li3/" } }</script>\n    <script type="module">import '@li3/web';</script>\n    <link rel="component" href="./component.html" />\n  </head>\n  <body>\n    <template app>\n      <main><h1>${name}</h1><${tag}></${tag}></main>\n    </template>\n  </body>\n</html>\n`,
-    "component.json": `${JSON.stringify({ name, description }, null, 2)}\n`,
+    "component.json": `${JSON.stringify({ name, description, designSystem }, null, 2)}\n`,
     "spec.mjs":
       "import test from 'node:test';\nimport assert from 'node:assert/strict';\n\ntest('component source is ready for specifications', () => {\n  assert.ok(true);\n});\n",
   };
@@ -694,7 +700,8 @@ function blankProjectFiles(repo, name, description) {
 function blankDesignSystemFiles(name, description) {
   return {
     "design-system.json": `${JSON.stringify({ type: "design-system", name, description }, null, 2)}\n`,
-    "styles.css": `/* Shared design tokens for ${name}. */\n`,
+    "styles.css": `/* Shared design tokens for ${name}. */\n@import "./tokens.css";\n`,
+    "tokens.css": `:root {\n  /* --color-primary: #2563eb; */\n  /* --spacing-unit: 0.25rem; */\n  /* --breakpoint-wide: 80rem; */\n}\n\n@theme {\n  /* --color-primary: #2563eb; */\n}\n`,
   };
 }
 async function projectMetadata(path, ref = "refs/remotes/origin/main") {
@@ -746,7 +753,13 @@ async function listRepos() {
   if (gitToken) {
     for (const { team, repo } of await remoteRepositories()) {
       await withRepoLock(team, repo, async () => {
-        const path = await remoteRepo(team, repo);
+        let path;
+        try {
+          path = await remoteRepo(team, repo);
+        } catch (error) {
+          console.warn(`Skipping unreadable Git repository ${team}/${repo}:`, error.message);
+          return;
+        }
         if (!path) {
           return;
         }
@@ -860,22 +873,29 @@ async function validateCssImports(path, files) {
         throw error;
       }
       const specifier = parsed.slice(1).find((value) => value !== undefined);
-      if (/^(?:[a-z][a-z0-9+.-]*:|\/\/|#)/i.test(specifier)) {
-        browserImportsFound = true;
+      if (specifier === "tailwindcss") {
         continue;
+      }
+      if (/^(?:[a-z][a-z0-9+.-]*:|\/\/|#)/i.test(specifier)) {
+        const error = new Error("External CSS imports are not allowed.");
+        error.status = 400;
+        throw error;
       }
       if (specifier.startsWith("/")) {
-        if (!specifier.startsWith("/static/")) {
-          const error = new Error("CSS imports must stay within this project or use a versioned /static/ asset URL.");
-          error.status = 400;
-          throw error;
+        if (
+          /^\/static\/[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._-]*\/(?:latest|v\d+\.\d+)\/tokens\.css$/.test(specifier)
+        ) {
+          browserImportsFound = true;
+          continue;
         }
-        browserImportsFound = true;
-        continue;
+        const error = new Error("Absolute CSS imports are only allowed for design-system tokens.css.");
+        error.status = 400;
+        throw error;
       }
       if (!specifier.startsWith(".")) {
-        browserImportsFound = true;
-        continue;
+        const error = new Error("External CSS imports are not allowed.");
+        error.status = 400;
+        throw error;
       }
       let localSpecifier;
       try {
@@ -978,6 +998,73 @@ async function publishSnapshot(path, team, repo, version = null) {
   const isMounted = isMountedSource(team, repo);
   const files = await discoverAssets(path);
   const isDesignSystem = await isDesignSystemProject(path);
+  const metadataFile = isDesignSystem ? "design-system.json" : "component.json";
+  let metadata;
+  try {
+    metadata = JSON.parse(Buffer.isBuffer(files[metadataFile]) ? files[metadataFile].toString() : files[metadataFile]);
+  } catch {
+    const error = new Error(`Valid ${metadataFile} metadata is required.`);
+    error.status = 400;
+    throw error;
+  }
+  if (isDesignSystem) {
+    if (files["tokens.css"] === undefined) {
+      const error = new Error("Design systems must publish tokens.css.");
+      error.status = 400;
+      throw error;
+    }
+  } else {
+    const dependency = metadata.designSystem;
+    if (
+      !dependency ||
+      dependency.team !== team ||
+      !valid(dependency.team, dependency.repo) ||
+      (!["latest"].includes(dependency.revision) && !/^v\d+\.\d+$/.test(dependency.revision || ""))
+    ) {
+      const error = new Error("Component must declare a valid designSystem dependency.");
+      error.status = 400;
+      throw error;
+    }
+    const url = `/static/${dependency.team}/${dependency.repo}/${dependency.revision}/tokens.css`;
+    const importedStylesheets = [];
+    for (const [file, value] of Object.entries(files)) {
+      if (extname(file).toLowerCase() !== ".css") {
+        continue;
+      }
+      const css = (Buffer.isBuffer(value) ? value.toString("utf8") : value).replace(/\/\*[\s\S]*?\*\//g, "");
+      for (const [, prelude] of css.matchAll(/@import\b([^;]*)(?:;|$)/gi)) {
+        const parsed = prelude.match(/^\s*(?:url\(\s*(?:"([^"]*)"|'([^']*)'|([^\s)]+))\s*\)|"([^"]*)"|'([^']*)')/i);
+        const specifier = parsed?.slice(1).find((value) => value !== undefined);
+        if (!specifier) {
+          const error = new Error("Component styles must use safely parseable imports.");
+          error.status = 400;
+          throw error;
+        }
+        if (specifier !== "tailwindcss" && !specifier.startsWith(".")) {
+          importedStylesheets.push(specifier);
+        }
+      }
+    }
+    if (importedStylesheets.length !== 1 || importedStylesheets[0] !== url) {
+      const error = new Error(
+        "Component styles must import the associated tokens.css exactly once and no external stylesheets.",
+      );
+      error.status = 400;
+      throw error;
+    }
+    const depPath = isMountedSource(dependency.team, dependency.repo)
+      ? mountedPath(dependency.team, dependency.repo)
+      : await remoteRepo(dependency.team, dependency.repo);
+    if (
+      !depPath ||
+      !(await isDesignSystemProject(depPath)) ||
+      !(await readRevision(dependency.team, dependency.repo, dependency.revision, "tokens.css"))
+    ) {
+      const error = new Error("The associated design system must have published tokens.css at the requested revision.");
+      error.status = 400;
+      throw error;
+    }
+  }
   await validateRelativeReferences(path, files);
   const sourceRevision = isMounted ? revisionFor(files) : (await git(path, ["rev-parse", "HEAD"])).stdout.trim();
   const stage = await mkdtemp(join(tmpdir(), "wds-publish-"));
@@ -1372,7 +1459,7 @@ createServer(async (request, response) => {
         return;
       }
       const input = await body(request);
-      const { team, repo, name = repo, description = "", type = "component" } = input || {};
+      const { team, repo, name = repo, description = "", type = "component", designSystem } = input || {};
       if (
         typeof team !== "string" ||
         team.length > 100 ||
@@ -1383,7 +1470,12 @@ createServer(async (request, response) => {
         name.length > 100 ||
         !["component", "design-system"].includes(type) ||
         typeof description !== "string" ||
-        description.length > 500
+        description.length > 500 ||
+        (type === "component" &&
+          (!designSystem ||
+            designSystem.team !== team ||
+            !valid(designSystem.team, designSystem.repo) ||
+            !(designSystem.revision === "latest" || /^v\d+\.\d+$/.test(designSystem.revision || ""))))
       ) {
         return reply(response, 400, { error: "Invalid project" });
       }
@@ -1391,10 +1483,23 @@ createServer(async (request, response) => {
         if ((mountedPath(team, repo) && existsSync(mountedPath(team, repo))) || (await remoteRepo(team, repo))) {
           return reply(response, 409, { error: "Project already exists" });
         }
+        if (type === "component") {
+          const systemPath = isMountedSource(designSystem.team, designSystem.repo)
+            ? mountedPath(designSystem.team, designSystem.repo)
+            : await remoteRepo(designSystem.team, designSystem.repo);
+          if (!systemPath || !(await isDesignSystemProject(systemPath))) {
+            return reply(response, 400, { error: "designSystem must reference an existing design-system project." });
+          }
+          if (!(await readRevision(designSystem.team, designSystem.repo, designSystem.revision, "tokens.css"))) {
+            return reply(response, 400, {
+              error: "Publish the design system tokens.css before creating a component that depends on it.",
+            });
+          }
+        }
         const files =
           type === "design-system"
             ? blankDesignSystemFiles(name, description)
-            : blankProjectFiles(repo, name, description);
+            : blankProjectFiles(repo, name, description, designSystem);
         const path = await ensureRepo(team, repo, files);
         const revision = (await git(path, ["rev-parse", "--short", "HEAD"])).stdout.trim();
         return reply(response, 201, {

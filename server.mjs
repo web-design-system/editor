@@ -683,8 +683,8 @@ async function ensureRepo(team, repo, files) {
 function blankProjectFiles(repo, name, description) {
   const tag = `ds-${repo}`;
   return {
-    "component.html": `<template component="${tag}" shadow-dom="open">\n  <link rel="stylesheet" href="./styles.css" />\n  <slot></slot>\n</template>\n`,
-    "styles.css": "",
+    "component.html": `<template component="${tag}" shadow-dom="open">\n  <link rel="stylesheet" href="./styles.css" />\n  <div data-wds-editable class="p-4 bg-indigo-600 text-white"><slot></slot></div>\n</template>\n`,
+    "styles.css": '@import "tailwindcss";\n',
     "stories.html": `<!doctype html>\n<html lang="en">\n  <head>\n    <meta charset="utf-8" />\n    <script type="importmap">{ "imports": { "@li3/": "https://cdn.li3.dev/@li3/" } }</script>\n    <script type="module">import '@li3/web';</script>\n    <link rel="component" href="./component.html" />\n  </head>\n  <body>\n    <template app>\n      <main><h1>${name}</h1><${tag}></${tag}></main>\n    </template>\n  </body>\n</html>\n`,
     "component.json": `${JSON.stringify({ name, description }, null, 2)}\n`,
     "spec.mjs":
@@ -1466,6 +1466,40 @@ createServer(async (request, response) => {
         });
       });
     }
+    if (request.method === "GET" && parts[0] === "api" && parts[1] === "history") {
+      if (!requireEditorAccess(request, response)) {
+        return;
+      }
+      const [, , team, repo] = parts;
+      if (parts.length !== 4 || !valid(team, repo)) {
+        return reply(response, 400, { error: "Invalid project" });
+      }
+      if (isMountedSource(team, repo)) {
+        return reply(response, 200, { history: [], sourceMode: "filesystem" });
+      }
+      return await withRepoLock(team, repo, async () => {
+        const path = await remoteRepo(team, repo);
+        if (!path) {
+          return reply(response, 404, { error: "Project not found" });
+        }
+        const log = await git(path, [
+          "log",
+          "refs/remotes/origin/main",
+          "-n",
+          "50",
+          "--format=%H%x00%s%x00%an%x00%aI%x00",
+        ]);
+        const fields = log.stdout.split("\0").filter(Boolean);
+        const history = [];
+        for (let index = 0; index + 3 < fields.length; index += 4) {
+          const [revision, message, author, date] = fields.slice(index, index + 4);
+          if (revision && /^[a-f0-9]{40}$/.test(revision) && !Number.isNaN(Date.parse(date))) {
+            history.push({ revision, message: message.slice(0, 500), author: author.slice(0, 100), date });
+          }
+        }
+        return reply(response, 200, { history, sourceMode: "git" });
+      });
+    }
     if (request.method === "PUT" && parts[0] === "api" && parts[1] === "source") {
       if (!requireEditorAccess(request, response)) {
         return;
@@ -1656,6 +1690,9 @@ createServer(async (request, response) => {
           response.writeHead(200, {
             "content-type": "text/html; charset=utf-8",
             "cache-control": revision === "latest" ? "no-store" : "public, max-age=31536000, immutable",
+            "content-security-policy":
+              "sandbox allow-scripts; default-src 'none'; script-src 'self' https://cdn.li3.dev 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'",
+            "referrer-policy": "no-referrer",
           });
           return response.end(preview);
         }

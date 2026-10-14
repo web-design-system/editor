@@ -253,7 +253,215 @@ if (team && repo) {
   workspace.style.display = "block";
   document.querySelector("#workspace-name").textContent = `${team} / ${repo}`;
   document.title = `${repo} · Workbench`;
-  loadUser();
+  loadWorkbench(team, repo);
 } else {
   loadWorkspace();
+}
+
+async function loadWorkbench(team, repo) {
+  const status = document.querySelector("#work-status");
+  const area = document.querySelector("#project-content");
+  const user = await loadUser();
+  if (!user) {
+    status.textContent = "Sign in to open this project.";
+    return;
+  }
+  const projectResponse = await fetch("/api/projects", { credentials: "same-origin" });
+  if (!projectResponse.ok) {
+    status.textContent =
+      projectResponse.status === 401 ? "Your session expired. Sign in again." : "Projects unavailable.";
+    return;
+  }
+  const projects = await projectResponse.json();
+  const project = projects.find((item) => item.team === team && item.repo === repo);
+  if (!project) {
+    status.textContent = "Project not found or unavailable.";
+    return;
+  }
+  const sourceResponse = await fetch(`/api/source/${encodeURIComponent(team)}/${encodeURIComponent(repo)}`, {
+    credentials: "same-origin",
+  });
+  if (!sourceResponse.ok) {
+    status.textContent =
+      sourceResponse.status === 401 ? "Your session expired. Sign in again." : "Could not load project source.";
+    return;
+  }
+  const source = await sourceResponse.json();
+  status.textContent = `${project.type === "component" ? "Team component" : "Design system"} · ${source.revision} · ${source.sourceMode}`;
+  if (project.type === "design-system") {
+    const components = projects.filter((item) => item.team === team && item.type === "component");
+    area.innerHTML = `<h1>${escapeHtml(project.name || repo)}</h1><p>Team-level repositories are siblings. Components can import this baseline once it is published; association does not create ownership.</p><h2>Shared stylesheet</h2><pre class="source-facts"></pre><h2>Team components</h2><div class="component-list">${components.map((item) => `<a href="/?team=${encodeURIComponent(team)}&amp;repo=${encodeURIComponent(item.repo)}">${escapeHtml(item.name || item.repo)} · ${escapeHtml(item.repo)}</a>`).join("") || "<p>No components yet.</p>"}</div><form id="component-create" class="creation-form"><h2>Add a component</h2><label>Repository slug<input name="repo" required maxlength="100" pattern="[a-z0-9][a-z0-9._\\-]*"></label><label>Name<input name="name" maxlength="100"></label><label>Description<textarea name="description" rows="2" maxlength="500"></textarea></label><button>Create component</button></form><p role="status" id="create-status"></p>`;
+    area.querySelector("pre").textContent = source.files["styles.css"] || "(No shared stylesheet yet)";
+    area.querySelector("#component-create").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const values = Object.fromEntries(new FormData(event.currentTarget));
+      const response = await fetch("/api/projects", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          team,
+          repo: values.repo,
+          name: values.name || values.repo,
+          description: values.description,
+          type: "component",
+        }),
+      });
+      const data = await responseData(response);
+      if (!response.ok) {
+        area.querySelector("#create-status").textContent = data.error || "Could not create component.";
+        return;
+      }
+      location.href = `/?team=${encodeURIComponent(team)}&repo=${encodeURIComponent(values.repo)}`;
+    });
+    return;
+  }
+  const files = {
+    "component.html":
+      source.files["component.html"] ||
+      '<template component="ds-component" shadow-dom="open"><div data-wds-editable class="p-4 bg-indigo-600 text-white">Hello component</div></template>',
+    "styles.css": source.files["styles.css"] || "",
+  };
+  if (source.files["component.mjs"] !== undefined) {
+    files["component.mjs"] = source.files["component.mjs"];
+  }
+  area.innerHTML = `<h1>${escapeHtml(project.name || repo)} <small>Draft workbench</small></h1><p>Team-level component${project.designSystem ? ` · baseline ${escapeHtml(project.designSystem)}` : ""}. Published styles may import a design system separately.</p><div class="editor-layout"><section><h2>Draft preview (sandboxed, no component scripts)</h2><iframe title="Draft component preview" sandbox="" id="draft-preview"></iframe><fieldset><legend>Selected target: template root <code>data-wds-editable</code></legend><label>Padding<select data-utility="padding"><option value="">none</option><option>p-2</option><option>p-4</option><option>p-6</option><option>p-8</option></select></label><label>Margin<select data-utility="margin"><option value="">none</option><option>m-2</option><option>m-4</option><option>mt-4</option><option>mb-4</option><option>mx-auto</option></select></label><label>Background<select data-utility="background"><option value="">none</option><option>bg-indigo-600</option><option>bg-blue-600</option><option>bg-slate-900</option><option>bg-white</option></select></label><label>Text color<select data-utility="text"><option value="">none</option><option>text-white</option><option>text-slate-900</option><option>text-indigo-700</option></select></label><label>Custom Tailwind v4 utility<input id="custom-utility" placeholder="rounded-lg" maxlength="80"></label><button type="button" id="apply-utility">Apply utility</button><p id="selected-classes"></p></fieldset></section><section><h2>Source editor</h2><label><input type="checkbox" id="enable-module" ${files["component.mjs"] !== undefined ? "checked" : ""}> Add/use component.mjs (module source is not executed in Draft preview)</label><label>File<select id="source-file"><option>component.html</option><option>styles.css</option><option ${files["component.mjs"] === undefined ? "disabled" : ""}>component.mjs</option></select></label><textarea id="source-editor" spellcheck="false" aria-label="Component source"></textarea><label>Commit message<input id="commit-message" value="Update component source" maxlength="200"></label><button id="save-source">Save commit</button> <button id="refresh-history">Refresh history</button><p id="save-status" role="status"></p><h2>Commit history</h2><ol id="history-list"></ol><h2>Publish public latest</h2><p>Publishing updates public CDN artifacts separately from committed source.</p><button id="publish-source">Publish latest</button><div id="publish-result" role="status"></div></section></div>`;
+  const editor = area.querySelector("#source-editor");
+  const fileSelect = area.querySelector("#source-file");
+  const updateEditor = () => {
+    editor.value = files[fileSelect.value];
+  };
+  const refreshPreview = () => {
+    const template = files["component.html"].match(/<template\b[^>]*>([\s\S]*?)<\/template\s*>/i);
+    const html = (template?.[1] || files["component.html"])
+      .replace(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi, "")
+      .replace(/<link\b[^>]*rel\s*=\s*(['"])stylesheet\1[^>]*>/gi, "")
+      .replace(/\son\w+\s*=\s*(['"]).*?\1/gi, "");
+    const utilityPreview =
+      ".p-2{padding:.5rem}.p-4{padding:1rem}.p-6{padding:1.5rem}.p-8{padding:2rem}.m-2{margin:.5rem}.m-4{margin:1rem}.mt-4{margin-top:1rem}.mb-4{margin-bottom:1rem}.mx-auto{margin-inline:auto}.bg-indigo-600{background-color:#4f46e5}.bg-blue-600{background-color:#2563eb}.bg-slate-900{background-color:#0f172a}.bg-white{background-color:#fff}.text-white{color:#fff}.text-slate-900{color:#0f172a}.text-indigo-700{color:#4338ca}.rounded-lg{border-radius:.5rem}";
+    area.querySelector("#draft-preview").srcdoc =
+      `<!doctype html><meta charset="utf-8"><style>${utilityPreview}${files["styles.css"].replace(/@import[^;]+;/g, "").replace(/<\/style/gi, "<\\/style")}</style>${html}`;
+    const match = files["component.html"].match(/data-wds-editable[^>]*class\s*=\s*["']([^"']*)/i);
+    const classes = match?.[1]?.split(/\s+/).filter(Boolean) || [];
+    area.querySelector("#selected-classes").textContent = `Selected classes: ${classes.join(" ") || "(none)"}`;
+    const utilityPrefixes = { padding: /^p-/, margin: /^(?:m|mt|mb|mx)-/, background: /^bg-/, text: /^text-/ };
+    for (const [group, pattern] of Object.entries(utilityPrefixes)) {
+      const select = area.querySelector(`[data-utility="${group}"]`);
+      const selected = classes.find((item) => pattern.test(item));
+      if (select && [...select.options].some((option) => option.value === selected)) {
+        select.value = selected || "";
+      }
+    }
+  };
+  fileSelect.addEventListener("change", updateEditor);
+  area.querySelector("#enable-module").addEventListener("change", (event) => {
+    if (event.target.checked) {
+      files["component.mjs"] = "export const componentName = 'component';\n";
+      fileSelect.querySelector('[value="component.mjs"]').disabled = false;
+      if (!/component\.mjs/.test(files["component.html"])) {
+        files["component.html"] += '\n<script type="module" src="./component.mjs"></script>\n';
+      }
+    } else {
+      delete files["component.mjs"];
+      fileSelect.querySelector('[value="component.mjs"]').disabled = true;
+      if (fileSelect.value === "component.mjs") {
+        fileSelect.value = "component.html";
+      }
+    }
+    updateEditor();
+    refreshPreview();
+  });
+  editor.addEventListener("input", () => {
+    files[fileSelect.value] = editor.value;
+    refreshPreview();
+  });
+  area
+    .querySelectorAll("[data-utility]")
+    .forEach((select) => select.addEventListener("change", () => applyUtility(select.value, select.dataset.utility)));
+  function applyUtility(token, group = "custom") {
+    if (!token || !/^[a-z0-9-]+(?:\[[a-z0-9#.%_-]+\])?$/.test(token)) {
+      return;
+    }
+    const groupPatterns = {
+      padding: /^p-[\w[\].%-]+$/,
+      margin: /^(?:m|mt|mb|mx)-[\w[\].%-]+$/,
+      background: /^bg-[\w[\].%-]+$/,
+      text: /^text-[\w[\].%-]+$/,
+    };
+    files["component.html"] = files["component.html"].replace(
+      /(<[^>]*data-wds-editable[^>]*class\s*=\s*["'])([^"']*)(["'])/i,
+      (_all, before, classes, after) => {
+        const next = classes
+          .split(/\s+/)
+          .filter(Boolean)
+          .filter((item) => !groupPatterns[group]?.test(item));
+        return `${before}${[...new Set([...next, token])].join(" ")}${after}`;
+      },
+    );
+    if (fileSelect.value === "component.html") {
+      editor.value = files["component.html"];
+    }
+    refreshPreview();
+  }
+  area
+    .querySelector("#apply-utility")
+    .addEventListener("click", () => applyUtility(area.querySelector("#custom-utility").value.trim()));
+  area.querySelector("#save-source").addEventListener("click", async () => {
+    files[fileSelect.value] = editor.value;
+    const response = await fetch(`/api/source/${encodeURIComponent(team)}/${encodeURIComponent(repo)}`, {
+      method: "PUT",
+      credentials: "same-origin",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        files,
+        message: area.querySelector("#commit-message").value.trim() || "Update component source",
+      }),
+    });
+    const data = await responseData(response);
+    area.querySelector("#save-status").textContent = response.ok
+      ? `Committed ${data.revision} (${data.sourceMode}).`
+      : data.error || `Save failed (${response.status}).`;
+    if (response.ok) {
+      loadHistory();
+    }
+  });
+  async function loadHistory() {
+    const response = await fetch(`/api/history/${encodeURIComponent(team)}/${encodeURIComponent(repo)}`, {
+      credentials: "same-origin",
+    });
+    const data = await responseData(response);
+    const list = area.querySelector("#history-list");
+    list.replaceChildren();
+    if (!response.ok) {
+      list.textContent = data.error || "History unavailable.";
+      return;
+    }
+    for (const item of data.history || []) {
+      const row = document.createElement("li");
+      row.textContent = `${item.revision.slice(0, 10)} · ${item.message} · ${item.author} · ${item.date}`;
+      list.append(row);
+    }
+    if (!(data.history || []).length) {
+      list.textContent =
+        data.sourceMode === "filesystem" ? "Commit history unavailable for mounted source." : "No commits yet.";
+    }
+  }
+  area.querySelector("#refresh-history").addEventListener("click", loadHistory);
+  area.querySelector("#publish-source").addEventListener("click", async () => {
+    const response = await fetch(`/api/publish/${encodeURIComponent(team)}/${encodeURIComponent(repo)}`, {
+      method: "POST",
+      credentials: "same-origin",
+    });
+    const data = await responseData(response);
+    const result = area.querySelector("#publish-result");
+    result.textContent = response.ok
+      ? `Published revision ${data.revision}. `
+      : data.error || `Publish failed (${response.status}).`;
+    if (response.ok) {
+      result.innerHTML += `<a href="/static/${encodeURIComponent(team)}/${encodeURIComponent(repo)}/latest/component.html?view=component" target="_blank" rel="noopener">Open published component preview</a> · <code>/static/${team}/${repo}/latest/component.html</code>`;
+    }
+  });
+  updateEditor();
+  refreshPreview();
+  loadHistory();
 }

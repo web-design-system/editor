@@ -417,9 +417,15 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
     assert.equal(sourceBefore.sourceMode, "git");
     assert.equal((await fetch(`${base}/static/test-team/sample-project/latest/component.html`)).status, 404);
     assert.match(sourceBefore.files["component.html"], /component="ds-sample-project"/);
+    assert.match(sourceBefore.files["component.html"], /data-wds-editable class="p-4 bg-indigo-600 text-white"/);
+    assert.equal(sourceBefore.files["styles.css"], '@import "tailwindcss";\n');
     assert.match(sourceBefore.files["stories.html"], /import '@li3\/web'/);
     assert.match(sourceBefore.files["component.json"], /"description": "integration"/);
-    const changed = { ...sourceBefore.files, "component.html": "<main>Changed integration source</main>\n" };
+    const changed = {
+      ...sourceBefore.files,
+      "component.html":
+        '<template component="ds-sample-project" shadow-dom="open"><div data-wds-editable class="p-6">Changed integration source</div></template>\n',
+    };
     const update = await fetch(sourceUrl, {
       method: "PUT",
       headers,
@@ -430,6 +436,11 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
     assert.equal(updateData.sourceMode, "git");
     const sourceAfter = await (await fetch(sourceUrl, { headers })).json();
     assert.equal(sourceAfter.files["component.html"], changed["component.html"]);
+    const historyResponse = await fetch(`${base}/api/history/test-team/sample-project`, { headers });
+    const historyData = await historyResponse.json();
+    assert.equal(historyResponse.status, 200, JSON.stringify(historyData));
+    assert.ok(historyData.history.some((entry) => entry.message === "Integration source update"));
+    assert.match(historyData.history[0].revision, /^[a-f0-9]{40}$/);
     const blockedGitImport = await fetch(sourceUrl, {
       method: "PUT",
       headers,
@@ -474,6 +485,12 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
     assert.ok(publishedManifest.files.includes("component.html"));
     assert.equal(publishedManifest.files.includes("spec.mjs"), false);
     assert.equal((await fetch(`${base}/static/test-team/sample-project/latest/spec.mjs`)).status, 404);
+    const publishedPreview = await fetch(
+      `${base}/static/test-team/sample-project/latest/component.html?view=component`,
+    );
+    assert.equal(publishedPreview.status, 200);
+    assert.match(publishedPreview.headers.get("content-security-policy"), /^sandbox allow-scripts;/);
+    assert.match(publishedPreview.headers.get("content-security-policy"), /connect-src 'none'/);
     const publishedStyles = await (await fetch(`${base}/static/test-team/sample-project/latest/styles.css`)).text();
     assert.notEqual(publishedStyles, nestedSource.files["styles.css"]);
     assert.match(publishedStyles, /@import\s+["']\/static\/test-team\/sample-system\/latest\/styles\.css["']/);
@@ -614,6 +631,8 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
     await writeFile(outsidePath, ".outside { color: red; }\n");
     await symlink(temp, join(mountedProjectPath, "linked"), "dir");
     const mountedUrl = `${base}/api/source/mounted-team/mounted-widget`;
+    const mountedHistory = await fetch(`${base}/api/history/mounted-team/mounted-widget`, { headers });
+    assert.deepEqual(await mountedHistory.json(), { history: [], sourceMode: "filesystem" });
     const mountedSource = await (await fetch(mountedUrl, { headers })).json();
     assert.equal(mountedSource.files["component.html"], "<main>Mounted</main>\n");
     assert.equal(mountedSource.files["linked/outside.css"], undefined);

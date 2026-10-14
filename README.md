@@ -211,3 +211,7 @@ Deferred:
 - WebContainer, Li3 SSR/jsdom spec execution, and browser test reporting.
 - Separate preview origin and production sandbox policy.
 - AI assistance and GitHub export.
+
+# Authoring workbench
+
+Sign in, open a design system, and add components from its team component list. Teams are Git organizations; a design system and each component are sibling repositories in that organization. Components are team-level and shared: selecting a system in the workbench is a baseline/reference only, not repository ownership or an enforced dependency. Publish the design system first, then components may import its public stylesheet using a versioned `/static/<team>/<system>/latest/styles.css` URL. Component source commits update Git `main`; publishing is a separate explicit action that updates public `latest` artifacts. The public custom-element preview is available at `/static/<team>/<component>/latest/component.html?view=component`.

@@ -25,12 +25,18 @@ test("landing page lists teams and design systems without depending on component
   assert.doesNotMatch(html, /<wds-[a-z-]+/);
 });
 
-test("opening a design system presents a blank workbench shell", async () => {
+test("workbench exposes project source and authoring workflows", async () => {
   const html = await readFile(new URL("../public/index.html", import.meta.url), "utf8");
   const app = await readFile(new URL("../public/app.mjs", import.meta.url), "utf8");
   assert.match(app, /const team = params\.get\("team"\)/);
   assert.match(app, /const repo = params\.get\("repo"\)/);
   assert.match(app, /workspace\.style\.display = "block"/);
   assert.match(html, /id="workspace-user-card"/);
-  assert.match(html, /<main class="work-area" aria-label="Design system workspace"><\/main>/);
+  assert.match(html, /id="project-content"/);
+  assert.match(app, /api\/source/);
+  assert.match(app, /api\/history/);
+  assert.match(app, /data-wds-editable/);
+  assert.match(app, /Draft preview \(sandboxed, no component scripts\)/);
+  assert.match(app, /api\/publish/);
+  assert.match(app, /component-create/);
 });

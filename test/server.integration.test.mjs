@@ -134,7 +134,13 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
           body += chunk;
         }
         const { slug } = JSON.parse(body);
-        await mkdir(join(bareRoot, slug), { recursive: true });
+        try {
+          await mkdir(join(bareRoot, slug));
+        } catch {
+          res.writeHead(409);
+          res.end();
+          return;
+        }
         res.writeHead(201, { "content-type": "application/json" });
         res.end("{}");
         return;
@@ -266,6 +272,8 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
     }
     assert.equal(ready, true, `WDS server did not become ready: ${appErrors}`);
 
+    assert.equal((await fetch(`${base}/api/teams`, { method: "POST" })).status, 401);
+
     const login = await fetch(`${base}/api/oidc/login`, {
       redirect: "manual",
       headers: {
@@ -350,6 +358,24 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
     });
     assert.match(mismatchCallback.headers.get("location"), /auth_error=1/);
     userinfoSubject = "integration-user";
+    const invalidTeam = await fetch(`${base}/api/teams`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ slug: "Bad Team" }),
+    });
+    assert.equal(invalidTeam.status, 400);
+    const createTeam = await fetch(`${base}/api/teams`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ slug: "new-team" }),
+    });
+    assert.equal(createTeam.status, 201, await createTeam.text());
+    const duplicateTeam = await fetch(`${base}/api/teams`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ slug: "new-team" }),
+    });
+    assert.equal(duplicateTeam.status, 409);
     const invalid = await fetch(`${base}/api/projects`, {
       method: "POST",
       headers,
@@ -385,7 +411,7 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
       [{ team: "test-team", repo: "sample-project" }],
     );
     const teamListing = await fetch(`${base}/api/teams`, { headers });
-    assert.deepEqual((await teamListing.json()).teams, ["mounted-team", "test-team"]);
+    assert.deepEqual((await teamListing.json()).teams, ["mounted-team", "new-team", "test-team"]);
     const sourceUrl = `${base}/api/source/test-team/sample-project`;
     const sourceBefore = await (await fetch(sourceUrl, { headers })).json();
     assert.equal(sourceBefore.sourceMode, "git");
@@ -530,6 +556,7 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
       body: JSON.stringify({
         team: "test-team",
         repo: "sample-system",
+        name: "Shared Foundation",
         type: "design-system",
         description: "Shared tokens",
       }),
@@ -537,6 +564,7 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
     const systemCreated = await systemCreate.json();
     assert.equal(systemCreate.status, 201, JSON.stringify(systemCreated));
     assert.equal(systemCreated.project.type, "design-system");
+    assert.equal(systemCreated.project.name, "Shared Foundation");
     const systemListing = await fetch(`${base}/api/projects`, { headers });
     assert.deepEqual(
       (await systemListing.json())
@@ -550,6 +578,7 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
     const systemUrl = `${base}/api/source/test-team/sample-system`;
     const systemSource = await (await fetch(systemUrl, { headers })).json();
     assert.deepEqual(Object.keys(systemSource.files).sort(), ["design-system.json", "styles.css"]);
+    assert.match(systemSource.files["design-system.json"], /"name": "Shared Foundation"/);
     assert.equal(systemSource.files["component.html"], undefined);
     const tokenStyles = ":root { --ds-color-accent: #15b8a6; }\n";
     const systemUpdate = await fetch(systemUrl, {

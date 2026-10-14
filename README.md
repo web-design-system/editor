@@ -106,7 +106,7 @@ No release is created automatically for a new repository. An author must publish
 
 ## Creating A Design System
 
-An authenticated, allowlisted editor can use **New design system** in the workbench to create a project without leaving the interface. The team field is a Git organization slug; the repository field is a lowercase project slug. WDS creates the organization when needed, creates the Git repository, and pushes a first `main` commit containing a shared `styles.css` plus project metadata. A design-system repository is not a component: it has no component markup, story, or spec. Its stylesheet can hold versioned design tokens shared by components.
+An authenticated, allowlisted editor can create a team (Git organization) by slug or create a design system from the landing page. Design-system creation uses an existing team and accepts a repository slug plus optional display name and description. Team creation calls the Git API organization endpoint; creating a design system can also create its Git organization when needed, creates the Git repository, and pushes a first `main` commit containing a shared `styles.css` plus project metadata. A design-system repository is not a component: it has no component markup, story, or spec. Its stylesheet can hold versioned design tokens shared by components.
 
 For example, a component may import a released token stylesheet with `@import url("/static/acme-corp/foundation/v1.0/styles.css");`. This is an explicit public versioned asset reference; relative imports stay inside the current component repository and cannot traverse into sibling repositories or server files.
 
@@ -137,7 +137,7 @@ The component HTML is the consumer entrypoint. `stories.html` is published with 
 
 The service uses OIDC authorization-code flow with PKCE through `https://auth.api.apphor.de/` in production. Editor APIs require an authenticated OIDC session and an explicit subject allowlist. Team membership, per-team authorization, repository deletion, and invitations are not implemented yet.
 
-The landing page at `/` lists design systems and teams returned through the configured Git API connection. Opening a design system navigates to `/?team=<team>&repo=<repo>`, where the Workbench is currently an intentionally blank workspace shell with the account control in its header. The Git API currently supplies organizations visible to the configured service token; WDS cannot yet distinguish organizations personally owned by the signed-in user from other organizations available to that token. `/api/teams` exposes that organization list to authenticated, allowlisted editors.
+The landing page at `/` lists design systems and teams returned through the configured Git API connection and provides authenticated team/design-system creation controls. Opening a design system navigates to `/?team=<team>&repo=<repo>`, where the Workbench is currently an intentionally blank workspace shell with the account control in its header. The Git API currently supplies organizations visible to the configured service token; WDS cannot yet distinguish organizations personally owned by the signed-in user from other organizations available to that token. `/api/teams` exposes that organization list and authenticated `POST /api/teams` creates an organization. Membership administration, invitations, team rename, and deletion are not implemented; in particular, destructive operations and team-scoped authorization are out of scope. All allowlisted users share permissions of the configured Git API token.
 
 ## Persistence And Runtime
 

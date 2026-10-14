@@ -9,6 +9,7 @@ const arrow =
 let systems = [];
 let teams = [];
 let selectedTeam = "all";
+let authenticatedUser = false;
 function escapeHtml(value) {
   return String(value ?? "").replace(
     /[&<>"']/g,
@@ -69,6 +70,13 @@ function renderTeams() {
       count: systems.filter((system) => system.team === team).length,
     })),
   ];
+  const selector = document.querySelector("#system-team");
+  if (selector) {
+    selector.replaceChildren(...availableTeams.map((item) => new Option(item, item)));
+    if (selectedTeam !== "all" && availableTeams.includes(selectedTeam)) {
+      selector.value = selectedTeam;
+    }
+  }
   teamList.innerHTML = buttons.length
     ? buttons
         .map(
@@ -90,7 +98,7 @@ function renderSystems() {
   document.querySelector("#system-summary").textContent =
     `${visible.length} ${visible.length === 1 ? "design system" : "design systems"}`;
   if (!visible.length) {
-    systemGrid.innerHTML = `<div class="empty">${systems.length ? "There are no design systems in this team yet." : "No design systems are available for your account yet."}</div>`;
+    systemGrid.innerHTML = `<div class="empty">${systems.length ? "There are no design systems in this team yet." : "No design systems found in these teams yet. Create one above."}</div>`;
     return;
   }
   systemGrid.innerHTML = visible
@@ -102,6 +110,7 @@ function renderSystems() {
 }
 async function loadWorkspace() {
   const authenticated = await loadUser();
+  authenticatedUser = authenticated;
   if (!authenticated) {
     landing.hidden = false;
     const authError = new URLSearchParams(location.search).get("auth_error") === "1";
@@ -115,6 +124,7 @@ async function loadWorkspace() {
     systemGrid.innerHTML = '<div class="empty">Your design systems will appear here after sign-in.</div>';
     return;
   }
+  document.querySelector("#creation-controls").hidden = false;
   try {
     const [response, teamsResponse] = await Promise.all([
       fetch("/api/projects", { credentials: "same-origin" }),
@@ -145,6 +155,96 @@ async function loadWorkspace() {
     systemGrid.innerHTML = '<div class="empty">Could not load design systems. Please try again.</div>';
   }
 }
+async function responseData(response) {
+  return response.json().catch(() => ({}));
+}
+async function refreshWorkspace() {
+  const [projectsResponse, teamsResponse] = await Promise.all([
+    fetch("/api/projects", { credentials: "same-origin" }),
+    fetch("/api/teams", { credentials: "same-origin" }),
+  ]);
+  const projects = await responseData(projectsResponse);
+  const teamData = await responseData(teamsResponse);
+  if (!projectsResponse.ok || !teamsResponse.ok) {
+    throw new Error(projects.error || teamData.error || "Could not refresh teams and design systems.");
+  }
+  systems = Array.isArray(projects) ? projects.filter((project) => project.type === "design-system") : [];
+  teams = Array.isArray(teamData.teams) ? teamData.teams : [];
+  renderTeams();
+  renderSystems();
+}
+const teamForm = document.querySelector("#team-form");
+teamForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!authenticatedUser) {
+    return;
+  }
+  const button = teamForm.querySelector("button[type=submit]");
+  button.disabled = true;
+  setNotice("Creating team…");
+  try {
+    const response = await fetch("/api/teams", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ slug: new FormData(teamForm).get("slug") }),
+    });
+    const data = await responseData(response);
+    if (!response.ok) {
+      throw new Error(data.error || `Could not create team (HTTP ${response.status}).`);
+    }
+    await refreshWorkspace();
+    selectedTeam = data.team;
+    renderTeams();
+    renderSystems();
+    teamForm.reset();
+    setNotice(`Team ${data.team} created and selected.`);
+  } catch (error) {
+    setNotice(error.message || "Could not create team.");
+  } finally {
+    button.disabled = false;
+  }
+});
+const systemForm = document.querySelector("#system-form");
+systemForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!authenticatedUser) {
+    return;
+  }
+  const button = systemForm.querySelector("button[type=submit]");
+  button.disabled = true;
+  setNotice("Creating design system…");
+  try {
+    const values = Object.fromEntries(new FormData(systemForm));
+    const response = await fetch("/api/projects", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        team: values.team,
+        repo: values.repo,
+        name: values.name || values.repo,
+        description: values.description,
+        type: "design-system",
+      }),
+    });
+    const data = await responseData(response);
+    if (!response.ok) {
+      throw new Error(data.error || `Could not create design system (HTTP ${response.status}).`);
+    }
+    await refreshWorkspace();
+    selectedTeam = data.project.team;
+    renderTeams();
+    renderSystems();
+    systemForm.reset();
+    setNotice("Design system created.");
+    location.href = `/?team=${encodeURIComponent(data.project.team)}&repo=${encodeURIComponent(data.project.repo)}`;
+  } catch (error) {
+    setNotice(error.message || "Could not create design system.");
+  } finally {
+    button.disabled = false;
+  }
+});
 const params = new URLSearchParams(location.search);
 const team = params.get("team");
 const repo = params.get("repo");

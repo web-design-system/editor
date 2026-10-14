@@ -143,6 +143,63 @@ h1 {
 .section {
   margin-top: 48px;
 }
+.creation {
+  display: grid;
+  align-items: start;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 30px;
+}
+.creation[hidden] {
+  display: none;
+}
+.creation-form {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.creation-form h2 {
+  margin-bottom: 5px;
+}
+.creation-form label {
+  color: #596176;
+  font-size: 12px;
+  font-weight: 600;
+}
+.creation-form input,
+.creation-form select,
+.creation-form textarea {
+  width: 100%;
+  padding: 10px 11px;
+  border: 1px solid #d9dce5;
+  border-radius: 7px;
+  background: #fff;
+  font: inherit;
+  font-size: 13px;
+}
+.creation-form button {
+  justify-self: start;
+  min-height: 38px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 7px;
+  color: white;
+  background: var(--accent);
+  cursor: pointer;
+  font-weight: 650;
+}
+.creation-form button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+.creation-form a {
+  color: var(--accent);
+  font-size: 12px;
+}
 .section-heading {
   display: flex;
   align-items: baseline;
@@ -343,6 +400,9 @@ h2 {
   }
 }
 @media (max-width: 560px) {
+  .creation {
+    grid-template-columns: 1fr;
+  }
   .header {
     height: 66px;
     padding: 0 16px;

@@ -1348,18 +1348,39 @@ createServer(async (request, response) => {
   }
 
   try {
+    if (request.method === "POST" && url.pathname === "/api/teams") {
+      if (!requireEditorAccess(request, response)) {
+        return;
+      }
+      const input = await body(request);
+      const { slug } = input || {};
+      if (typeof slug !== "string" || slug.length > 100 || !valid(slug)) {
+        return reply(response, 400, { error: "Invalid team slug" });
+      }
+      try {
+        await api("/api/v1/orgs", { method: "POST", body: JSON.stringify({ slug }) });
+      } catch (error) {
+        if (error.status === 409) {
+          return reply(response, 409, { error: "Team already exists" });
+        }
+        throw error;
+      }
+      return reply(response, 201, { team: slug });
+    }
     if (request.method === "POST" && url.pathname === "/api/projects") {
       if (!requireEditorAccess(request, response)) {
         return;
       }
       const input = await body(request);
-      const { team, repo, description = "", type = "component" } = input || {};
+      const { team, repo, name = repo, description = "", type = "component" } = input || {};
       if (
         typeof team !== "string" ||
         team.length > 100 ||
         typeof repo !== "string" ||
         repo.length > 100 ||
         !valid(team, repo) ||
+        typeof name !== "string" ||
+        name.length > 100 ||
         !["component", "design-system"].includes(type) ||
         typeof description !== "string" ||
         description.length > 500
@@ -1370,7 +1391,6 @@ createServer(async (request, response) => {
         if ((mountedPath(team, repo) && existsSync(mountedPath(team, repo))) || (await remoteRepo(team, repo))) {
           return reply(response, 409, { error: "Project already exists" });
         }
-        const name = repo;
         const files =
           type === "design-system"
             ? blankDesignSystemFiles(name, description)

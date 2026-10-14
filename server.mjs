@@ -513,12 +513,12 @@ async function remoteTeams() {
     .map((item) => (typeof item === "string" ? item : item.slug || item.org))
     .filter((org) => typeof org === "string" && valid(org));
 }
-async function remoteRepo(team, repo, create = false) {
+async function remoteRepo(team, repo, create = false, inventory = null) {
   remoteRequired();
   if (!valid(team, repo)) {
     throw new Error("Invalid organization or repository name.");
   }
-  const entries = await remoteRepositories();
+  const entries = inventory || (await remoteRepositories());
   let exists = entries.some((entry) => entry.team === team && entry.repo === repo);
   if (!entries.some((entry) => entry.team === team)) {
     if (!create) {
@@ -751,11 +751,12 @@ async function listRepos() {
     }
   }
   if (gitToken) {
-    for (const { team, repo } of await remoteRepositories()) {
+    const inventory = await remoteRepositories();
+    for (const { team, repo } of inventory) {
       await withRepoLock(team, repo, async () => {
         let path;
         try {
-          path = await remoteRepo(team, repo);
+          path = await remoteRepo(team, repo, false, inventory);
         } catch (error) {
           console.warn(`Skipping unreadable Git repository ${team}/${repo}:`, error.message);
           return;

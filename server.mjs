@@ -46,7 +46,29 @@ const excludedPaths = new Set([".git", "node_modules", ".wds", "dist"]);
 const oidcIssuer = process.env.OIDC_ISSUER;
 const oidcClientId = process.env.OIDC_CLIENT_ID;
 const oidcClientSecret = process.env.OIDC_CLIENT_SECRET;
-const oidcRedirectUri = process.env.OIDC_REDIRECT_URI;
+const oidcRedirectUri =
+  process.env.OIDC_REDIRECT_URI ||
+  (() => {
+    if (!oidcClientId) {
+      return null;
+    }
+    try {
+      const clientOrigin = new URL(`https://${oidcClientId}`);
+      if (clientOrigin.hostname !== oidcClientId || clientOrigin.pathname !== "/") {
+        return null;
+      }
+      return new URL("/auth/callback", clientOrigin).href;
+    } catch {
+      return null;
+    }
+  })();
+const oidcCallbackPath = (() => {
+  try {
+    return oidcRedirectUri ? new URL(oidcRedirectUri).pathname : null;
+  } catch {
+    return null;
+  }
+})();
 const allowedSubjects = new Set(
   (process.env.WDS_ALLOWED_SUBJECTS || "")
     .split(",")
@@ -124,7 +146,7 @@ async function ensureAuthClient() {
 
 async function createAuthClient() {
   if (!oidcClientId || !oidcIssuer || !oidcRedirectUri) {
-    console.warn("OIDC_ISSUER, OIDC_CLIENT_ID, and OIDC_REDIRECT_URI must be set; OIDC auth will be disabled");
+    console.warn("OIDC_ISSUER and OIDC_CLIENT_ID must be set; OIDC auth will be disabled");
     return null;
   }
   const config = await oidc.discovery(
@@ -136,6 +158,9 @@ async function createAuthClient() {
       ? { execute: [oidc.allowInsecureRequests] }
       : undefined,
   );
+  if (!oidcCallbackPath || !["https:", "http:"].includes(new URL(oidcRedirectUri).protocol)) {
+    throw new Error("OIDC redirect URI must be an absolute HTTP(S) URL");
+  }
   return config;
 }
 
@@ -1211,12 +1236,12 @@ createServer(async (request, response) => {
     });
     response.writeHead(302, {
       Location: authUrl.href,
-      "Set-Cookie": `wds-oidc-state-${state}=${state}; Path=/api/oidc/callback; Max-Age=300; HttpOnly; Secure; SameSite=Lax`,
+      "Set-Cookie": `wds-oidc-state-${state}=${state}; Path=${oidcCallbackPath}; Max-Age=300; HttpOnly; Secure; SameSite=Lax`,
     });
     response.end();
     return;
   }
-  if (url.pathname === "/api/oidc/callback") {
+  if (oidcCallbackPath && url.pathname === oidcCallbackPath) {
     const code = url.searchParams.get("code");
     const providerError = url.searchParams.get("error");
     const state = url.searchParams.get("state");
@@ -1225,7 +1250,7 @@ createServer(async (request, response) => {
       ? request.headers.cookie?.match(new RegExp(`(?:^|;\\s*)wds-oidc-state-${state}=([^;]+)`))?.[1]
       : undefined;
     const expiredStateCookie = validState
-      ? `wds-oidc-state-${state}=; Path=/api/oidc/callback; Max-Age=0; HttpOnly; Secure; SameSite=Lax`
+      ? `wds-oidc-state-${state}=; Path=${oidcCallbackPath}; Max-Age=0; HttpOnly; Secure; SameSite=Lax`
       : undefined;
     if (!validState) {
       return reply(response, 400, { error: "Missing code or state" });

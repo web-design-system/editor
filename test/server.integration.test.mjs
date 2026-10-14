@@ -50,6 +50,7 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
     Object.assign(jwk, { kid: "integration-key", use: "sig", alg: "RS256" });
     let expectedNonce;
     let userinfoSubject = "integration-user";
+    let smartGitRequests = 0;
     oidcServer = createServer(async (req, res) => {
       const url = new URL(req.url, `http://${req.headers.host}`);
       const json = (body) => {
@@ -181,6 +182,7 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
         return;
       }
       if (path.startsWith("/git/")) {
+        smartGitRequests += 1;
         const gitPath = path.slice("/git/".length);
         const child = spawn("git", ["http-backend"], {
           env: {
@@ -456,10 +458,14 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
       assert.match(files["tokens.css"], /:root/);
       assert.match(files["styles.css"], /tokens\.css/);
     }
-    const systemsList = await (await fetch(`${base}/api/design-systems`, { headers })).json();
+    const smartGitRequestsBeforeMetadataLists = smartGitRequests;
+    const systemsListResponse = await fetch(`${base}/api/design-systems`, { headers });
+    assert.match(systemsListResponse.headers.get("server-timing"), /^app;dur=\d/);
+    const systemsList = await systemsListResponse.json();
     assert.equal(systemsList.designSystems.filter((item) => item.team_id === createdTeamData.team.id).length, 2);
     const nestedTeams = await (await fetch(`${base}/api/teams`, { headers })).json();
     assert.equal(nestedTeams.teams.find((item) => item.slug === "new-team").designSystems.length, 2);
+    assert.equal(smartGitRequests, smartGitRequestsBeforeMetadataLists);
     const newSystemPublish = await fetch(`${base}/api/publish/org-one/foundation`, { method: "POST", headers });
     assert.equal(newSystemPublish.status, 200, await newSystemPublish.clone().text());
     const newComponent = await fetch(`${base}/api/projects`, {

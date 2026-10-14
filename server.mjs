@@ -6,6 +6,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { randomBytes, createHash } from "node:crypto";
 import { tmpdir } from "node:os";
+import { performance } from "node:perf_hooks";
 import * as oidc from "openid-client";
 
 const exec = promisify(execFile);
@@ -18,6 +19,10 @@ const gitAuthorEmail = process.env.GIT_AUTHOR_EMAIL || "system@wds.local";
 const databaseUrl = process.env.DATABASE_URL;
 const databaseToken = process.env.DB_AUTH_TOKEN || process.env.DATABASE_TOKEN;
 const unsandboxedSpecsEnabled = process.env.WDS_ENABLE_UNSANDBOXED_SPECS === "true";
+const performanceDebugEnabled = process.env.WDS_PERF_DEBUG === "true";
+const configuredPerformanceSlowMs = Number(process.env.WDS_PERF_SLOW_MS || 250);
+const performanceSlowMs = Number.isFinite(configuredPerformanceSlowMs) ? Math.max(0, configuredPerformanceSlowMs) : 250;
+const legacyGitMigrationEnabled = process.env.WDS_LEGACY_GIT_MIGRATION === "true";
 const remoteCache = await mkdtemp(join(tmpdir(), "wds-next-remote-repos-"));
 process.once("exit", () => rmSync(remoteCache, { recursive: true, force: true }));
 const sourceTeam = process.env.SOURCE_TEAM;
@@ -65,8 +70,37 @@ const allowedSubjects = new Set(
 
 const sessions = new Map();
 const repoLocks = new Map();
+const requestTimings = new WeakMap();
 let metadataReady = null;
 let inventoryCache = { expires: 0, value: null, pending: null };
+let legacySeedPending = null;
+let legacySeedComplete = false;
+
+function performanceLog(operation, startedAt, fields = {}) {
+  const durationMs = Math.round((performance.now() - startedAt) * 10) / 10;
+  if (performanceDebugEnabled || durationMs >= performanceSlowMs) {
+    console.info(`[wds-perf] ${JSON.stringify({ operation, durationMs, ...fields })}`);
+  }
+  return durationMs;
+}
+
+async function measurePerformance(operation, fields, action) {
+  const startedAt = performance.now();
+  try {
+    const result = await action();
+    performanceLog(operation, startedAt, { ...fields, outcome: "ok" });
+    return result;
+  } catch (error) {
+    performanceLog(operation, startedAt, { ...fields, outcome: "error", status: error.status });
+    throw error;
+  }
+}
+
+function metadataOperation(sql) {
+  const normalized = sql.trim().replace(/\s+/g, " ");
+  const table = normalized.match(/(?:FROM|INTO|TABLE)\s+(?:IF NOT EXISTS )?([a-z_]+)/i)?.[1] || "unknown";
+  return `${normalized.split(" ", 1)[0].toLowerCase()}.${table.toLowerCase()}`;
+}
 
 function invalidateInventory() {
   inventoryCache = { expires: 0, value: null, pending: null };
@@ -94,36 +128,38 @@ async function metadataQuery(sql, params = []) {
   } else if (!endpointUrl.pathname.endsWith("/query")) {
     endpointUrl.pathname = `${endpointUrl.pathname.replace(/\/$/, "")}/query`;
   }
-  let response;
-  try {
-    response = await fetch(endpointUrl, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        ...(databaseToken ? { authorization: `Bearer ${databaseToken}` } : {}),
-      },
-      body: JSON.stringify({ s: sql, d: params, m: /^\s*select\b/i.test(sql) ? "all" : "run" }),
-    });
-    const text = await response.text();
-    if (!response.ok) {
-      throw new Error("Metadata database request failed");
+  return measurePerformance("metadata.query", { statement: metadataOperation(sql) }, async () => {
+    let response;
+    try {
+      response = await fetch(endpointUrl, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          ...(databaseToken ? { authorization: `Bearer ${databaseToken}` } : {}),
+        },
+        body: JSON.stringify({ s: sql, d: params, m: /^\s*select\b/i.test(sql) ? "all" : "run" }),
+      });
+      const text = await response.text();
+      if (!response.ok) {
+        throw new Error("Metadata database request failed");
+      }
+      let data = text ? JSON.parse(text) : {};
+      if (data && data.result && !Array.isArray(data.rows)) {
+        data = data.result;
+      }
+      if (data && data.error) {
+        throw new Error(String(data.error).slice(0, 300));
+      }
+      return data;
+    } catch (error) {
+      // Preserve constraint details for callers to map duplicate records to HTTP 409.
+      // Network and malformed responses remain deliberately opaque to API clients.
+      if (error && /unique|constraint/i.test(error.message || "")) {
+        throw error;
+      }
+      throw Object.assign(new Error("Team and design-system metadata is temporarily unavailable."), { status: 503 });
     }
-    let data = text ? JSON.parse(text) : {};
-    if (data && data.result && !Array.isArray(data.rows)) {
-      data = data.result;
-    }
-    if (data && data.error) {
-      throw new Error(String(data.error).slice(0, 300));
-    }
-    return data;
-  } catch (error) {
-    // Preserve constraint details for callers to map duplicate records to HTTP 409.
-    // Network and malformed responses remain deliberately opaque to API clients.
-    if (error && /unique|constraint/i.test(error.message || "")) {
-      throw error;
-    }
-    throw Object.assign(new Error("Team and design-system metadata is temporarily unavailable."), { status: 503 });
-  }
+  });
 }
 
 async function ensureMetadata() {
@@ -144,57 +180,73 @@ async function ensureMetadata() {
 }
 
 async function seedLegacySystems() {
-  await ensureMetadata();
-  if (!gitToken && !sourceTeamPath) {
-    return;
-  }
-  let projects;
-  try {
-    projects = await listRepos();
-  } catch {
-    return;
-  }
-  for (const project of projects.filter((item) => item.type === "design-system" && valid(item.team, item.repo))) {
-    let teamRows = queryRows(await metadataQuery("SELECT id FROM teams WHERE slug = ?", [project.team]));
-    if (!teamRows.length) {
-      const teamId = randomBytes(16).toString("hex");
+  return measurePerformance("legacy.seed", {}, async () => {
+    await ensureMetadata();
+    if (!gitToken && !sourceTeamPath) {
+      return;
+    }
+    let projects;
+    try {
+      projects = await listRepos();
+    } catch {
+      return;
+    }
+    for (const project of projects.filter((item) => item.type === "design-system" && valid(item.team, item.repo))) {
+      let teamRows = queryRows(await metadataQuery("SELECT id FROM teams WHERE slug = ?", [project.team]));
+      if (!teamRows.length) {
+        const teamId = randomBytes(16).toString("hex");
+        try {
+          await metadataQuery("INSERT INTO teams (id, slug, name) VALUES (?, ?, ?)", [
+            teamId,
+            project.team,
+            project.team,
+          ]);
+        } catch (error) {
+          if (!/unique|constraint/i.test(error.message || "")) {
+            throw error;
+          }
+        }
+        teamRows = queryRows(await metadataQuery("SELECT id FROM teams WHERE slug = ?", [project.team]));
+      }
+      if (
+        !teamRows.length ||
+        queryRows(await metadataQuery("SELECT id FROM design_systems WHERE git_org = ?", [project.team])).length
+      ) {
+        continue;
+      }
       try {
-        await metadataQuery("INSERT INTO teams (id, slug, name) VALUES (?, ?, ?)", [
-          teamId,
-          project.team,
-          project.team,
-        ]);
+        await metadataQuery(
+          "INSERT INTO design_systems (id, team_id, slug, git_org, foundation_repo, name) VALUES (?, ?, ?, ?, ?, ?)",
+          [
+            randomBytes(16).toString("hex"),
+            teamRows[0].id,
+            project.repo,
+            project.team,
+            project.repo,
+            project.name || project.repo,
+          ],
+        );
       } catch (error) {
         if (!/unique|constraint/i.test(error.message || "")) {
           throw error;
         }
       }
-      teamRows = queryRows(await metadataQuery("SELECT id FROM teams WHERE slug = ?", [project.team]));
     }
-    if (
-      !teamRows.length ||
-      queryRows(await metadataQuery("SELECT id FROM design_systems WHERE git_org = ?", [project.team])).length
-    ) {
-      continue;
-    }
-    try {
-      await metadataQuery(
-        "INSERT INTO design_systems (id, team_id, slug, git_org, foundation_repo, name) VALUES (?, ?, ?, ?, ?, ?)",
-        [
-          randomBytes(16).toString("hex"),
-          teamRows[0].id,
-          project.repo,
-          project.team,
-          project.repo,
-          project.name || project.repo,
-        ],
-      );
-    } catch (error) {
-      if (!/unique|constraint/i.test(error.message || "")) {
-        throw error;
-      }
-    }
+  });
+}
+
+function scheduleLegacySystemSeed() {
+  if (!legacyGitMigrationEnabled || legacySeedComplete || legacySeedPending) {
+    return;
   }
+  legacySeedPending = seedLegacySystems()
+    .then(() => {
+      legacySeedComplete = true;
+    })
+    .catch((error) => console.warn("Legacy Git migration failed:", error.message))
+    .finally(() => {
+      legacySeedPending = null;
+    });
 }
 
 function queryRows(data) {
@@ -596,7 +648,9 @@ async function git(cwd, args, remote = false, encoding = "utf8") {
     });
     env.GIT_ASKPASS = helper;
   }
-  return exec("git", ["-C", cwd, ...args], { env, encoding });
+  return measurePerformance("git.command", { command: args[0], remote }, () =>
+    exec("git", ["-C", cwd, ...args], { env, encoding }),
+  );
 }
 function remoteRequired() {
   if (!gitApi) {
@@ -620,43 +674,51 @@ function configureGitAuthor(path) {
 }
 async function api(path, options = {}) {
   remoteRequired();
-  const response = await fetch(`${gitApi}${path}`, {
-    ...options,
-    headers: {
-      Authorization: `Bearer ${gitToken}`,
-      ...(options.body ? { "content-type": "application/json" } : {}),
-      ...options.headers,
-    },
+  const operation = options.method || "GET";
+  const route = path
+    .replace(/\/(?:[a-z0-9._-]+)(?=\/repos(?:\/|$))/i, "/:org")
+    .replace(/\/repos\/[a-z0-9._-]+$/i, "/repos/:repo");
+  return measurePerformance("git-api.request", { method: operation, route }, async () => {
+    const response = await fetch(`${gitApi}${path}`, {
+      ...options,
+      headers: {
+        Authorization: `Bearer ${gitToken}`,
+        ...(options.body ? { "content-type": "application/json" } : {}),
+        ...options.headers,
+      },
+    });
+    if (!response.ok) {
+      const error = new Error(`Git API request failed (${response.status})`);
+      error.status = response.status >= 400 && response.status < 500 ? response.status : 502;
+      throw error;
+    }
+    return response.status === 204 ? null : response.json();
   });
-  if (!response.ok) {
-    const error = new Error(`Git API request failed (${response.status})`);
-    error.status = response.status >= 400 && response.status < 500 ? response.status : 502;
-    throw error;
-  }
-  return response.status === 204 ? null : response.json();
 }
 async function remoteRepositories() {
-  const orgResponse = await api("/api/v1/orgs");
-  const orgs = Array.isArray(orgResponse) ? orgResponse : orgResponse.orgs || orgResponse.organizations || [];
-  const result = [];
-  for (const item of orgs) {
-    const org = typeof item === "string" ? item : item.slug || item.org;
-    if (!org) {
-      continue;
+  return measurePerformance("git-api.inventory", {}, async () => {
+    const orgResponse = await api("/api/v1/orgs");
+    const orgs = Array.isArray(orgResponse) ? orgResponse : orgResponse.orgs || orgResponse.organizations || [];
+    const result = [];
+    for (const item of orgs) {
+      const org = typeof item === "string" ? item : item.slug || item.org;
+      if (!org) {
+        continue;
+      }
+      let response;
+      try {
+        response = await api(`/api/v1/orgs/${encodeURIComponent(org)}/repos`);
+      } catch (error) {
+        console.warn(`Skipping inaccessible Git organization ${org}:`, error.message);
+        continue;
+      }
+      const repos = Array.isArray(response) ? response : response.repos || response.repositories || [];
+      for (const entry of repos) {
+        result.push({ team: org, repo: typeof entry === "string" ? entry : entry.repo || entry.slug || entry.name });
+      }
     }
-    let response;
-    try {
-      response = await api(`/api/v1/orgs/${encodeURIComponent(org)}/repos`);
-    } catch (error) {
-      console.warn(`Skipping inaccessible Git organization ${org}:`, error.message);
-      continue;
-    }
-    const repos = Array.isArray(response) ? response : response.repos || response.repositories || [];
-    for (const entry of repos) {
-      result.push({ team: org, repo: typeof entry === "string" ? entry : entry.repo || entry.slug || entry.name });
-    }
-  }
-  return result.filter((entry) => entry.repo);
+    return result.filter((entry) => entry.repo);
+  });
 }
 async function remoteRepo(team, repo, create = false, inventory = null) {
   remoteRequired();
@@ -801,6 +863,10 @@ async function body(request) {
   }
 }
 function reply(response, status, data, type = "application/json; charset=utf-8") {
+  const startedAt = requestTimings.get(response);
+  if (startedAt !== undefined && !response.headersSent) {
+    response.setHeader("server-timing", `app;dur=${performanceLog("request.server-timing", startedAt, {})}`);
+  }
   response.writeHead(status, { "content-type": type, "cache-control": "no-store" });
   response.end(typeof data === "string" ? data : JSON.stringify(data));
 }
@@ -869,69 +935,71 @@ async function projectMetadata(path, ref = "refs/remotes/origin/main") {
   return null;
 }
 async function listReposUncached() {
-  const projects = [];
-  if (sourceTeamPath && existsSync(sourceTeamPath)) {
-    const entries = await readdir(sourceTeamPath, { withFileTypes: true });
-    for (const entry of entries.filter((item) => item.isDirectory() && valid(item.name))) {
-      if (!isMountedSource(sourceTeam, entry.name)) {
-        continue;
-      }
-      const path = mountedPath(sourceTeam, entry.name);
-      let metadata;
-      try {
-        metadata = JSON.parse(await readFile(join(path, "component.json"), "utf8"));
-        metadata.type = "component";
-      } catch {
-        metadata = JSON.parse(await readFile(join(path, "design-system.json"), "utf8"));
-        if (metadata.type !== "design-system") {
+  return measurePerformance("git.inventory-projects", {}, async () => {
+    const projects = [];
+    if (sourceTeamPath && existsSync(sourceTeamPath)) {
+      const entries = await readdir(sourceTeamPath, { withFileTypes: true });
+      for (const entry of entries.filter((item) => item.isDirectory() && valid(item.name))) {
+        if (!isMountedSource(sourceTeam, entry.name)) {
           continue;
         }
+        const path = mountedPath(sourceTeam, entry.name);
+        let metadata;
+        try {
+          metadata = JSON.parse(await readFile(join(path, "component.json"), "utf8"));
+          metadata.type = "component";
+        } catch {
+          metadata = JSON.parse(await readFile(join(path, "design-system.json"), "utf8"));
+          if (metadata.type !== "design-system") {
+            continue;
+          }
+        }
+        projects.push({
+          team: sourceTeam,
+          repo: entry.name,
+          ...metadata,
+          revision: revisionFor(await discoverAssets(path)),
+          sourceMode: "filesystem",
+        });
       }
-      projects.push({
-        team: sourceTeam,
-        repo: entry.name,
-        ...metadata,
-        revision: revisionFor(await discoverAssets(path)),
-        sourceMode: "filesystem",
-      });
     }
-  }
-  if (gitToken) {
-    const inventory = await remoteRepositories();
-    for (const { team, repo } of inventory) {
-      await withRepoLock(team, repo, async () => {
-        let path;
-        try {
-          path = await remoteRepo(team, repo, false, inventory);
-        } catch (error) {
-          console.warn(`Skipping unreadable Git repository ${team}/${repo}:`, error.message);
-          return;
-        }
-        if (!path) {
-          return;
-        }
-        try {
-          const metadata = await projectMetadata(path);
-          if (!metadata) {
+    if (gitToken) {
+      const inventory = await remoteRepositories();
+      for (const { team, repo } of inventory) {
+        await withRepoLock(team, repo, async () => {
+          let path;
+          try {
+            path = await remoteRepo(team, repo, false, inventory);
+          } catch (error) {
+            console.warn(`Skipping unreadable Git repository ${team}/${repo}:`, error.message);
             return;
           }
-          if (!projects.some((project) => project.team === team && project.repo === repo)) {
-            projects.push({
-              team,
-              repo,
-              ...metadata,
-              revision: (await git(path, ["rev-parse", "--short", "refs/remotes/origin/main"])).stdout.trim(),
-            });
+          if (!path) {
+            return;
           }
-        } catch {
-          // Empty or non-WDS repositories are not editor projects.
-        }
-      });
+          try {
+            const metadata = await projectMetadata(path);
+            if (!metadata) {
+              return;
+            }
+            if (!projects.some((project) => project.team === team && project.repo === repo)) {
+              projects.push({
+                team,
+                repo,
+                ...metadata,
+                revision: (await git(path, ["rev-parse", "--short", "refs/remotes/origin/main"])).stdout.trim(),
+              });
+            }
+          } catch {
+            // Empty or non-WDS repositories are not editor projects.
+          }
+        });
+      }
+    } else if (projects.length === 0) {
+      remoteRequired();
     }
-  } else if (projects.length === 0) {
-    remoteRequired();
-  }
-  return projects;
+    return projects;
+  });
 }
 async function listRepos() {
   if (inventoryCache.value && inventoryCache.expires > Date.now()) {
@@ -1458,7 +1526,16 @@ async function serveStatic(request, response, pathname) {
 }
 
 createServer(async (request, response) => {
+  const startedAt = performance.now();
+  requestTimings.set(response, startedAt);
   const url = new URL(request.url, `http://${request.headers.host}`);
+  response.once("finish", () => {
+    performanceLog("http.request", startedAt, {
+      method: request.method,
+      path: url.pathname,
+      status: response.statusCode,
+    });
+  });
   const parts = url.pathname.split("/").filter(Boolean);
 
   // OIDC Auth routes
@@ -1686,7 +1763,8 @@ createServer(async (request, response) => {
       if (!requireEditorAccess(request, response)) {
         return;
       }
-      await seedLegacySystems();
+      await ensureMetadata();
+      scheduleLegacySystemSeed();
       const teams = queryRows(await metadataQuery("SELECT id, slug, name, created_at FROM teams ORDER BY slug"));
       const systems = queryRows(
         await metadataQuery(
@@ -1704,7 +1782,8 @@ createServer(async (request, response) => {
       if (!requireEditorAccess(request, response)) {
         return;
       }
-      await seedLegacySystems();
+      await ensureMetadata();
+      scheduleLegacySystemSeed();
       return reply(response, 200, {
         designSystems: queryRows(
           await metadataQuery(

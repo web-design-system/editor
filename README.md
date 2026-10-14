@@ -138,7 +138,7 @@ The component HTML is the consumer entrypoint. `stories.html` is published with 
 
 The service uses OIDC authorization-code flow with PKCE through `https://auth.api.apphor.de/` in production. Editor APIs require an authenticated OIDC session and an explicit subject allowlist. Team membership, per-team authorization, repository deletion, and invitations are not implemented yet.
 
-The landing page lists metadata teams and design systems alongside readable legacy Git projects. `GET /api/teams` returns teams with nested design systems; `POST /api/teams` creates metadata only. `GET/POST /api/design-systems` lists or creates organization-backed systems. Legacy repositories remain at their original `/static/<org>/<repo>/...` paths and are not automatically moved. Team membership and team-scoped authorization are not implemented; all allowlisted users share permissions of the configured Git API token.
+The landing page reads metadata teams and design systems directly from d0. `GET /api/teams` returns teams with nested design systems; `POST /api/teams` creates metadata only. `GET/POST /api/design-systems` lists or creates organization-backed systems. This path does not inspect or clone Git repositories. Legacy repositories remain at their original `/static/<org>/<repo>/...` paths and are not automatically moved. Set `WDS_LEGACY_GIT_MIGRATION=true` only while importing readable legacy Git design-system repositories; it runs asynchronously and must be disabled after migration. Team membership and team-scoped authorization are not implemented; all allowlisted users share permissions of the configured Git API token.
 
 ## Persistence And Runtime
 
@@ -151,6 +151,8 @@ Existing repositories under the former local `data/repos` or `REPOS_PATH` storag
 The mounted source remains filesystem-backed and bypasses remote Git storage, including its compile/release behavior. Configure `SOURCE_TEAM` and `SOURCE_TEAM_PATH` together to enable it; neither has a built-in path or team-name default.
 
 The metadata store is the d0 SQLite API configured by `DATABASE_URL` (production requires HTTPS); an optional `DB_AUTH_TOKEN` or `DATABASE_TOKEN` is sent as a Bearer credential. It currently owns WDS teams and design-system mappings. Git remains authoritative for source, history, and artifact revisions. A WDS team is metadata only and may own several design systems; each new design system is a Git organization with a reserved `foundation` repository. Components are repositories in that organization and refer to `/static/<git-org>/foundation/<revision>/tokens.css`. Existing Git organization/repository URLs are unchanged. Readable legacy design-system repositories are surfaced as legacy mappings and are not moved or rewritten; inaccessible repositories are skipped. Team/system metadata endpoints return 503 if the metadata database is not configured or unavailable.
+
+Set `WDS_PERF_DEBUG=true` to emit structured `[wds-perf]` timing records for each HTTP request, d0 metadata query, Git API call, Git inventory scan, and legacy-system seed. Without it, operations at or above `WDS_PERF_SLOW_MS` (default `250`) are logged. Timing records never include credentials, database bindings, or Git organization/repository names. API responses also include an `Server-Timing: app` duration for browser network inspection.
 
 S3-compatible object storage is not required in v1. It becomes useful only when artifacts need independent CDN delivery, replication, or storage separated from the editor deployment.
 

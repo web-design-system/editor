@@ -56,9 +56,12 @@ function setNotice(message, signIn = false) {
     : "";
 }
 function renderTeams() {
-  const availableTeams = [...new Set([...teams, ...systems.map((system) => system.team)])].sort((a, b) =>
-    a.localeCompare(b),
-  );
+  const availableTeams = [
+    ...new Set([
+      ...teams.map((team) => (typeof team === "string" ? team : team.slug)),
+      ...systems.map((system) => system.team),
+    ]),
+  ].sort((a, b) => a.localeCompare(b));
   document.querySelector("#team-summary").textContent = availableTeams.length
     ? `${availableTeams.length} ${availableTeams.length === 1 ? "team" : "teams"}`
     : "";
@@ -104,7 +107,7 @@ function renderSystems() {
   systemGrid.innerHTML = visible
     .map(
       (system) =>
-        `<a class="system-card" href="/?team=${encodeURIComponent(system.team)}&amp;repo=${encodeURIComponent(system.repo)}" aria-label="Open ${escapeHtml(system.name || system.repo)}"><div class="card-top"><span class="system-icon">${icon}</span><span class="team-tag">${escapeHtml(system.team)}</span></div><h3>${escapeHtml(system.name || system.repo)}</h3><p>${escapeHtml(system.description || "Shared design tokens and component styles.")}</p><span class="card-footer"><span>${escapeHtml(system.repo)}</span><span class="open-label">Open ${arrow}</span></span></a>`,
+        `<a class="system-card" href="/?team=${encodeURIComponent(system.org || system.team)}&amp;repo=${encodeURIComponent(system.repo)}" aria-label="Open ${escapeHtml(system.name || system.repo)}"><div class="card-top"><span class="system-icon">${icon}</span><span class="team-tag">${escapeHtml(system.team)}</span></div><h3>${escapeHtml(system.name || system.repo)}</h3><p>${escapeHtml(system.description || "Shared design tokens and component styles.")}</p><span class="card-footer"><span>${escapeHtml(system.repo)}</span><span class="open-label">Open ${arrow}</span></span></a>`,
     )
     .join("");
 }
@@ -126,9 +129,10 @@ async function loadWorkspace() {
   }
   document.querySelector("#creation-controls").hidden = false;
   try {
-    const [response, teamsResponse] = await Promise.all([
+    const [response, teamsResponse, systemsResponse] = await Promise.all([
       fetch("/api/projects", { credentials: "same-origin" }),
       fetch("/api/teams", { credentials: "same-origin" }),
+      fetch("/api/design-systems", { credentials: "same-origin" }),
     ]);
     if (response.status === 401) {
       setNotice("Your session has expired.", true);
@@ -142,10 +146,24 @@ async function loadWorkspace() {
       return;
     }
     const projects = await response.json();
+    const teamData = teamsResponse.ok ? await teamsResponse.json() : { teams: [] };
+    teams = Array.isArray(teamData.teams) ? teamData.teams : [];
     systems = Array.isArray(projects) ? projects.filter((project) => project.type === "design-system") : [];
-    if (teamsResponse.ok) {
-      const teamData = await teamsResponse.json();
-      teams = Array.isArray(teamData.teams) ? teamData.teams : [];
+    if (systemsResponse.ok) {
+      const registered = await systemsResponse.json();
+      for (const system of registered.designSystems || []) {
+        const existing = systems.find((item) => item.team === system.git_org && item.repo === system.foundation_repo);
+        if (existing) {
+          systems.splice(systems.indexOf(existing), 1);
+        }
+        systems.push({
+          team: teams.find((item) => item.id === system.team_id)?.slug || system.git_org,
+          org: system.git_org,
+          repo: system.foundation_repo,
+          name: system.name,
+          type: "design-system",
+        });
+      }
     }
     renderTeams();
     renderSystems();
@@ -159,16 +177,31 @@ async function responseData(response) {
   return response.json().catch(() => ({}));
 }
 async function refreshWorkspace() {
-  const [projectsResponse, teamsResponse] = await Promise.all([
+  const [projectsResponse, teamsResponse, systemsResponse] = await Promise.all([
     fetch("/api/projects", { credentials: "same-origin" }),
     fetch("/api/teams", { credentials: "same-origin" }),
+    fetch("/api/design-systems", { credentials: "same-origin" }),
   ]);
   const projects = await responseData(projectsResponse);
   const teamData = await responseData(teamsResponse);
-  if (!projectsResponse.ok || !teamsResponse.ok) {
+  const registered = await responseData(systemsResponse);
+  if (!projectsResponse.ok || !teamsResponse.ok || !systemsResponse.ok) {
     throw new Error(projects.error || teamData.error || "Could not refresh teams and design systems.");
   }
   systems = Array.isArray(projects) ? projects.filter((project) => project.type === "design-system") : [];
+  for (const system of registered.designSystems || []) {
+    const existing = systems.find((item) => item.team === system.git_org && item.repo === system.foundation_repo);
+    if (existing) {
+      systems.splice(systems.indexOf(existing), 1);
+    }
+    systems.push({
+      team: teamData.teams.find((item) => item.id === system.team_id)?.slug || system.git_org,
+      org: system.git_org,
+      repo: system.foundation_repo,
+      name: system.name,
+      type: "design-system",
+    });
+  }
   teams = Array.isArray(teamData.teams) ? teamData.teams : [];
   renderTeams();
   renderSystems();
@@ -194,11 +227,11 @@ teamForm.addEventListener("submit", async (event) => {
       throw new Error(data.error || `Could not create team (HTTP ${response.status}).`);
     }
     await refreshWorkspace();
-    selectedTeam = data.team;
+    selectedTeam = data.team.slug;
     renderTeams();
     renderSystems();
     teamForm.reset();
-    setNotice(`Team ${data.team} created and selected.`);
+    setNotice(`Team ${data.team.slug} created and selected.`);
   } catch (error) {
     setNotice(error.message || "Could not create team.");
   } finally {
@@ -216,13 +249,14 @@ systemForm.addEventListener("submit", async (event) => {
   setNotice("Creating design system…");
   try {
     const values = Object.fromEntries(new FormData(systemForm));
-    const response = await fetch("/api/projects", {
+    const response = await fetch("/api/design-systems", {
       method: "POST",
       credentials: "same-origin",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         team: values.team,
-        repo: values.repo,
+        slug: values.repo,
+        gitOrg: values.gitOrg,
         name: values.name || values.repo,
         description: values.description,
         type: "design-system",
@@ -233,12 +267,12 @@ systemForm.addEventListener("submit", async (event) => {
       throw new Error(data.error || `Could not create design system (HTTP ${response.status}).`);
     }
     await refreshWorkspace();
-    selectedTeam = data.project.team;
+    selectedTeam = values.team;
     renderTeams();
     renderSystems();
     systemForm.reset();
     setNotice("Design system created.");
-    location.href = `/?team=${encodeURIComponent(data.project.team)}&repo=${encodeURIComponent(data.project.repo)}`;
+    location.href = `/?team=${encodeURIComponent(data.designSystem.team)}&repo=foundation`;
   } catch (error) {
     setNotice(error.message || "Could not create design system.");
   } finally {

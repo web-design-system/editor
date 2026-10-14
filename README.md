@@ -107,7 +107,7 @@ No release is created automatically for a new repository. An author must publish
 
 ## Creating A Design System
 
-An authenticated, allowlisted editor can create a team (Git organization) by slug or create a design system from the landing page. Design-system creation uses an existing team and accepts a repository slug plus optional display name and description. Team creation calls the Git API organization endpoint; creating a design system can also create its Git organization when needed, creates the Git repository, and pushes a first `main` commit containing a shared `styles.css` plus project metadata. A design-system repository is not a component: it has no component markup, story, or spec. Its stylesheet can hold versioned design tokens shared by components.
+An authenticated, allowlisted editor creates WDS teams as metadata records, then creates design systems under a selected team. Each design system gets a Git organization and a `foundation` repository with `design-system.json`, `tokens.css`, and `styles.css`. Components are created only inside that system organization and use the foundation token URL as their default dependency.
 
 For example, a component may import a released token stylesheet with `@import url("/static/acme-corp/foundation/v1.0/styles.css");`. This is an explicit public versioned asset reference; relative imports stay inside the current component repository and cannot traverse into sibling repositories or server files.
 
@@ -138,7 +138,7 @@ The component HTML is the consumer entrypoint. `stories.html` is published with 
 
 The service uses OIDC authorization-code flow with PKCE through `https://auth.api.apphor.de/` in production. Editor APIs require an authenticated OIDC session and an explicit subject allowlist. Team membership, per-team authorization, repository deletion, and invitations are not implemented yet.
 
-The landing page at `/` lists design systems and teams returned through the configured Git API connection and provides authenticated team/design-system creation controls. Opening a design system navigates to `/?team=<team>&repo=<repo>`, where the Workbench is currently an intentionally blank workspace shell with the account control in its header. The Git API currently supplies organizations visible to the configured service token; WDS cannot yet distinguish organizations personally owned by the signed-in user from other organizations available to that token. `/api/teams` exposes that organization list and authenticated `POST /api/teams` creates an organization. Membership administration, invitations, team rename, and deletion are not implemented; in particular, destructive operations and team-scoped authorization are out of scope. All allowlisted users share permissions of the configured Git API token.
+The landing page lists metadata teams and design systems alongside readable legacy Git projects. `GET /api/teams` returns teams with nested design systems; `POST /api/teams` creates metadata only. `GET/POST /api/design-systems` lists or creates organization-backed systems. Legacy repositories remain at their original `/static/<org>/<repo>/...` paths and are not automatically moved. Team membership and team-scoped authorization are not implemented; all allowlisted users share permissions of the configured Git API token.
 
 ## Persistence And Runtime
 
@@ -150,7 +150,7 @@ Existing repositories under the former local `data/repos` or `REPOS_PATH` storag
 
 The mounted source remains filesystem-backed and bypasses remote Git storage, including its compile/release behavior. Configure `SOURCE_TEAM` and `SOURCE_TEAM_PATH` together to enable it; neither has a built-in path or team-name default.
 
-The planned metadata store is the d0 SQLite API at `https://wds-test.db.apphor.de/api`. It will own users, teams, invitations, repository records, sessions, releases, build records, and public share metadata. Git remains the authoritative source and revision store.
+The metadata store is the d0 SQLite API configured by `DATABASE_URL` (production requires HTTPS); an optional `DB_AUTH_TOKEN` or `DATABASE_TOKEN` is sent as a Bearer credential. It currently owns WDS teams and design-system mappings. Git remains authoritative for source, history, and artifact revisions. A WDS team is metadata only and may own several design systems; each new design system is a Git organization with a reserved `foundation` repository. Components are repositories in that organization and refer to `/static/<git-org>/foundation/<revision>/tokens.css`. Existing Git organization/repository URLs are unchanged. Readable legacy design-system repositories are surfaced as legacy mappings and are not moved or rewritten; inaccessible repositories are skipped. Team/system metadata endpoints return 503 if the metadata database is not configured or unavailable.
 
 S3-compatible object storage is not required in v1. It becomes useful only when artifacts need independent CDN delivery, replication, or storage separated from the editor deployment.
 
@@ -215,4 +215,4 @@ Deferred:
 
 # Authoring workbench
 
-Sign in, open a design system, and add components from its team component list. Teams are Git organizations; a design system and each component are sibling repositories in that organization. Components are team-level and shared: selecting a system in the workbench is a baseline/reference only, not repository ownership or an enforced dependency. Publish the design system first, then components may import its public stylesheet using a versioned `/static/<team>/<system>/latest/styles.css` URL. Component source commits update Git `main`; publishing is a separate explicit action that updates public `latest` artifacts. The public custom-element preview is available at `/static/<team>/<component>/latest/component.html?view=component`.
+Sign in, create/select a WDS team, then create/select a design system and add components from its workbench. Components are repositories in the design-system Git organization and import `/static/<org>/foundation/latest/tokens.css`. Component source commits update Git `main`; publishing is a separate explicit action that updates public `latest` artifacts. Existing Git org/repo artifact URLs and `team/repo` workspace links continue to address their Git organization/repository values.

@@ -15,6 +15,8 @@ const gitApi = process.env.GIT_API_URL?.replace(/\/$/, "");
 const gitToken = process.env.GIT_API_TOKEN;
 const gitAuthorName = process.env.GIT_AUTHOR_NAME || "Design System";
 const gitAuthorEmail = process.env.GIT_AUTHOR_EMAIL || "system@wds.local";
+const databaseUrl = process.env.DATABASE_URL;
+const databaseToken = process.env.DB_AUTH_TOKEN || process.env.DATABASE_TOKEN;
 const unsandboxedSpecsEnabled = process.env.WDS_ENABLE_UNSANDBOXED_SPECS === "true";
 const remoteCache = await mkdtemp(join(tmpdir(), "wds-next-remote-repos-"));
 process.once("exit", () => rmSync(remoteCache, { recursive: true, force: true }));
@@ -63,6 +65,156 @@ const allowedSubjects = new Set(
 
 const sessions = new Map();
 const repoLocks = new Map();
+let metadataReady = null;
+let inventoryCache = { expires: 0, value: null, pending: null };
+
+function invalidateInventory() {
+  inventoryCache = { expires: 0, value: null, pending: null };
+}
+
+function metadataAvailable() {
+  if (!databaseUrl) {
+    return false;
+  }
+  try {
+    const parsed = new URL(databaseUrl);
+    return !(process.env.NODE_ENV === "production" && parsed.protocol !== "https:");
+  } catch {
+    return false;
+  }
+}
+
+async function metadataQuery(sql, params = []) {
+  if (!metadataAvailable()) {
+    throw Object.assign(new Error("Team and design-system metadata is unavailable."), { status: 503 });
+  }
+  const endpointUrl = new URL(databaseUrl);
+  if (endpointUrl.pathname.endsWith("/index.mjs")) {
+    endpointUrl.pathname = endpointUrl.pathname.replace(/\/index\.mjs$/, "/query");
+  } else if (!endpointUrl.pathname.endsWith("/query")) {
+    endpointUrl.pathname = `${endpointUrl.pathname.replace(/\/$/, "")}/query`;
+  }
+  let response;
+  try {
+    response = await fetch(endpointUrl, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        ...(databaseToken ? { authorization: `Bearer ${databaseToken}` } : {}),
+      },
+      body: JSON.stringify({ s: sql, d: params, m: /^\s*select\b/i.test(sql) ? "all" : "run" }),
+    });
+    const text = await response.text();
+    if (!response.ok) {
+      throw new Error("Metadata database request failed");
+    }
+    let data = text ? JSON.parse(text) : {};
+    if (data && data.result && !Array.isArray(data.rows)) {
+      data = data.result;
+    }
+    if (data && data.error) {
+      throw new Error(String(data.error).slice(0, 300));
+    }
+    return data;
+  } catch (error) {
+    // Preserve constraint details for callers to map duplicate records to HTTP 409.
+    // Network and malformed responses remain deliberately opaque to API clients.
+    if (error && /unique|constraint/i.test(error.message || "")) {
+      throw error;
+    }
+    throw Object.assign(new Error("Team and design-system metadata is temporarily unavailable."), { status: 503 });
+  }
+}
+
+async function ensureMetadata() {
+  if (!metadataReady) {
+    metadataReady = (async () => {
+      await metadataQuery(
+        "CREATE TABLE IF NOT EXISTS teams (id TEXT PRIMARY KEY, slug TEXT NOT NULL UNIQUE, name TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
+      );
+      await metadataQuery(
+        "CREATE TABLE IF NOT EXISTS design_systems (id TEXT PRIMARY KEY, team_id TEXT NOT NULL REFERENCES teams(id), slug TEXT NOT NULL UNIQUE, git_org TEXT NOT NULL UNIQUE, foundation_repo TEXT NOT NULL DEFAULT 'foundation', name TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
+      );
+    })().catch((error) => {
+      metadataReady = null;
+      throw error;
+    });
+  }
+  await metadataReady;
+}
+
+async function seedLegacySystems() {
+  await ensureMetadata();
+  if (!gitToken && !sourceTeamPath) {
+    return;
+  }
+  let projects;
+  try {
+    projects = await listRepos();
+  } catch {
+    return;
+  }
+  for (const project of projects.filter((item) => item.type === "design-system" && valid(item.team, item.repo))) {
+    let teamRows = queryRows(await metadataQuery("SELECT id FROM teams WHERE slug = ?", [project.team]));
+    if (!teamRows.length) {
+      const teamId = randomBytes(16).toString("hex");
+      try {
+        await metadataQuery("INSERT INTO teams (id, slug, name) VALUES (?, ?, ?)", [
+          teamId,
+          project.team,
+          project.team,
+        ]);
+      } catch (error) {
+        if (!/unique|constraint/i.test(error.message || "")) {
+          throw error;
+        }
+      }
+      teamRows = queryRows(await metadataQuery("SELECT id FROM teams WHERE slug = ?", [project.team]));
+    }
+    if (
+      !teamRows.length ||
+      queryRows(await metadataQuery("SELECT id FROM design_systems WHERE git_org = ?", [project.team])).length
+    ) {
+      continue;
+    }
+    try {
+      await metadataQuery(
+        "INSERT INTO design_systems (id, team_id, slug, git_org, foundation_repo, name) VALUES (?, ?, ?, ?, ?, ?)",
+        [
+          randomBytes(16).toString("hex"),
+          teamRows[0].id,
+          project.repo,
+          project.team,
+          project.repo,
+          project.name || project.repo,
+        ],
+      );
+    } catch (error) {
+      if (!/unique|constraint/i.test(error.message || "")) {
+        throw error;
+      }
+    }
+  }
+}
+
+function queryRows(data) {
+  let rows = Array.isArray(data)
+    ? data
+    : Array.isArray(data?.rows)
+      ? data.rows
+      : Array.isArray(data?.results)
+        ? data.results
+        : Array.isArray(data?.data?.rows)
+          ? data.data.rows
+          : Array.isArray(data?.result?.rows)
+            ? data.result.rows
+            : [];
+  const columns = data?.columns || data?.result?.columns || data?.data?.columns;
+  if (columns && rows.length && Array.isArray(rows[0])) {
+    rows = rows.map((row) => Object.fromEntries(columns.map((column, index) => [column.name || column, row[index]])));
+  }
+  return rows;
+}
 
 let authClient = null;
 let authReady = false;
@@ -506,13 +658,6 @@ async function remoteRepositories() {
   }
   return result.filter((entry) => entry.repo);
 }
-async function remoteTeams() {
-  const orgResponse = await api("/api/v1/orgs");
-  const orgs = Array.isArray(orgResponse) ? orgResponse : orgResponse.orgs || orgResponse.organizations || [];
-  return orgs
-    .map((item) => (typeof item === "string" ? item : item.slug || item.org))
-    .filter((org) => typeof org === "string" && valid(org));
-}
 async function remoteRepo(team, repo, create = false, inventory = null) {
   remoteRequired();
   if (!valid(team, repo)) {
@@ -683,6 +828,7 @@ async function ensureRepo(team, repo, files) {
   await git(path, ["add", "."]);
   await git(path, ["commit", "-m", "Initial component source"]);
   await git(path, ["push", "-u", "origin", "main"], true);
+  invalidateInventory();
   return path;
 }
 
@@ -722,7 +868,7 @@ async function projectMetadata(path, ref = "refs/remotes/origin/main") {
   }
   return null;
 }
-async function listRepos() {
+async function listReposUncached() {
   const projects = [];
   if (sourceTeamPath && existsSync(sourceTeamPath)) {
     const entries = await readdir(sourceTeamPath, { withFileTypes: true });
@@ -786,6 +932,23 @@ async function listRepos() {
     remoteRequired();
   }
   return projects;
+}
+async function listRepos() {
+  if (inventoryCache.value && inventoryCache.expires > Date.now()) {
+    return inventoryCache.value;
+  }
+  if (!inventoryCache.pending) {
+    inventoryCache.pending = listReposUncached()
+      .then((value) => {
+        inventoryCache = { value, expires: Date.now() + 3000, pending: null };
+        return value;
+      })
+      .catch((error) => {
+        inventoryCache = { expires: 0, value: null, pending: null };
+        throw error;
+      });
+  }
+  return inventoryCache.pending;
 }
 async function readRevision(team, repo, revision, file) {
   if (
@@ -1441,19 +1604,24 @@ createServer(async (request, response) => {
         return;
       }
       const input = await body(request);
-      const { slug } = input || {};
+      const { slug, name = slug } = input || {};
       if (typeof slug !== "string" || slug.length > 100 || !valid(slug)) {
         return reply(response, 400, { error: "Invalid team slug" });
       }
+      if (typeof name !== "string" || name.length > 100) {
+        return reply(response, 400, { error: "Invalid team name" });
+      }
+      await ensureMetadata();
+      const id = randomBytes(16).toString("hex");
       try {
-        await api("/api/v1/orgs", { method: "POST", body: JSON.stringify({ slug }) });
+        await metadataQuery("INSERT INTO teams (id, slug, name) VALUES (?, ?, ?)", [id, slug, name]);
       } catch (error) {
-        if (error.status === 409) {
+        if (/unique|constraint/i.test(error.message)) {
           return reply(response, 409, { error: "Team already exists" });
         }
         throw error;
       }
-      return reply(response, 201, { team: slug });
+      return reply(response, 201, { team: { id, slug, name } });
     }
     if (request.method === "POST" && url.pathname === "/api/projects") {
       if (!requireEditorAccess(request, response)) {
@@ -1518,15 +1686,85 @@ createServer(async (request, response) => {
       if (!requireEditorAccess(request, response)) {
         return;
       }
-      const teams = new Set(sourceTeam && sourceTeamPath ? [sourceTeam] : []);
-      if (gitToken) {
-        for (const team of await remoteTeams()) {
-          teams.add(team);
-        }
-      } else if (!teams.size) {
-        remoteRequired();
+      await seedLegacySystems();
+      const teams = queryRows(await metadataQuery("SELECT id, slug, name, created_at FROM teams ORDER BY slug"));
+      const systems = queryRows(
+        await metadataQuery(
+          "SELECT id, team_id, slug, git_org, foundation_repo, name, created_at FROM design_systems ORDER BY slug",
+        ),
+      );
+      return reply(response, 200, {
+        teams: teams.map((team) => ({
+          ...team,
+          designSystems: systems.filter((system) => system.team_id === team.id),
+        })),
+      });
+    }
+    if (request.method === "GET" && url.pathname === "/api/design-systems") {
+      if (!requireEditorAccess(request, response)) {
+        return;
       }
-      return reply(response, 200, { teams: [...teams].sort((a, b) => a.localeCompare(b)) });
+      await seedLegacySystems();
+      return reply(response, 200, {
+        designSystems: queryRows(
+          await metadataQuery(
+            "SELECT id, team_id, slug, git_org, foundation_repo, name, created_at FROM design_systems ORDER BY slug",
+          ),
+        ),
+      });
+    }
+    if (request.method === "POST" && url.pathname === "/api/design-systems") {
+      if (!requireEditorAccess(request, response)) {
+        return;
+      }
+      const { teamId, team, slug, name = slug, gitOrg } = await body(request);
+      if (
+        (!teamId && !team) ||
+        typeof slug !== "string" ||
+        !valid(slug) ||
+        typeof gitOrg !== "string" ||
+        !valid(gitOrg) ||
+        typeof name !== "string" ||
+        name.length > 100
+      ) {
+        return reply(response, 400, { error: "Invalid design system" });
+      }
+      await ensureMetadata();
+      const teams = queryRows(
+        await metadataQuery(`SELECT id, slug FROM teams WHERE ${teamId ? "id" : "slug"} = ?`, [teamId || team]),
+      );
+      if (!teams.length) {
+        return reply(response, 404, { error: "Team not found" });
+      }
+      const teamRow = teams[0];
+      const existing = queryRows(await metadataQuery("SELECT id FROM design_systems WHERE git_org = ?", [gitOrg]));
+      if (existing.length) {
+        return reply(response, 409, { error: "Git organization is already assigned to a design system" });
+      }
+      try {
+        await api("/api/v1/orgs", { method: "POST", body: JSON.stringify({ slug: gitOrg }) });
+      } catch (error) {
+        if (error.status !== 409) {
+          throw error;
+        }
+      }
+      const foundation = await ensureRepo(gitOrg, "foundation", blankDesignSystemFiles(name, "Shared design tokens"));
+      if (!(await isDesignSystemProject(foundation))) {
+        return reply(response, 409, { error: "The reserved foundation repository is not a design system." });
+      }
+      const revision = (await git(foundation, ["rev-parse", "--short", "HEAD"])).stdout.trim();
+      try {
+        await metadataQuery(
+          "INSERT INTO design_systems (id, team_id, slug, git_org, foundation_repo, name) VALUES (?, ?, ?, ?, 'foundation', ?)",
+          [randomBytes(16).toString("hex"), teamRow.id, slug, gitOrg, name],
+        );
+      } catch (error) {
+        if (/unique|constraint/i.test(error.message || "")) {
+          return reply(response, 409, { error: "Design system metadata already exists." });
+        }
+        throw Object.assign(new Error("System repository is ready; retry to persist its metadata."), { status: 503 });
+      }
+      return reply(response, 201, { designSystem: { team: gitOrg, repo: "foundation", slug, name, revision } });
     }
     if (request.method === "GET" && parts[0] === "api" && parts[1] === "source") {
       if (!requireEditorAccess(request, response)) {
@@ -1687,6 +1925,7 @@ createServer(async (request, response) => {
           await git(path, ["commit", "-m", message]);
         }
         await git(path, ["push", "origin", "main"], true);
+        invalidateInventory();
         return reply(response, 200, {
           revision: (await git(path, ["rev-parse", "--short", "HEAD"])).stdout.trim(),
           sourceMode: "git",
@@ -1714,6 +1953,7 @@ createServer(async (request, response) => {
         const version =
           versions.length === 0 ? "v1.0" : kind === "major" ? `v${major + 1}.0` : `v${major || 1}.${minor + 1}`;
         const published = await publishSnapshot(path, team, repo, version);
+        invalidateInventory();
         return reply(response, 201, { version, revision: published.revision });
       }
       return await withRepoLock(team, repo, async () => {
@@ -1730,6 +1970,7 @@ createServer(async (request, response) => {
         }
         const version = await nextVersion(path, kind);
         const result = await publishSnapshot(path, team, repo, version);
+        invalidateInventory();
         await git(path, ["tag", "-a", version, "-m", `Release ${version}`]);
         await git(path, ["push", "origin", version], true);
         return reply(response, 201, { version, revision: result.revision });
@@ -1759,6 +2000,7 @@ createServer(async (request, response) => {
           }
         }
         const result = await publishSnapshot(path, team, repo);
+        invalidateInventory();
         return reply(response, 200, result);
       });
     }

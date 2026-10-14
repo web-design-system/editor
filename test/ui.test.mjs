@@ -10,11 +10,12 @@ test("landing page lists teams and design systems without depending on component
   assert.match(html, /id="team-form"/);
   assert.match(html, /id="system-form"/);
   assert.match(html, /id="creation-controls"[^>]*hidden/);
-  assert.match(html, /Teams are Git organizations; design systems are repositories inside a team/);
+  assert.match(html, /Teams own design systems/);
+  assert.match(html, /Git organization slug/);
   assert.match(app, /fetch\("\/api\/teams"/);
   assert.match(app, /fetch\("\/api\/projects"/);
   assert.match(app, /project\.type === "design-system"/);
-  assert.match(app, /\/\?team=\$\{encodeURIComponent\(system\.team\)\}&amp;repo=/);
+  assert.match(app, /\/\?team=\$\{encodeURIComponent\(system\.org \|\| system\.team\)\}&amp;repo=/);
   assert.match(app, /\/api\/oidc\/me/);
   assert.match(app, /\/api\/oidc\/login/);
   assert.match(app, /fetch\("\/api\/teams", \{/);

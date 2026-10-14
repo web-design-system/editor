@@ -24,8 +24,8 @@
         <p class="eyebrow">Design systems</p>
         <h1>Your workspace</h1>
         <p class="intro">
-          Teams are Git organizations; design systems are repositories inside a team. Choose a system to open it, or
-          create a team and design system below.
+          Teams own design systems. Each design system is a Git organization with a foundation repository. Choose a
+          system to open it, or create a team and design system below.
         </p>
         <section class="creation" id="creation-controls" aria-label="Create team or design system" hidden>
           <form id="team-form" class="creation-form">
@@ -46,7 +46,7 @@
             <label for="system-team">Team</label>
             <select id="system-team" name="team" required></select>
             <a href="#team-form" id="create-team-link">Create a team</a>
-            <label for="system-repo">Repository slug</label>
+            <label for="system-repo">Design-system slug</label>
             <input
               id="system-repo"
               name="repo"
@@ -55,6 +55,8 @@
               pattern="[a-z0-9][a-z0-9._\-]*"
               autocomplete="off"
             />
+            <label for="system-org">Git organization slug</label>
+            <input id="system-org" name="gitOrg" required maxlength="100" pattern="[a-z0-9][a-z0-9._\-]*" />
             <label for="system-name">Display name (optional)</label>
             <input id="system-name" name="name" maxlength="100" />
             <label for="system-description">Description (optional)</label>

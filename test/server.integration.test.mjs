@@ -35,6 +35,7 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
   const temp = await mkdtemp(join(tmpdir(), "wds-next-integration-"));
   let oidcServer;
   let gitApiServer;
+  let databaseServer;
   let app;
   try {
     const bareRoot = join(temp, "git");
@@ -232,6 +233,56 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
     });
     const gitPort = await listen(gitApiServer);
     const gitApiUrl = `http://127.0.0.1:${gitPort}`;
+    const metadata = { teams: [], design_systems: [] };
+    let databaseAvailable = true;
+    const schemaStatements = [];
+    databaseServer = createServer(async (req, res) => {
+      if (!databaseAvailable) {
+        res.writeHead(503);
+        res.end("unavailable");
+        return;
+      }
+      let raw = "";
+      for await (const chunk of req) {
+        raw += chunk;
+      }
+      const { s: sql, d: params = [] } = JSON.parse(raw || "{}");
+      assert.equal(req.headers.authorization, "Bearer local-db-test-token");
+      if (sql.startsWith("CREATE TABLE")) {
+        schemaStatements.push(sql);
+      }
+      const normalized = sql.trim().toLowerCase();
+      let rows = [];
+      if (normalized.startsWith("insert into teams")) {
+        const row = { id: params[0], slug: params[1], name: params[2], created_at: new Date().toISOString() };
+        if (metadata.teams.some((team) => team.slug === row.slug)) {
+          res.writeHead(200, { "content-type": "application/json" });
+          res.end(JSON.stringify({ error: "unique constraint failed" }));
+          return;
+        }
+        metadata.teams.push(row);
+      } else if (normalized.startsWith("insert into design_systems")) {
+        const row = {
+          id: params[0],
+          team_id: params[1],
+          slug: params[2],
+          git_org: params[3],
+          foundation_repo: "foundation",
+          name: params[4],
+        };
+        metadata.design_systems.push(row);
+      } else if (normalized.startsWith("select")) {
+        const table = normalized.includes("from teams") ? metadata.teams : metadata.design_systems;
+        rows = table.filter(
+          (row) =>
+            !normalized.includes(" where ") ||
+            Object.entries(row).some(([key, value]) => normalized.includes(`${key} = ?`) && value === params[0]),
+        );
+      }
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ rows }));
+    });
+    const databasePort = await listen(databaseServer);
     const appPort = await new Promise((resolvePort, reject) => {
       const probe = createServer();
       probe.once("error", reject);
@@ -250,6 +301,8 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
         OIDC_CLIENT_SECRET: "local-secret",
         GIT_API_URL: gitApiUrl,
         GIT_API_TOKEN: "local-test-only",
+        DATABASE_URL: `http://127.0.0.1:${databasePort}/api`,
+        DB_AUTH_TOKEN: "local-db-test-token",
         WDS_ALLOWED_SUBJECTS: "integration-user",
         SOURCE_TEAM: "mounted-team",
         SOURCE_TEAM_PATH: mountedRoot,
@@ -371,13 +424,62 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
       headers,
       body: JSON.stringify({ slug: "new-team" }),
     });
-    assert.equal(createTeam.status, 201, await createTeam.text());
+    const createdTeamData = await createTeam.json();
+    assert.equal(createTeam.status, 201, JSON.stringify(createdTeamData));
+    const gitOrgsAfterTeamCreate = await (
+      await fetch(`${gitApiUrl}/api/v1/orgs`, { headers: { authorization: "Bearer local-test-only" } })
+    ).json();
+    assert.equal(gitOrgsAfterTeamCreate.includes("new-team"), false);
     const duplicateTeam = await fetch(`${base}/api/teams`, {
       method: "POST",
       headers,
       body: JSON.stringify({ slug: "new-team" }),
     });
-    assert.equal(duplicateTeam.status, 409);
+    assert.equal(duplicateTeam.status, 409, await duplicateTeam.clone().text());
+    assert.equal(typeof createdTeamData.team.slug, "string");
+    const systemsCreated = [];
+    for (const [slug, gitOrg, teamRef] of [
+      ["system-one", "org-one", { team: "new-team" }],
+      ["system-two", "org-two", { teamId: createdTeamData.team.id }],
+    ]) {
+      const response = await fetch(`${base}/api/design-systems`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ ...teamRef, slug, gitOrg, name: slug }),
+      });
+      assert.equal(response.status, 201, await response.clone().text());
+      systemsCreated.push(await response.json());
+      const foundationSource = await fetch(`${base}/api/source/${gitOrg}/foundation`, { headers });
+      assert.equal(foundationSource.status, 200);
+      const files = (await foundationSource.json()).files;
+      assert.match(files["design-system.json"], /design-system/);
+      assert.match(files["tokens.css"], /:root/);
+      assert.match(files["styles.css"], /tokens\.css/);
+    }
+    const systemsList = await (await fetch(`${base}/api/design-systems`, { headers })).json();
+    assert.equal(systemsList.designSystems.filter((item) => item.team_id === createdTeamData.team.id).length, 2);
+    const nestedTeams = await (await fetch(`${base}/api/teams`, { headers })).json();
+    assert.equal(nestedTeams.teams.find((item) => item.slug === "new-team").designSystems.length, 2);
+    const newSystemPublish = await fetch(`${base}/api/publish/org-one/foundation`, { method: "POST", headers });
+    assert.equal(newSystemPublish.status, 200, await newSystemPublish.clone().text());
+    const newComponent = await fetch(`${base}/api/projects`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        team: "org-one",
+        repo: "new-button",
+        designSystem: { team: "org-one", repo: "foundation", revision: "latest" },
+      }),
+    });
+    assert.equal(newComponent.status, 201, await newComponent.clone().text());
+    const newComponentSource = await (await fetch(`${base}/api/source/org-one/new-button`, { headers })).json();
+    assert.match(newComponentSource.files["styles.css"], /\/static\/org-one\/foundation\/latest\/tokens\.css/);
+    const newComponentPublish = await fetch(`${base}/api/publish/org-one/new-button`, {
+      method: "POST",
+      headers,
+    });
+    assert.equal(newComponentPublish.status, 200, await newComponentPublish.clone().text());
+    assert.equal((await fetch(`${base}/static/org-one/new-button/latest/component.html`)).status, 200);
     const invalid = await fetch(`${base}/api/projects`, {
       method: "POST",
       headers,
@@ -460,14 +562,15 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
     assert.equal(duplicate.status, 409);
     const listing = await fetch(`${base}/api/projects`, { headers });
     assert.deepEqual(
-      (await listing.json()).map(({ team, repo }) => ({ team, repo })),
+      (await listing.json()).filter(({ team }) => team === "test-team").map(({ team, repo }) => ({ team, repo })),
       [
         { team: "test-team", repo: "foundation" },
         { team: "test-team", repo: "sample-project" },
       ],
     );
     const teamListing = await fetch(`${base}/api/teams`, { headers });
-    assert.deepEqual((await teamListing.json()).teams, ["broken-team", "mounted-team", "new-team", "test-team"]);
+    const listedTeams = (await teamListing.json()).teams;
+    assert.ok(listedTeams.some(({ slug }) => slug === "new-team"));
     const sourceUrl = `${base}/api/source/test-team/sample-project`;
     const sourceBefore = await (await fetch(sourceUrl, { headers })).json();
     assert.equal(sourceBefore.sourceMode, "git");
@@ -669,6 +772,7 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
     const systemListing = await fetch(`${base}/api/projects`, { headers });
     assert.deepEqual(
       (await systemListing.json())
+        .filter(({ team }) => team === "test-team")
         .map(({ repo, type }) => ({ repo, type }))
         .sort((a, b) => a.repo.localeCompare(b.repo)),
       [
@@ -915,6 +1019,12 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
       body: JSON.stringify({ kind: "minor" }),
     });
     assert.equal(malformedReleaseRoute.status, 400);
+    databaseAvailable = false;
+    const databaseUnavailable = await fetch(`${base}/api/design-systems`, { headers });
+    assert.equal(databaseUnavailable.status, 503);
+    assert.match((await databaseUnavailable.json()).error, /temporarily unavailable/);
+    assert.equal(schemaStatements.length, 2);
+    assert.ok(schemaStatements.every((sql) => sql.includes("IF NOT EXISTS")));
     t.diagnostic(
       `OIDC flow, project CRUD, validation, source push and Git history verified locally (${create.status}, ${duplicate.status}, ${invalid.status}).`,
     );
@@ -930,6 +1040,9 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
     }
     if (gitApiServer?.listening) {
       await close(gitApiServer);
+    }
+    if (databaseServer?.listening) {
+      await close(databaseServer);
     }
     await rm(temp, { recursive: true, force: true });
   }

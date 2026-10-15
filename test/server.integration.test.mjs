@@ -51,6 +51,9 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
     let expectedNonce;
     let userinfoSubject = "integration-user";
     let smartGitRequests = 0;
+    const restFileRefs = [];
+    const restFileUrls = [];
+    let restHeadRequests = 0;
     oidcServer = createServer(async (req, res) => {
       const url = new URL(req.url, `http://${req.headers.host}`);
       const json = (body) => {
@@ -122,6 +125,7 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
 
     gitApiServer = createServer(async (req, res) => {
       const path = decodeURIComponent(new URL(req.url, "http://localhost").pathname);
+      const parsedUrl = new URL(req.url, "http://localhost");
       if (!path.startsWith("/git/") && req.headers.authorization !== "Bearer local-test-only") {
         res.writeHead(401);
         res.end();
@@ -155,6 +159,73 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
         res.writeHead(200, { "content-type": "application/json" });
         res.end(JSON.stringify(names.map((name) => name.replace(/\.git$/, ""))));
         return;
+      }
+      const readRoute = path.match(/^\/api\/v1\/orgs\/([^/]+)\/repos\/([^/]+)\/(tree|file|log)$/);
+      if (readRoute) {
+        const [, org, repo, kind] = readRoute;
+        const gitDir = join(bareRoot, org, `${repo}.git`);
+        const ref = parsedUrl.searchParams.get("ref") || "main";
+        try {
+          if (kind === "tree") {
+            const names = (await run("git", ["--git-dir", gitDir, "ls-tree", "-r", "--name-only", ref], { cwd: temp }))
+              .split("\n")
+              .filter(Boolean);
+            res.writeHead(200, { "content-type": "application/json" });
+            res.end(JSON.stringify(names));
+            return;
+          }
+          if (kind === "file") {
+            const file = parsedUrl.searchParams.get("path");
+            restFileRefs.push({ ref, file, method: req.method });
+            restFileUrls.push(req.url);
+            if (req.method === "HEAD") {
+              restHeadRequests += 1;
+            }
+            const content = await new Promise((resolveContent, rejectContent) => {
+              const child = spawn("git", ["--git-dir", gitDir, "show", `${ref}:${file}`], {
+                cwd: temp,
+                stdio: ["ignore", "pipe", "pipe"],
+              });
+              const chunks = [];
+              child.stdout.on("data", (chunk) => chunks.push(chunk));
+              child.once("error", rejectContent);
+              child.once("close", (code) =>
+                code === 0 ? resolveContent(Buffer.concat(chunks)) : rejectContent(new Error("missing file")),
+              );
+            });
+            res.writeHead(200, { "content-type": "text/plain; charset=utf-8" });
+            res.end(req.method === "HEAD" ? undefined : content);
+            return;
+          }
+          const entries = (
+            await run(
+              "git",
+              [
+                "--git-dir",
+                gitDir,
+                "log",
+                "-n",
+                parsedUrl.searchParams.get("limit") || "50",
+                "--format=%H%x00%s%x00%an%x00%aI",
+                "main",
+              ],
+              { cwd: temp },
+            )
+          )
+            .split("\n")
+            .filter(Boolean);
+          const commits = entries.map((row) => {
+            const [revision, message, author, date] = row.split("\0");
+            return { revision, message, author, date };
+          });
+          res.writeHead(200, { "content-type": "application/json" });
+          res.end(JSON.stringify(commits));
+          return;
+        } catch {
+          res.writeHead(404);
+          res.end();
+          return;
+        }
       }
       const createRepo = path.match(/^\/api\/v1\/orgs\/([^/]+)\/repos\/([^/]+)$/);
       if (createRepo && req.method === "POST") {
@@ -465,7 +536,11 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
     assert.equal(systemsList.designSystems.filter((item) => item.team_id === createdTeamData.team.id).length, 2);
     const nestedTeams = await (await fetch(`${base}/api/teams`, { headers })).json();
     assert.equal(nestedTeams.teams.find((item) => item.slug === "new-team").designSystems.length, 2);
-    assert.equal(smartGitRequests, smartGitRequestsBeforeMetadataLists);
+    assert.equal(
+      smartGitRequests,
+      smartGitRequestsBeforeMetadataLists,
+      "GET /api/teams and GET /api/design-systems must not use Smart HTTP",
+    );
     const newSystemPublish = await fetch(`${base}/api/publish/org-one/foundation`, { method: "POST", headers });
     assert.equal(newSystemPublish.status, 200, await newSystemPublish.clone().text());
     const newComponent = await fetch(`${base}/api/projects`, {
@@ -578,7 +653,9 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
     const listedTeams = (await teamListing.json()).teams;
     assert.ok(listedTeams.some(({ slug }) => slug === "new-team"));
     const sourceUrl = `${base}/api/source/test-team/sample-project`;
+    const smartBeforeSource = smartGitRequests;
     const sourceBefore = await (await fetch(sourceUrl, { headers })).json();
+    assert.equal(smartGitRequests, smartBeforeSource, "GET /api/source must not use Smart HTTP");
     assert.equal(sourceBefore.sourceMode, "git");
     assert.equal((await fetch(`${base}/static/test-team/sample-project/latest/component.html`)).status, 404);
     assert.match(sourceBefore.files["component.html"], /component="ds-sample-project"/);
@@ -605,7 +682,9 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
     assert.equal(updateData.sourceMode, "git");
     const sourceAfter = await (await fetch(sourceUrl, { headers })).json();
     assert.equal(sourceAfter.files["component.html"], changed["component.html"]);
+    const smartBeforeHistory = smartGitRequests;
     const historyResponse = await fetch(`${base}/api/history/test-team/sample-project`, { headers });
+    assert.equal(smartGitRequests, smartBeforeHistory, "GET /api/history must not use Smart HTTP");
     const historyData = await historyResponse.json();
     assert.equal(historyResponse.status, 200, JSON.stringify(historyData));
     assert.ok(historyData.history.some((entry) => entry.message === "Integration source update"));
@@ -677,9 +756,11 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
     assert.ok(publishedManifest.files.includes("component.html"));
     assert.equal(publishedManifest.files.includes("spec.mjs"), false);
     assert.equal((await fetch(`${base}/static/test-team/sample-project/latest/spec.mjs`)).status, 404);
+    const smartBeforeStatic = smartGitRequests;
     const publishedPreview = await fetch(
       `${base}/static/test-team/sample-project/latest/component.html?view=component`,
     );
+    assert.equal(smartGitRequests, smartBeforeStatic, "GET /static must not use Smart HTTP");
     assert.equal(publishedPreview.status, 200);
     assert.match(publishedPreview.headers.get("content-security-policy"), /^sandbox allow-scripts;/);
     assert.match(publishedPreview.headers.get("content-security-policy"), /connect-src 'none'/);
@@ -814,6 +895,25 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
     const publishedSystemStyles = await fetch(`${base}/static/test-team/sample-system/latest/styles.css`);
     assert.equal(publishedSystemStyles.status, 200);
     assert.equal(await publishedSystemStyles.text(), tokenStyles);
+    assert.ok(
+      restFileRefs.some(({ ref, file, method }) => ref === "main" && file === "component.json" && method === "GET"),
+    );
+    assert.ok(
+      restFileRefs.some(({ ref, file, method }) => ref === "main" && file === "themes/nested.css" && method === "GET"),
+      "nested path and immutable ref should survive URL query encoding",
+    );
+    assert.ok(
+      restFileUrls.some((url) => url.includes("path=themes%2Fnested.css") && url.includes("ref=main")),
+      "file path and ref must be query parameters, not interpolated route fragments",
+    );
+    assert.ok(restFileRefs.some(({ ref, file }) => ref === "wds-artifacts" && file.startsWith("latest/")));
+    assert.ok(
+      restFileRefs.some(
+        ({ ref, file, method }) => ref === "wds-artifacts" && file.endsWith("tokens.css") && method === "HEAD",
+      ),
+      "remote token existence validation should use HEAD",
+    );
+    assert.ok(restHeadRequests > 0);
     assert.equal((await fetch(`${base}/static/test-team/sample-system/latest/component.html`)).status, 404);
     assert.equal((await fetch(`${base}/static/test-team/sample-system/latest/design-system.json`)).status, 404);
     const versionedStyles = await fetch(`${base}/static/test-team/sample-system/${releaseData.version}/styles.css`);

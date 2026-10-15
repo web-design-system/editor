@@ -2122,7 +2122,7 @@ createServer(async (request, response) => {
       }
       return reply(response, 200, await runSpecs(team, repo));
     }
-    if (request.method === "GET" && parts[0] === "static" && parts.length >= 5) {
+    if (["GET", "HEAD"].includes(request.method) && parts[0] === "static" && parts.length >= 5) {
       const [, team, repo, revision, ...fileParts] = parts;
       if (fileParts.some((part) => /%2f|%5c|%2e/i.test(part))) {
         return reply(response, 404, "Not found", "text/plain");
@@ -2150,7 +2150,7 @@ createServer(async (request, response) => {
               "sandbox allow-scripts; default-src 'none'; script-src 'self' https://cdn.li3.dev 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'",
             "referrer-policy": "no-referrer",
           });
-          return response.end(preview);
+          return response.end(request.method === "HEAD" ? undefined : preview);
         }
       }
       const asset = await readRevision(team, repo, revision, file);
@@ -2161,7 +2161,7 @@ createServer(async (request, response) => {
         "content-type": contentType(file),
         "cache-control": revision === "latest" ? "no-store" : "public, max-age=31536000, immutable",
       });
-      return response.end(asset);
+      return response.end(request.method === "HEAD" ? undefined : asset);
     }
     return serveStatic(request, response, url.pathname === "/" ? "/index.html" : url.pathname);
   } catch (error) {

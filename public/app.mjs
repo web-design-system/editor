@@ -1,3 +1,5 @@
+import "/code-editor.mjs";
+
 const landing = document.querySelector("#landing");
 const workspace = document.querySelector("#workspace");
 const teamList = document.querySelector("#team-list");
@@ -304,11 +306,23 @@ async function loadWorkbench(team, repo) {
   status.textContent = `${project.type === "component" ? "Team component" : "Design system"} · ${source.revision} · ${source.sourceMode}`;
   if (project.type === "design-system") {
     const components = projects.filter((item) => item.team === team && item.type === "component");
-    area.innerHTML = `<h1>${escapeHtml(project.name || repo)}</h1><p>New components will depend on this system’s published tokens.css at the latest revision.</p><h2>Shared tokens.css</h2><pre class="source-facts"></pre><section class="creation-form"><label>Tokens source<textarea id="tokens-editor" spellcheck="false" aria-label="Design system tokens"></textarea></label><label>Commit message<input id="tokens-message" value="Update design tokens" maxlength="200"></label><button type="button" id="save-tokens">Save token commit</button><button type="button" id="publish-tokens">Publish tokens latest</button><p id="token-status" role="status"></p></section><h2>Team components</h2><div class="component-list">${components.map((item) => `<a href="/?team=${encodeURIComponent(team)}&amp;repo=${encodeURIComponent(item.repo)}">${escapeHtml(item.name || item.repo)} · ${escapeHtml(item.repo)}</a>`).join("") || "<p>No components yet.</p>"}</div><form id="component-create" class="creation-form"><h2>Add a component</h2><label>Repository slug<input name="repo" required maxlength="100" pattern="[a-z0-9][a-z0-9._\\-]*"></label><label>Name<input name="name" maxlength="100"></label><label>Description<textarea name="description" rows="2" maxlength="500"></textarea></label><button>Create component</button></form><p role="status" id="create-status"></p>`;
+    area.innerHTML = `<h1>${escapeHtml(project.name || repo)}</h1><p>New components will depend on this system’s published tokens.css at the latest revision.</p><h2>Shared tokens.css</h2><pre class="source-facts"></pre><section class="creation-form"><label for="tokens-editor">Tokens source</label><wds-code-editor id="tokens-editor" role="group" aria-label="Design system tokens"><textarea aria-label="CSS tokens source" spellcheck="false"></textarea></wds-code-editor><label>Commit message<input id="tokens-message" value="Update design tokens" maxlength="200"></label><button type="button" id="save-tokens">Save token commit</button><button type="button" id="publish-tokens">Publish tokens latest</button><p id="token-status" role="status"></p></section><h2>Team components</h2><div class="component-list">${components.map((item) => `<a href="/?team=${encodeURIComponent(team)}&amp;repo=${encodeURIComponent(item.repo)}">${escapeHtml(item.name || item.repo)} · ${escapeHtml(item.repo)}</a>`).join("") || "<p>No components yet.</p>"}</div><form id="component-create" class="creation-form" hidden><h2>Add a component</h2><label>Component name<input name="name" required maxlength="100"></label><p>Repository slug is generated from this name.</p><button>Create component</button></form><p role="status" id="create-status"></p>`;
     area.querySelector("pre").textContent = source.files["styles.css"] || "(No shared stylesheet yet)";
     const tokensEditor = area.querySelector("#tokens-editor");
     const tokenStatus = area.querySelector("#token-status");
     tokensEditor.value = source.files["tokens.css"] || "";
+    const componentForm = area.querySelector("#component-create");
+    const artifactUrl = `/static/${encodeURIComponent(team)}/${encodeURIComponent(repo)}/latest/tokens.css`;
+    const probePublishedTokens = async () => {
+      componentForm.hidden = true;
+      try {
+        const response = await fetch(artifactUrl, { method: "HEAD", cache: "no-store" });
+        componentForm.hidden = !response.ok;
+      } catch {
+        componentForm.hidden = true;
+      }
+    };
+    probePublishedTokens();
     area.querySelector("#save-tokens").addEventListener("click", async () => {
       const response = await fetch(`/api/source/${encodeURIComponent(team)}/${encodeURIComponent(repo)}`, {
         method: "PUT",
@@ -331,19 +345,27 @@ async function loadWorkbench(team, repo) {
       tokenStatus.textContent = response.ok
         ? `Published tokens revision ${data.revision}.`
         : data.error || "Could not publish tokens.";
+      if (response.ok) {
+        await probePublishedTokens();
+      }
     });
     area.querySelector("#component-create").addEventListener("submit", async (event) => {
       event.preventDefault();
       const values = Object.fromEntries(new FormData(event.currentTarget));
+      const name = values.name.trim();
+      const slug = name
+        .toLowerCase()
+        .replace(/[^a-z0-9._-]+/g, "-")
+        .replace(/^[^a-z0-9]+|[^a-z0-9._-]+$/g, "")
+        .slice(0, 100);
       const response = await fetch("/api/projects", {
         method: "POST",
         credentials: "same-origin",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           team,
-          repo: values.repo,
-          name: values.name || values.repo,
-          description: values.description,
+          repo: slug,
+          name,
           type: "component",
           designSystem: { team, repo, revision: "latest" },
         }),
@@ -353,7 +375,7 @@ async function loadWorkbench(team, repo) {
         area.querySelector("#create-status").textContent = data.error || "Could not create component.";
         return;
       }
-      location.href = `/?team=${encodeURIComponent(team)}&repo=${encodeURIComponent(values.repo)}`;
+      location.href = `/?team=${encodeURIComponent(team)}&repo=${encodeURIComponent(slug)}`;
     });
     return;
   }

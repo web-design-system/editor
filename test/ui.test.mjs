@@ -27,6 +27,7 @@ test("landing page lists teams and design systems without depending on component
 test("workbench exposes project source and authoring workflows", async () => {
   const html = await readFile(new URL("../public/index.html", import.meta.url), "utf8");
   const app = await readFile(new URL("../public/app.mjs", import.meta.url), "utf8");
+  const editor = await readFile(new URL("../public/code-editor.mjs", import.meta.url), "utf8");
   assert.match(app, /const team = params\.get\("team"\)/);
   assert.match(app, /const repo = params\.get\("repo"\)/);
   assert.match(app, /workspace\.style\.display = "block"/);
@@ -43,4 +44,16 @@ test("workbench exposes project source and authoring workflows", async () => {
   assert.match(app, /tokens-editor/);
   assert.match(app, /save-tokens/);
   assert.match(app, /publish-tokens/);
+  assert.match(app, /method: "HEAD", cache: "no-store"/);
+  assert.match(app, /componentForm\.hidden = !response\.ok/);
+  assert.match(app, /if \(response\.ok\) \{\s+await probePublishedTokens\(\)/);
+  assert.match(app, /Component name/);
+  assert.match(app, /repo: slug,\s+name,/);
+  assert.doesNotMatch(app, /name="description"|Repository slug<input name="repo"/);
+  assert.match(editor, /class WdsCodeEditor extends HTMLElement/);
+  assert.match(editor, /<textarea/);
+  assert.match(editor, /set value\(value\)/);
+  assert.match(editor, /new Event\("input", \{ bubbles: true \}\)/);
+  assert.match(editor, /event\.shiftKey/);
+  assert.match(editor, /aria-live="polite"/);
 });

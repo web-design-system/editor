@@ -617,6 +617,10 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
     const foundationPublish = await fetch(`${base}/api/publish/test-team/foundation`, { method: "POST", headers });
     assert.equal(foundationPublish.status, 200, await foundationPublish.text());
     assert.equal((await fetch(`${base}/static/test-team/foundation/latest/tokens.css`)).status, 200);
+    const tokenHead = await fetch(`${base}/static/test-team/foundation/latest/tokens.css`, { method: "HEAD" });
+    assert.equal(tokenHead.status, 200);
+    assert.equal(await tokenHead.text(), "");
+    assert.equal(tokenHead.headers.get("cache-control"), "no-store");
     const create = await fetch(`${base}/api/projects`, {
       method: "POST",
       headers,

@@ -3,9 +3,11 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#f7f8fb" />
+    <meta name="theme-color" content="#18181b" />
     <title>WDS · Design systems</title>
     <link rel="stylesheet" href="/app.css" />
+    <link rel="stylesheet" href="/studio.css" />
+    <link rel="stylesheet" href="/workspace.css" />
     <script type="importmap">
       { "imports": { "@li3/": "https://cdn.li3.dev/@li3/" } }
     </script>
@@ -23,16 +25,50 @@
           >
         </div>
       </header>
-      <main class="main">
-        <p class="eyebrow">Design systems</p>
-        <h1>Your workspace</h1>
-        <p class="intro">
-          Teams own design systems. Each design system is a Git organization with a foundation repository. Choose a
-          system to open it, or create a team and design system below.
-        </p>
+      <div class="dashboard-layout">
+        <aside class="workspace-sidebar" aria-label="Workspace navigation">
+          <a class="workspace-home" href="/">▦ <span>Workspace overview</span></a>
+          <div class="section-heading">
+            <h2 id="teams-title">Teams</h2>
+            <span class="section-note" id="team-summary"></span>
+          </div>
+          <div class="team-list" id="team-list"><span class="loading">Loading teams…</span></div>
+          <button type="button" class="sidebar-create" data-create="team" hidden>＋ New team</button>
+          <div class="sidebar-guide">
+            <span>YOUR WORKSPACE</span>
+            <p>Team <span>→</span> Design systems</p>
+            <p>Design system <span>→</span> Foundation + components</p>
+            <small>One Git organization per system. One repository per Foundation or component.</small>
+          </div>
+        </aside>
+        <main class="main dashboard-main">
+          <nav class="breadcrumbs" id="dashboard-breadcrumbs" aria-label="Breadcrumb"><span>Workspace</span></nav>
+          <div class="dashboard-heading">
+            <div>
+              <p class="eyebrow" id="dashboard-kicker">Your workspace</p>
+              <h1 id="dashboard-title">Design systems</h1>
+              <p class="intro" id="dashboard-description">
+                Teams own design systems. Build a shared foundation, then bring your components to life.
+              </p>
+            </div>
+            <button type="button" class="primary-button" data-create="system" hidden>＋ New design system</button>
+          </div>
+          <p class="notice" id="notice" role="status" aria-live="polite" hidden></p>
+          <section class="section" aria-labelledby="systems-title">
+            <div class="section-heading">
+              <h2 id="systems-title">All design systems</h2>
+              <span class="section-note" id="system-summary"></span>
+            </div>
+            <div class="system-grid" id="system-grid"><span class="loading">Loading design systems…</span></div>
+          </section>
+        </main>
+      </div>
+      <dialog id="creation-dialog" aria-label="Create workspace resource">
+        <button type="button" class="dialog-close" aria-label="Close dialog">×</button>
         <section class="creation" id="creation-controls" aria-label="Create team or design system" hidden>
           <form id="team-form" class="creation-form">
             <h2>Create a team</h2>
+            <p class="form-description">A home for your design systems. Each team can own multiple systems.</p>
             <label for="team-slug">Team slug</label>
             <input
               id="team-slug"
@@ -46,9 +82,14 @@
           </form>
           <form id="system-form" class="creation-form">
             <h2>Create a design system</h2>
+            <p class="form-description">
+              Creates a Git organization and its Foundation repository for shared design tokens.
+            </p>
             <label for="system-team">Team</label>
             <select id="system-team" name="team" required></select>
-            <a href="#team-form" id="create-team-link">Create a team</a>
+            <button type="button" class="text-button" id="create-team-link" data-create="team">
+              Create a team first
+            </button>
             <label for="system-repo">Design-system slug</label>
             <input
               id="system-repo"
@@ -67,22 +108,8 @@
             <button type="submit">Create design system</button>
           </form>
         </section>
-        <section class="section" aria-labelledby="teams-title">
-          <div class="section-heading">
-            <h2 id="teams-title">Teams</h2>
-            <span class="section-note" id="team-summary"></span>
-          </div>
-          <div class="team-list" id="team-list"><span class="loading">Loading teams…</span></div>
-        </section>
-        <section class="section" aria-labelledby="systems-title">
-          <div class="section-heading">
-            <h2 id="systems-title">Design systems</h2>
-            <span class="section-note" id="system-summary"></span>
-          </div>
-          <div class="system-grid" id="system-grid"><span class="loading">Loading design systems…</span></div>
-        </section>
-        <p class="notice" id="notice" role="status" aria-live="polite" hidden></p>
-      </main>
+        <p id="creation-status" role="status" aria-live="polite"></p>
+      </dialog>
     </div>
     <div class="workspace" id="workspace">
       <header class="header">

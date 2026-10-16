@@ -1,8 +1,14 @@
 import { createStudio } from "./studio.mjs";
-const studioStyles = document.createElement("link");
-studioStyles.rel = "stylesheet";
-studioStyles.href = "/studio.css";
-document.head.append(studioStyles);
+import { registerEditorFallback } from "./editor-fallback.mjs";
+import {
+  initializeNavigation,
+  dashboardHeading,
+  renderSystemOverview,
+  workbenchNavigation,
+  enhanceFoundation,
+  systemUrl,
+} from "./navigation.mjs";
+initializeNavigation();
 
 const landing = document.querySelector("#landing");
 const workspace = document.querySelector("#workspace");
@@ -15,9 +21,8 @@ async function loadCodeEditor() {
       const { load } = await import("@li3/web");
       await load("https://sodium.static.apphor.de/code-editor.html");
       await customElements.whenDefined("code-editor");
-    })().catch((error) => {
-      codeEditorLoad = null;
-      throw error;
+    })().catch(() => {
+      registerEditorFallback();
     });
   }
   await codeEditorLoad;
@@ -28,7 +33,7 @@ const arrow =
   '<svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3.5 8h9m-4-4 4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 let systems = [];
 let teams = [];
-let selectedTeam = "all";
+let selectedTeam = new URLSearchParams(location.search).get("teamSlug") || "all";
 let authenticatedUser = false;
 function escapeHtml(value) {
   return String(value ?? "").replace(
@@ -69,6 +74,7 @@ async function loadUser() {
   return data.authenticated === true;
 }
 function setNotice(message, signIn = false) {
+  document.querySelector("#creation-status").textContent = message || "";
   const notice = document.querySelector("#notice");
   notice.hidden = !message;
   notice.innerHTML = message
@@ -110,13 +116,29 @@ function renderTeams() {
     : '<span class="section-note">Teams will appear here when you have access to a design system.</span>';
   for (const button of teamList.querySelectorAll("[data-team]")) {
     button.addEventListener("click", () => {
+      if (new URLSearchParams(location.search).has("system")) {
+        location.href = button.dataset.team === "all" ? "/" : `/?teamSlug=${encodeURIComponent(button.dataset.team)}`;
+        return;
+      }
       selectedTeam = button.dataset.team;
+      history.replaceState(null, "", selectedTeam === "all" ? "/" : `/?teamSlug=${encodeURIComponent(selectedTeam)}`);
       renderTeams();
       renderSystems();
     });
   }
 }
 function renderSystems() {
+  const org = new URLSearchParams(location.search).get("system");
+  if (org) {
+    const system = systems.find((item) => (item.org || item.team) === org);
+    if (system) {
+      renderSystemOverview(system, systemGrid);
+    } else {
+      systemGrid.innerHTML = '<div class="empty">Design system not found. <a href="/">Return to workspace →</a></div>';
+    }
+    return;
+  }
+  dashboardHeading(selectedTeam);
   const visible = selectedTeam === "all" ? systems : systems.filter((system) => system.team === selectedTeam);
   document.querySelector("#system-summary").textContent =
     `${visible.length} ${visible.length === 1 ? "design system" : "design systems"}`;
@@ -127,7 +149,7 @@ function renderSystems() {
   systemGrid.innerHTML = visible
     .map(
       (system) =>
-        `<a class="system-card" href="/?team=${encodeURIComponent(system.org || system.team)}&amp;repo=${encodeURIComponent(system.repo)}" aria-label="Open ${escapeHtml(system.name || system.repo)}"><div class="card-top"><span class="system-icon">${icon}</span><span class="team-tag">${escapeHtml(system.team)}</span></div><h3>${escapeHtml(system.name || system.repo)}</h3><p>${escapeHtml(system.description || "Shared design tokens and component styles.")}</p><span class="card-footer"><span>${escapeHtml(system.repo)}</span><span class="open-label">Open ${arrow}</span></span></a>`,
+        `<a class="system-card" href="${systemUrl(system.org || system.team)}" aria-label="Open ${escapeHtml(system.name || system.repo)}"><div class="card-top"><span class="system-icon">${icon}</span><span class="team-tag">${escapeHtml(system.team)}</span></div><h3>${escapeHtml(system.name || system.repo)}</h3><p>${escapeHtml(system.description || "Foundation and component repositories.")}</p><span class="card-footer"><span>${escapeHtml(system.org || system.team)}</span><span class="open-label">Open ${arrow}</span></span></a>`,
     )
     .join("");
 }
@@ -148,6 +170,9 @@ async function loadWorkspace() {
     return;
   }
   document.querySelector("#creation-controls").hidden = false;
+  document.querySelectorAll("[data-create]").forEach((button) => {
+    button.hidden = false;
+  });
   try {
     const [teamsResponse, systemsResponse] = await Promise.all([
       fetch("/api/teams", { credentials: "same-origin" }),
@@ -174,6 +199,10 @@ async function loadWorkspace() {
       name: system.name,
       type: "design-system",
     }));
+    const currentSystem = systems.find((item) => item.org === new URLSearchParams(location.search).get("system"));
+    if (currentSystem) {
+      selectedTeam = currentSystem.team;
+    }
     renderTeams();
     renderSystems();
   } catch {
@@ -228,9 +257,13 @@ teamForm.addEventListener("submit", async (event) => {
     }
     await refreshWorkspace();
     selectedTeam = data.team.slug;
+    history.replaceState(null, "", `/?teamSlug=${encodeURIComponent(selectedTeam)}`);
+    systemGrid.classList.remove("system-overview");
+    document.querySelector('.dashboard-heading [data-create="system"]').hidden = false;
     renderTeams();
     renderSystems();
     teamForm.reset();
+    document.querySelector("#creation-dialog").close();
     setNotice(`Team ${data.team.slug} created and selected.`);
   } catch (error) {
     setNotice(error.message || "Could not create team.");
@@ -272,7 +305,7 @@ systemForm.addEventListener("submit", async (event) => {
     renderSystems();
     systemForm.reset();
     setNotice("Design system created.");
-    location.href = `/?team=${encodeURIComponent(data.designSystem.team)}&repo=foundation`;
+    location.href = systemUrl(data.designSystem.team);
   } catch (error) {
     setNotice(error.message || "Could not create design system.");
   } finally {
@@ -338,15 +371,21 @@ async function loadWorkbench(team, repo) {
     tokensEditor.value = source.files["tokens.css"] || "";
     tokensEditor.language = "css";
     tokensEditor.status = "tokens.css";
+    const foundationDraft = enhanceFoundation(area, source, () => {
+      area.querySelector("#foundation-state").textContent = "Unsaved changes";
+    });
+    workbenchNavigation(area, project, projects, team, repo);
     area.querySelector(".project-drawer").open = !window.matchMedia("(max-width: 760px)").matches;
     const componentForm = area.querySelector("#component-create");
     const artifactUrl = `/static/${encodeURIComponent(team)}/${encodeURIComponent(repo)}/latest/tokens.css`;
     const probePublishedTokens = async () => {
       componentForm.hidden = true;
+      area.querySelector("#foundation-new-component").disabled = true;
       const publicationState = area.querySelector("#token-publication-state");
       try {
         const response = await fetch(artifactUrl, { method: "HEAD", cache: "no-store" });
         componentForm.hidden = !response.ok;
+        area.querySelector("#foundation-new-component").disabled = !response.ok;
         publicationState.textContent = response.ok
           ? "Published tokens.css is available; component creation is unlocked."
           : "tokens.css is not published yet; publish it to unlock component creation.";
@@ -362,7 +401,7 @@ async function loadWorkbench(team, repo) {
         credentials: "same-origin",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          files: { "tokens.css": tokensEditor.value },
+          files: foundationDraft(),
           baseRef,
           message: area.querySelector("#tokens-message").value.trim() || "Update design tokens",
         }),
@@ -602,6 +641,7 @@ async function loadWorkbench(team, repo) {
     area.querySelector("#draft-state").textContent = "Unsaved changes";
   });
   refreshPreview = studio.refresh;
+  workbenchNavigation(area, project, projects, team, repo);
   updateEditor();
   refreshPreview();
   loadHistory();

@@ -28,7 +28,7 @@ WDS aims to provide a team-shared workflow for creating and maintaining design s
 
 Create a WDS team, create a design system for it, and provision the design system's Git organization and `foundation` repository. Edit `tokens.css`, commit the source, then publish it. Commit does not update public assets; publishing updates the mutable `latest` token artifact. Component creation remains locked until the published token artifact is available.
 
-The current foundation studio edits `tokens.css`. It displays `styles.css` as context, but does not yet provide a complete multi-file foundation editor.
+The Foundation studio edits all returned source files, including tokens, shared styles, and metadata, retaining drafts across file switches. A design-system overview separates the Foundation repository from component repositories. Team-scoped navigation and breadcrumbs reflect the metadata-team → Git-organization → repository hierarchy.
 
 ### Component authoring
 
@@ -102,7 +102,7 @@ These describe current product limitations, not promises or committed delivery d
 - The Design surface is intentionally basic: one editable template target and a fixed set of utility controls, rather than arbitrary visual layout editing.
 - The draft preview does not execute setup modules, event handlers, or stories. It does not reproduce the full published Li3 runtime.
 - There is no breakpoint-marker workflow, full story gallery, component dependency browser/graph, or integrated visual regression suite.
-- The foundation studio edits tokens only; complete editing for all foundation files is missing.
+- Foundation file creation, renaming, and deletion are not exposed in the studio; existing source files are editable.
 - Some supported repository files can be selected in Code mode, but the UI does not provide a full file creation/rename/delete manager.
 - Versioned release creation is available in the backend but missing from the author-facing studio controls.
 - Conflict detection exists, but merge/rebase support and multi-author live collaboration do not.

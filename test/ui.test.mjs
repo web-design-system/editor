@@ -14,7 +14,7 @@ test("landing page lists teams and design systems without depending on component
   assert.match(html, /Git organization slug/);
   assert.match(app, /fetch\("\/api\/teams"/);
   assert.match(app, /fetch\("\/api\/design-systems"/);
-  assert.match(app, /\/\?team=\$\{encodeURIComponent\(system\.org \|\| system\.team\)\}&amp;repo=/);
+  assert.match(app, /systemUrl\(system\.org \|\| system\.team\)/);
   assert.match(app, /\/api\/oidc\/me/);
   assert.match(app, /\/api\/oidc\/login/);
   assert.match(app, /fetch\("\/api\/teams", \{/);

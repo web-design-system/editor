@@ -303,6 +303,7 @@ async function loadWorkbench(team, repo) {
     return;
   }
   const source = await sourceResponse.json();
+  let baseRef = source.baseRef;
   status.textContent = `${project.type === "component" ? "Team component" : "Design system"} · ${source.revision} · ${source.sourceMode}`;
   if (project.type === "design-system") {
     const components = projects.filter((item) => item.team === team && item.type === "component");
@@ -336,12 +337,14 @@ async function loadWorkbench(team, repo) {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           files: { "tokens.css": tokensEditor.value },
+          baseRef,
           message: area.querySelector("#tokens-message").value.trim() || "Update design tokens",
         }),
       });
       const data = await responseData(response);
       tokenStatus.textContent = response.ok ? `Committed ${data.revision}.` : data.error || "Could not save tokens.";
       if (response.ok) {
+        baseRef = data.baseRef || baseRef;
         area.querySelector("#foundation-state").textContent = `Committed · ${data.revision}`;
       }
     });
@@ -545,6 +548,7 @@ async function loadWorkbench(team, repo) {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         files,
+        baseRef,
         message: area.querySelector("#commit-message").value.trim() || "Update component source",
       }),
     });
@@ -556,6 +560,7 @@ async function loadWorkbench(team, repo) {
       area.querySelector("#draft-state").textContent = `Committed · ${data.revision}`;
     }
     if (response.ok) {
+      baseRef = data.baseRef || baseRef;
       loadHistory();
     }
   });

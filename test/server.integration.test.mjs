@@ -32,6 +32,8 @@ const run = (cmd, args, options = {}) =>
   });
 
 test("OIDC-authenticated project flow persists changes to isolated Git API", async (t) => {
+  const serverSource = await readFile(join(projectRoot, "server.mjs"), "utf8");
+  assert.doesNotMatch(serverSource, /remoteCache|remoteRepo\(|GIT_ASKPASS|git\s+(?:clone|fetch|push)\b/i);
   const temp = await mkdtemp(join(tmpdir(), "wds-next-integration-"));
   let oidcServer;
   let gitApiServer;
@@ -40,7 +42,10 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
   try {
     const bareRoot = join(temp, "git");
     const mountedRoot = join(temp, "mounted");
-    const imageBytes = Buffer.from([0, 1, 2, 3, 255, 128]);
+    const atomicCommits = [];
+    const tagWrites = [];
+    let forceNextAtomicConflict = false;
+    let forceNextTagFailure = false;
     await mkdir(bareRoot);
     await mkdir(mountedRoot);
     await mkdir(join(bareRoot, "broken-team"));
@@ -160,6 +165,164 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
         res.end(JSON.stringify(names.map((name) => name.replace(/\.git$/, ""))));
         return;
       }
+      const repoRoute = path.match(/^\/api\/v1\/orgs\/([^/]+)\/repos\/([^/]+)(?:\/(.*))?$/);
+      if (repoRoute) {
+        const [, org, repo, operation = ""] = repoRoute;
+        const gitDir = join(bareRoot, org, `${repo}.git`);
+        const readJson = async () => {
+          let raw = "";
+          for await (const chunk of req) {
+            raw += chunk;
+          }
+          return JSON.parse(raw || "{}");
+        };
+        const gitDirExists = await readdir(gitDir)
+          .then(() => true)
+          .catch(() => false);
+        if (operation === "branches" && req.method === "GET") {
+          const refs = gitDirExists
+            ? (
+                await run(
+                  "git",
+                  ["--git-dir", gitDir, "for-each-ref", "--format=%(refname:short) %(objectname)", "refs/heads"],
+                  { cwd: temp },
+                )
+              )
+                .split("\n")
+                .filter(Boolean)
+            : [];
+          res.writeHead(200, { "content-type": "application/json" });
+          res.end(
+            JSON.stringify(
+              refs.map((entry) => {
+                const [name, sha] = entry.split(" ");
+                return { name, sha };
+              }),
+            ),
+          );
+          return;
+        }
+        if (operation === "tags" && req.method === "GET") {
+          const tags = gitDirExists
+            ? (await run("git", ["--git-dir", gitDir, "tag", "--list"], { cwd: temp })).split("\n").filter(Boolean)
+            : [];
+          res.writeHead(200, { "content-type": "application/json" });
+          res.end(JSON.stringify(tags));
+          return;
+        }
+        if (operation === "tags" && req.method === "POST") {
+          const { name, target } = await readJson();
+          if (forceNextTagFailure) {
+            forceNextTagFailure = false;
+            res.writeHead(500);
+            res.end();
+            return;
+          }
+          try {
+            await run(
+              "git",
+              [
+                "-c",
+                "user.name=GitMini",
+                "-c",
+                "user.email=gitmini@example.test",
+                "--git-dir",
+                gitDir,
+                "tag",
+                "-a",
+                name,
+                target,
+                "-m",
+                name,
+              ],
+              { cwd: temp },
+            );
+            tagWrites.push({ name, target });
+            res.writeHead(200, { "content-type": "application/json" });
+            res.end(JSON.stringify({ name, target }));
+          } catch {
+            res.writeHead(409);
+            res.end();
+          }
+          return;
+        }
+        if (operation === "commits" && req.method === "POST") {
+          const input = await readJson();
+          atomicCommits.push({ org, repo, ...input });
+          if (forceNextAtomicConflict) {
+            forceNextAtomicConflict = false;
+            res.writeHead(409);
+            res.end();
+            return;
+          }
+          const branch = input.targetBranch || "main";
+          const current = gitDirExists
+            ? await run("git", ["--git-dir", gitDir, "rev-parse", `refs/heads/${branch}`], { cwd: temp }).catch(
+                () => "",
+              )
+            : "";
+          if ((current || null) !== input.expectedRef) {
+            res.writeHead(409);
+            res.end();
+            return;
+          }
+          const checkout = join(temp, `atomic-${org}-${repo}-${Math.random().toString(16).slice(2)}`);
+          try {
+            await run("git", ["clone", "--quiet", gitDir, checkout], { cwd: temp });
+            const branchExists = await run(
+              "git",
+              ["-C", checkout, "show-ref", "--verify", `refs/remotes/origin/${branch}`],
+              { cwd: temp },
+            )
+              .then(() => true)
+              .catch(() => false);
+            if (branchExists) {
+              await run("git", ["-C", checkout, "checkout", "--quiet", "-B", branch, `origin/${branch}`], {
+                cwd: temp,
+              });
+            } else {
+              await run("git", ["-C", checkout, "checkout", "--quiet", "--orphan", branch], { cwd: temp });
+              await run("git", ["-C", checkout, "rm", "-rf", "--ignore-unmatch", "."], { cwd: temp }).catch(() => "");
+            }
+            for (const change of input.changes) {
+              const target = join(checkout, change.path);
+              if (change.delete) {
+                await rm(target, { force: true });
+              } else {
+                await mkdir(join(target, ".."), { recursive: true });
+                await writeFile(target, Buffer.from(change.content, "base64"));
+              }
+            }
+            await run("git", ["-C", checkout, "add", "-A"]);
+            await run(
+              "git",
+              [
+                "-C",
+                checkout,
+                "-c",
+                "user.name=GitMini",
+                "-c",
+                "user.email=gitmini@example.test",
+                "commit",
+                "--quiet",
+                "-m",
+                input.message,
+              ],
+              { cwd: temp },
+            );
+            const sha = await run("git", ["-C", checkout, "rev-parse", "HEAD"], { cwd: temp });
+            await run("git", ["-C", checkout, "push", "--quiet", "origin", branch], { cwd: temp });
+            res.writeHead(201, { "content-type": "application/json" });
+            res.end(JSON.stringify({ commit: { sha }, ref: sha }));
+          } catch (error) {
+            res.writeHead(400, { "content-type": "application/json" });
+            res.end(JSON.stringify({ error: error.message }));
+          } finally {
+            await rm(checkout, { recursive: true, force: true });
+          }
+          return;
+        }
+      }
       const readRoute = path.match(/^\/api\/v1\/orgs\/([^/]+)\/repos\/([^/]+)\/(tree|file|log)$/);
       if (readRoute) {
         const [, org, repo, kind] = readRoute;
@@ -232,19 +395,7 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
         const repoPath = join(bareRoot, createRepo[1], `${createRepo[2]}.git`);
         try {
           await mkdir(join(bareRoot, createRepo[1]), { recursive: true });
-          const seedPath = join(temp, `initial-repository-${createRepo[2]}`);
-          await run("git", ["init", "--bare", "--initial-branch=master", repoPath]);
-          await run("git", ["init", "--initial-branch=master", seedPath]);
-          await run("git", ["-C", seedPath, "config", "user.name", "Git API"]);
-          await run("git", ["-C", seedPath, "config", "user.email", "git-api@example.test"]);
-          await writeFile(join(seedPath, "README.md"), "Git API repository initialization\n");
-          await writeFile(join(seedPath, ".env"), "PRIVATE=not-public\n");
-          await mkdir(join(seedPath, "images"), { recursive: true });
-          await writeFile(join(seedPath, "images", "seed.png"), imageBytes);
-          await run("git", ["-C", seedPath, "add", "."]);
-          await run("git", ["-C", seedPath, "commit", "-m", "Initialize repository"]);
-          await run("git", ["-C", seedPath, "remote", "add", "origin", repoPath]);
-          await run("git", ["-C", seedPath, "push", "origin", "master"]);
+          await run("git", ["init", "--bare", "--initial-branch=main", repoPath]);
           res.writeHead(201, { "content-type": "application/json" });
         } catch {
           res.writeHead(409);
@@ -377,6 +528,7 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
         DATABASE_URL: `http://127.0.0.1:${databasePort}/api`,
         DB_AUTH_TOKEN: "local-db-test-token",
         WDS_ALLOWED_SUBJECTS: "integration-user",
+        WDS_ENABLE_UNSANDBOXED_SPECS: "true",
         SOURCE_TEAM: "mounted-team",
         SOURCE_TEAM_PATH: mountedRoot,
       },
@@ -661,6 +813,12 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
     const sourceBefore = await (await fetch(sourceUrl, { headers })).json();
     assert.equal(smartGitRequests, smartBeforeSource, "GET /api/source must not use Smart HTTP");
     assert.equal(sourceBefore.sourceMode, "git");
+    const smartBeforeSpecs = smartGitRequests;
+    const specs = await fetch(`${base}/api/test/test-team/sample-project`, { method: "POST", headers });
+    const specsData = await specs.json();
+    assert.equal(specs.status, 200, JSON.stringify(specsData));
+    assert.equal(specsData.code, 0, specsData.output);
+    assert.equal(smartGitRequests, smartBeforeSpecs, "remote spec execution must use GitMini REST, not Smart HTTP");
     assert.equal((await fetch(`${base}/static/test-team/sample-project/latest/component.html`)).status, 404);
     assert.match(sourceBefore.files["component.html"], /component="ds-sample-project"/);
     assert.match(sourceBefore.files["component.html"], /data-wds-editable class="p-4 bg-indigo-600 text-white"/);
@@ -679,25 +837,43 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
     const update = await fetch(sourceUrl, {
       method: "PUT",
       headers,
-      body: JSON.stringify({ files: changed, message: "Integration source update" }),
+      body: JSON.stringify({ files: changed, baseRef: sourceBefore.baseRef, message: "Integration source update" }),
     });
     const updateData = await update.json();
     assert.equal(update.status, 200, JSON.stringify(updateData));
     assert.equal(updateData.sourceMode, "git");
     const sourceAfter = await (await fetch(sourceUrl, { headers })).json();
     assert.equal(sourceAfter.files["component.html"], changed["component.html"]);
+    const missingBaseRef = await fetch(sourceUrl, {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({ files: changed }),
+    });
+    assert.equal(missingBaseRef.status, 400);
+    forceNextAtomicConflict = true;
+    const racedUpdate = await fetch(sourceUrl, {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({ files: changed, baseRef: sourceAfter.baseRef, message: "Simulated CAS race" }),
+    });
+    assert.equal(racedUpdate.status, 409);
+    assert.equal(
+      (await (await fetch(sourceUrl, { headers })).json()).files["component.html"],
+      changed["component.html"],
+    );
     const smartBeforeHistory = smartGitRequests;
     const historyResponse = await fetch(`${base}/api/history/test-team/sample-project`, { headers });
     assert.equal(smartGitRequests, smartBeforeHistory, "GET /api/history must not use Smart HTTP");
     const historyData = await historyResponse.json();
     assert.equal(historyResponse.status, 200, JSON.stringify(historyData));
     assert.ok(historyData.history.some((entry) => entry.message === "Integration source update"));
-    assert.match(historyData.history[0].revision, /^[a-f0-9]{40}$/);
+    assert.match(historyData.history[0].revision, /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/);
     const blockedGitImport = await fetch(sourceUrl, {
       method: "PUT",
       headers,
       body: JSON.stringify({
         files: { ...sourceAfter.files, "styles.css": '@import "../outside.css"' },
+        baseRef: sourceAfter.baseRef,
         message: "Reject cross-repository stylesheet import",
       }),
     });
@@ -709,6 +885,7 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
       headers,
       body: JSON.stringify({
         files: { ...sourceAfter.files, "styles.css": '@import url("https://example.test/tokens.css");' },
+        baseRef: sourceAfter.baseRef,
         message: "Reject remote stylesheet",
       }),
     });
@@ -721,14 +898,16 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
           ...sourceAfter.files,
           "styles.css": '@import url("/static/test-team/other-system/latest/tokens.css");\n@import "tailwindcss";\n',
         },
+        baseRef: sourceAfter.baseRef,
         message: "Use mismatched tokens",
       }),
     });
     assert.equal(mismatchedTokens.status, 200);
+    const afterMismatchedTokens = await (await fetch(sourceUrl, { headers })).json();
     const mismatchedPublish = await fetch(`${base}/api/publish/test-team/sample-project`, { method: "POST", headers });
     assert.equal(mismatchedPublish.status, 400);
     const nestedFiles = {
-      ...sourceAfter.files,
+      ...afterMismatchedTokens.files,
       "styles.css":
         '@import url("/static/test-team/foundation/latest/tokens.css");\n@import "tailwindcss";\n.dynamic { color: teal; }\n',
       "themes/nested.css": ".dynamic { color: teal; }\n",
@@ -738,7 +917,11 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
     const nestedUpdate = await fetch(sourceUrl, {
       method: "PUT",
       headers,
-      body: JSON.stringify({ files: nestedFiles, message: "Integration source update" }),
+      body: JSON.stringify({
+        files: nestedFiles,
+        baseRef: afterMismatchedTokens.baseRef,
+        message: "Integration source update",
+      }),
     });
     assert.equal(nestedUpdate.status, 200);
     const nestedSource = await (await fetch(sourceUrl, { headers })).json();
@@ -752,7 +935,7 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
     });
     const publishData = await publish.json();
     assert.equal(publish.status, 200, JSON.stringify(publishData));
-    assert.match(publishData.revision, /^[a-f0-9]{40}$/);
+    assert.match(publishData.revision, /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/);
     const publishedManifest = await (
       await fetch(`${base}/static/test-team/sample-project/latest/manifest.json`)
     ).json();
@@ -779,9 +962,24 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
     const newerCommit = await fetch(sourceUrl, {
       method: "PUT",
       headers,
-      body: JSON.stringify({ files: newerSource, message: "Unpublished source change" }),
+      body: JSON.stringify({ files: newerSource, baseRef: nestedSource.baseRef, message: "Unpublished source change" }),
     });
     assert.equal(newerCommit.status, 200);
+    const artifactRepoPath = join(bareRoot, "test-team", "sample-project.git");
+    const artifactRef = await run("git", ["--git-dir", artifactRepoPath, "rev-parse", "refs/heads/wds-artifacts"], {
+      cwd: temp,
+    });
+    const addObsoleteArtifact = await fetch(`${gitApiUrl}/api/v1/orgs/test-team/repos/sample-project/commits`, {
+      method: "POST",
+      headers: { authorization: "Bearer local-test-only", "content-type": "application/json" },
+      body: JSON.stringify({
+        expectedRef: artifactRef,
+        targetBranch: "wds-artifacts",
+        message: "Add stale artifact for cleanup coverage",
+        changes: [{ path: "latest/obsolete.css", content: Buffer.from(".obsolete {}\n").toString("base64") }],
+      }),
+    });
+    assert.equal(addObsoleteArtifact.status, 201, await addObsoleteArtifact.text());
     assert.equal(
       await (await fetch(`${base}/static/test-team/sample-project/latest/component.html`)).text(),
       changed["component.html"],
@@ -792,6 +990,7 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
       body: "{}",
     });
     assert.equal(republish.status, 200);
+    assert.equal((await fetch(`${base}/static/test-team/sample-project/latest/obsolete.css`)).status, 404);
     assert.equal(
       await (await fetch(`${base}/static/test-team/sample-project/latest/component.html`)).text(),
       newerSource["component.html"],
@@ -804,17 +1003,12 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
     assert.equal(svg.headers.get("content-type"), "image/svg+xml");
     assert.match(await svg.text(), /<title>Fresh<\/title>/);
     const png = await fetch(`${base}/static/test-team/sample-project/latest/images/seed.png`);
-    assert.equal(png.headers.get("content-type"), "image/png");
-    assert.deepEqual(Buffer.from(await png.arrayBuffer()), imageBytes);
+    assert.equal(png.status, 404);
     assert.equal((await fetch(`${base}/static/test-team/sample-project/latest/.secret`)).status, 404);
     assert.equal((await fetch(`${base}/static/test-team/sample-project/latest/.env`)).status, 404);
     assert.equal((await fetch(`${base}/static/test-team/sample-project/latest/%2e%2e/README.md`)).status, 404);
     assert.equal((await fetch(`${base}/static/test-team/sample-project/latest/images%2fseed.png`)).status, 404);
     const remoteRepoPath = join(bareRoot, "test-team", "sample-project.git");
-    assert.equal(
-      await run("git", ["--git-dir", remoteRepoPath, "log", "-1", "--format=%an <%ae>", "main"], { cwd: temp }),
-      "Design System <system@wds.local>",
-    );
     assert.match(
       await run("git", ["--git-dir", remoteRepoPath, "log", "-1", "--format=%s", "main"], { cwd: temp }),
       /Unpublished source change/,
@@ -822,28 +1016,6 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
     assert.equal(
       await run("git", ["--git-dir", remoteRepoPath, "show", "main:component.html"], { cwd: temp }),
       newerSource["component.html"].trim(),
-    );
-    assert.equal(
-      await run("git", ["--git-dir", remoteRepoPath, "show", "main:README.md"], { cwd: temp }),
-      "Git API repository initialization",
-    );
-    assert.equal(
-      await run("git", ["--git-dir", remoteRepoPath, "log", "--format=%an <%ae>", "main"], { cwd: temp }),
-      [
-        "Design System <system@wds.local>",
-        "Design System <system@wds.local>",
-        "Design System <system@wds.local>",
-        "Design System <system@wds.local>",
-        "Design System <system@wds.local>",
-        "Git API <git-api@example.test>",
-      ].join("\n"),
-    );
-    await run(
-      "git",
-      ["--git-dir", remoteRepoPath, "merge-base", "--is-ancestor", "refs/heads/master", "refs/heads/main"],
-      {
-        cwd: temp,
-      },
     );
     const systemCreate = await fetch(`${base}/api/projects`, {
       method: "POST",
@@ -885,10 +1057,18 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
       headers,
       body: JSON.stringify({
         files: { ...systemSource.files, "styles.css": tokenStyles },
+        baseRef: systemSource.baseRef,
         message: "Define shared tokens",
       }),
     });
     assert.equal(systemUpdate.status, 200);
+    forceNextTagFailure = true;
+    const failedSystemRelease = await fetch(`${base}/api/release/test-team/sample-system`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ kind: "minor" }),
+    });
+    assert.equal(failedSystemRelease.status, 502);
     const systemRelease = await fetch(`${base}/api/release/test-team/sample-system`, {
       method: "POST",
       headers,
@@ -899,15 +1079,21 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
     const publishedSystemStyles = await fetch(`${base}/static/test-team/sample-system/latest/styles.css`);
     assert.equal(publishedSystemStyles.status, 200);
     assert.equal(await publishedSystemStyles.text(), tokenStyles);
+    assert.equal(tagWrites.length, 1);
+    assert.deepEqual(tagWrites[0], { name: releaseData.version, target: releaseData.revision });
     assert.ok(
-      restFileRefs.some(({ ref, file, method }) => ref === "main" && file === "component.json" && method === "GET"),
+      restFileRefs.some(
+        ({ ref, file, method }) => /^[a-f0-9]{40,64}$/i.test(ref) && file === "component.json" && method === "GET",
+      ),
     );
     assert.ok(
-      restFileRefs.some(({ ref, file, method }) => ref === "main" && file === "themes/nested.css" && method === "GET"),
+      restFileRefs.some(
+        ({ ref, file, method }) => /^[a-f0-9]{40,64}$/i.test(ref) && file === "themes/nested.css" && method === "GET",
+      ),
       "nested path and immutable ref should survive URL query encoding",
     );
     assert.ok(
-      restFileUrls.some((url) => url.includes("path=themes%2Fnested.css") && url.includes("ref=main")),
+      restFileUrls.some((url) => url.includes("path=themes%2Fnested.css") && /ref=[a-f0-9]{40,64}/i.test(url)),
       "file path and ref must be query parameters, not interpolated route fragments",
     );
     assert.ok(restFileRefs.some(({ ref, file }) => ref === "wds-artifacts" && file.startsWith("latest/")));
@@ -923,6 +1109,31 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
     const versionedStyles = await fetch(`${base}/static/test-team/sample-system/${releaseData.version}/styles.css`);
     assert.equal(versionedStyles.status, 200);
     assert.equal(await versionedStyles.text(), tokenStyles);
+    const systemSourceAfterRelease = await (
+      await fetch(`${base}/api/source/test-team/sample-system`, { headers })
+    ).json();
+    const changedTokens = ":root { --ds-color-accent: #ff5500; }\n";
+    const updateAfterRelease = await fetch(`${base}/api/source/test-team/sample-system`, {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({
+        files: { ...systemSourceAfterRelease.files, "tokens.css": changedTokens },
+        baseRef: systemSourceAfterRelease.baseRef,
+        message: "Update tokens after release",
+      }),
+    });
+    assert.equal(updateAfterRelease.status, 200);
+    const publishAfterRelease = await fetch(`${base}/api/publish/test-team/sample-system`, {
+      method: "POST",
+      headers,
+      body: "{}",
+    });
+    assert.equal(publishAfterRelease.status, 200, await publishAfterRelease.text());
+    assert.equal(await (await fetch(`${base}/static/test-team/sample-system/latest/tokens.css`)).text(), changedTokens);
+    assert.equal(
+      await (await fetch(`${base}/static/test-team/sample-system/${releaseData.version}/tokens.css`)).text(),
+      systemSource.files["tokens.css"],
+    );
     const mountedFoundationPath = join(mountedRoot, "foundation");
     await mkdir(mountedFoundationPath);
     await writeFile(
@@ -1135,8 +1346,23 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
     assert.match((await databaseUnavailable.json()).error, /temporarily unavailable/);
     assert.equal(schemaStatements.length, 2);
     assert.ok(schemaStatements.every((sql) => sql.includes("IF NOT EXISTS")));
+    assert.equal(
+      smartGitRequests,
+      0,
+      "remote inventory, source, history, specs, publish, and release must not use Smart HTTP",
+    );
+    assert.ok(atomicCommits.some(({ targetBranch, expectedRef }) => targetBranch === "main" && expectedRef === null));
+    assert.ok(
+      atomicCommits.some(
+        ({ targetBranch, expectedRef, message }) =>
+          targetBranch === "main" && message === "Integration source update" && /^[a-f0-9]{40,64}$/i.test(expectedRef),
+      ),
+    );
+    assert.ok(
+      atomicCommits.some(({ targetBranch, expectedRef }) => targetBranch === "wds-artifacts" && expectedRef === null),
+    );
     t.diagnostic(
-      `OIDC flow, project CRUD, validation, source push and Git history verified locally (${create.status}, ${duplicate.status}, ${invalid.status}).`,
+      `OIDC flow, project CRUD, validation, atomic source commits, REST specs and history verified locally (${create.status}, ${duplicate.status}, ${invalid.status}).`,
     );
   } finally {
     if (app && app.exitCode === null) {

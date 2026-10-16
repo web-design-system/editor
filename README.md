@@ -1,19 +1,21 @@
 # Web Design System Editor
 
-An HTML-first component workbench for authoring, testing, versioning, and publishing Li3 web components. It combines a lightweight design tool, Storybook-style component laboratory, Git-backed revision history, and CDN-style static releases.
+An HTML-first workbench for authoring, versioning, and publishing Li3 web components. The product goal is a lightweight Design/Code studio with Git-backed history and static releases; the current preview is deliberately more limited than a full Storybook-style component laboratory.
 
 The application is intended to run at `https://wds.apphor.de`.
 
+For the current product goals, architecture/design decisions, implementation summary, and known feature gaps, see [the project overview](docs/project-overview.md).
+
 ## Product Model
 
-A team owns independent repositories. A repository is either:
+A WDS team is a metadata entity and may own several design systems. Each design system owns a Git organization with a reserved `foundation` repository; its components are repositories in that organization. A WDS repository contains either:
 
-- A baseline design system, which owns shared tokens, CSS, assets, and optional reusable components.
+- A design system's `foundation` repository, which owns required shared tokens and styles.
 - A self-contained component, which owns its markup, styles, behavior, stories, and tests.
 
-There is one Git repository per baseline or component. Git is an internal storage implementation, not an external user-facing Git hosting product.
+There is one Git repository per component, plus one reserved `foundation` repository per design system. Git is an internal storage implementation, not an external user-facing Git hosting product. WDS team slugs and Git organization slugs are distinct identifiers.
 
-Teams use GitHub-style lowercase slugs, such as `acme-corp/buttons`. The custom-element name is stored separately in `component.json` and must satisfy the Web Components naming rules.
+WDS validates team slugs, design-system slugs, and Git organization/repository coordinates as lowercase safe path segments. The custom-element name is stored separately in `component.json` and must satisfy the Web Components naming rules.
 
 ## Source Format
 
@@ -55,15 +57,15 @@ Components are Li3 HTML files. They may use templates, custom elements, Shadow D
 
 Design systems own and publish `tokens.css` as their central token contract. It documents color, spacing, and breakpoint custom properties and may include Tailwind v4 `@theme` definitions. `styles.css` may import `./tokens.css` for compatibility. Components must import exactly `/static/<team>/<repo>/<revision>/tokens.css`, matching their metadata; `@import "tailwindcss"` is permitted as the local build directive. Other external CSS imports are rejected. Publish the design system first. Existing components must be migrated by adding the dependency metadata, adding the exact token import, and publishing only after the selected revision has published `tokens.css`.
 
-Component stylesheets may use only their declared design system's published `tokens.css` as a cross-repository CSS import. Relative styles, modules, and assets are allowed only within that component's own repository; WDS validates these paths and rejects imports that escape the component boundary, including symlink traversal. A dependency on another WDS component must use its absolute published URL, for example `/static/acme-corp/icons/latest/component.html`.
+Component stylesheets may use only their declared design system's published `tokens.css` as a cross-repository CSS import; arbitrary external CSS imports are rejected. Relative styles, modules, and assets are allowed only within that component's own repository; WDS validates these paths and rejects imports that escape the component boundary, including symlink traversal. Other WDS components can be referenced as published assets through their absolute URL, for example `/static/acme-corp/icons/latest/component.html`; this does not permit importing arbitrary component CSS.
 
 The editor discovers supported project files from that repository on each request instead of relying on a server-side filename list. Nested HTML, CSS, JavaScript, JSON, and SVG source files are editable; supported images and fonts are served as assets. Discovery never follows symlinks and excludes hidden paths, Git metadata, generated output, dependencies, and release internals. Static asset requests are confined to the selected repository and revision.
 
 Design-system repositories use the same Git-backed source model but are not components. They hold shared token/value files (for example `tokens.css` or `colors.css`), are published as standalone assets, and are not passed through the component CSS compiler or added to a component's build output. Components reference these files through absolute published URLs such as `/static/acme-corp/foundation/latest/tokens.css`.
 
-The Workbench's component stylesheets reference `/static/web-design-system/foundation/latest/tokens.css`. That shared project must be created and published before the Workbench's shared tokens/utilities are available. Other systems can choose their own baseline repository and URL.
+The Workbench's component stylesheets reference `/static/web-design-system/foundation/latest/tokens.css`. That shared project must be created and published before the Workbench's shared tokens/utilities are available. Other design systems use their own `foundation` repository and token URL.
 
-Baseline repositories use this source shape:
+Foundation repositories use this source shape:
 
 ```text
 styles.css
@@ -77,19 +79,15 @@ spec.mjs
 
 `stories.html` is handcrafted Li3 markup. It is the canonical styleguide source and can use `<script state>` and ordinary Li3 behavior to exercise variants and interaction states.
 
-The editor renders stories in a resizable, sandboxed iframe. The preview width can be changed continuously and with breakpoint markers. The initial markers are Tailwind-style defaults:
+`stories.html` is retained as component source and is published, but the current studio does not render a story gallery. The Design surface renders a limited draft of `component.html` in a sandboxed iframe; scripts, stylesheet links, and inline event handlers are removed. Preview width is adjustable, but breakpoint markers and full Li3 runtime behavior are not currently implemented.
 
-- `sm`: 640px
-- `md`: 768px
-- `lg`: 1024px
+The intended visual direction is a compact technical workspace with project navigation, source editing, an inspector, status, and a live preview canvas. This is a design direction, not a claim that all those surfaces are complete.
 
-The editor’s visual direction is a compact, dark, technical three-pane workspace inspired by VoidExplorer Shipyard: project registry, source workspace, design inspector, persistent status, and a live preview canvas.
-
-Components are allowed full browser capabilities in v1, including remote imports and network access. Before production use beyond the initial tester, the preview must move to a distinct origin and receive a restrictive CSP/permission policy.
+The draft preview does not run component scripts. Published components are intended for browser consumption, but broader untrusted author access still requires a separate-origin full-runtime preview and restrictive deployment policy.
 
 ## Revisions And Releases
 
-All authors work on `main`; branches, pull requests, locks, and real-time collaborative editing are out of scope for v1. The initial multi-user policy is last-write-wins.
+All authors work on `main`; branches, pull requests, locks, and real-time collaborative editing are out of scope for v1. Source commits use atomic compare-and-swap against the full `baseRef`; concurrent stale writes conflict instead of silently overwriting newer source.
 
 - Unsaved editor state is private and is never published.
 - A commit creates a Git revision on `main`.
@@ -107,11 +105,11 @@ No release is created automatically for a new repository. An author must publish
 
 ## Creating A Design System
 
-An authenticated, allowlisted editor creates WDS teams as metadata records, then creates design systems under a selected team. Each design system gets a Git organization and a `foundation` repository with `design-system.json`, `tokens.css`, and `styles.css`. Components are created only inside that system organization and use the foundation token URL as their default dependency.
+An authenticated, allowlisted editor creates WDS teams as metadata records, then creates design systems under a selected team. Each design system gets a Git organization and a reserved `foundation` repository with `design-system.json`, `tokens.css`, and `styles.css`. Components are created only inside that system organization and use the foundation token URL as their required dependency. The component name is the only required component-creation field; WDS derives the repository slug.
 
-For example, a component may import a released token stylesheet with `@import url("/static/acme-corp/foundation/v1.0/styles.css");`. This is an explicit public versioned asset reference; relative imports stay inside the current component repository and cannot traverse into sibling repositories or server files.
+For example, a component may import a released token stylesheet with `@import url("/static/acme-corp/foundation/v1.0/tokens.css");`. This is an explicit public versioned asset reference; relative imports stay inside the current component repository and cannot traverse into sibling repositories or server files.
 
-The new project is selected in the workbench immediately, with only its shared stylesheet available in the source editor. Commit saves source; **Publish latest** makes the shared files available at their public URLs. The design-system file is served as authored and is not compiled into a component stylesheet. Release creates an immutable versioned artifact. The configured Git API token must have permission to create organizations and repositories for the selected team, as well as read and write Git data.
+The foundation studio edits `tokens.css` and shows `styles.css` as context; complete multi-file foundation editing is not yet available. Commit saves source; **Publish latest** makes the shared files available at their public URLs. The design-system files are served as authored and are not compiled into a component stylesheet. The server supports immutable versioned releases, but the studio does not yet expose release creation. The configured Git API token must have permission to create organizations and repositories for the selected team, as well as read and write Git data.
 
 ## Public Artifact URLs
 
@@ -160,9 +158,7 @@ S3-compatible object storage is not required in v1. It becomes useful only when 
 
 ## Testing
 
-Each repository starts with one `spec.mjs`. Specs use Node built-ins such as `node:test` and `node:assert`.
-
-The intended next test runner mounts the committed source in WebContainer and runs specs in the browser. `@li3/ssr` plus `jsdom` will make Li3 component rendering testable from Node without adding a full browser test framework. Browser integration tests can be added after that with a native browser test page or Playwright.
+Repositories may include `spec.mjs`, which can use Node built-ins such as `node:test` and `node:assert`. Optional server-side execution is disabled by default; when explicitly enabled it runs trusted specs with Node.js and is not sandboxed. There is no in-workbench spec runner/report UI or browser test runner yet. The product and architecture gaps are tracked in the [project overview](docs/project-overview.md).
 
 ## CSS Compilation
 
@@ -174,7 +170,7 @@ AI is a phase-two authoring tool, not a central runtime dependency. It may later
 
 ## Development
 
-The workbench UI is composed from Li3 components loaded from the mounted design-system source. pnpm is used for dependency operations and the production image retains only production dependencies.
+The application UI is served from `public/`. The code editor is loaded at runtime from sodium and uses its public CDN runtime/assets; see the [project overview](docs/project-overview.md) for availability and supply-chain tradeoffs. pnpm is used for dependency operations and the production image retains only production dependencies.
 
 ```sh
 pnpm start
@@ -193,30 +189,6 @@ docker run --rm -p 4173:4173 -e PORT=4173 web-design-system-editor:local
 
 Mount `/data` in deployment so authored Git repositories persist across containers.
 
-## Prototype Status
+## Authoring workbench
 
-Implemented now:
-
-- Multi-team landing page with team filters and design-system cards; opened systems currently show a blank workbench shell.
-- Individual topbar, registry, studio, editor tabs, inspector, preview, action button, panel, viewport control, and workbench components remain independently authored in design-system source for gradual reintroduction.
-- Git API-backed source commits, explicit publication to mutable `latest`, and immutable major/minor releases.
-- Public static serving from published artifacts only; source commits do not change public output.
-- Component CSS compilation during publish; design-system styles are published separately without component compilation.
-- Per-request source discovery and repository-boundary validation for relative imports/assets.
-- Li3 sample component with explicit baseline CSS and separate ESM setup module.
-- Published component stylesheets are compiled through the Tailwind 4 CLI and served as `styles.css`.
-- Resizable preview width and breakpoint shortcuts.
-- Production Docker build and HTTP smoke test.
-
-Deferred:
-
-- OIDC sessions, d0 persistence, teams, and single-use invitation links.
-- Dependency graph/manifest generation and release artifact copying.
-- Tailwind 4 adapter.
-- WebContainer, Li3 SSR/jsdom spec execution, and browser test reporting.
-- Separate preview origin and production sandbox policy.
-- AI assistance and GitHub export.
-
-# Authoring workbench
-
-Sign in, create/select a WDS team, then create/select a design system and add components from its workbench. Components are repositories in the design-system Git organization and import `/static/<org>/foundation/latest/tokens.css`. Component source commits update Git `main`; publishing is a separate explicit action that updates public `latest` artifacts. Existing Git org/repo artifact URLs and `team/repo` workspace links continue to address their Git organization/repository values.
+Sign in, create/select a WDS team, then create/select a design system and add components from its workbench. Components are repositories in the design-system Git organization and import `/static/<org>/foundation/latest/tokens.css`. Component source commits update Git `main`; publishing is a separate explicit action that updates public `latest` artifacts. Project workspace routes use Git organization/repository coordinates in their `team` and `repo` query parameters; these are not WDS team slugs.

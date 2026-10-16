@@ -797,18 +797,11 @@ h2 {
   color: var(--muted);
   font-size: 13px;
 }
-.foundation-main wds-code-editor {
+.foundation-main code-editor {
   display: block;
-}
-.foundation-main textarea {
   width: 100%;
+  height: 390px;
   min-height: 390px;
-  padding: 12px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  font:
-    13px/1.55 ui-monospace,
-    monospace;
 }
 .action-row {
   display: flex;
@@ -946,22 +939,11 @@ h2 {
 .studio-shell .design-surface iframe {
   min-height: 470px;
 }
-.studio-shell .code-surface wds-code-editor,
-.studio-shell .code-surface textarea {
+.studio-shell .code-surface code-editor {
   display: block;
   width: 100%;
+  height: 500px;
   min-height: 500px;
-}
-.studio-shell .code-surface wds-code-editor {
-  --editor-min-height: 500px;
-}
-.studio-shell .code-surface textarea {
-  padding: 12px;
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  font:
-    13px/1.55 ui-monospace,
-    monospace;
 }
 .history-drawer {
   margin-top: 8px;
@@ -1042,7 +1024,8 @@ h2 {
   .studio-shell .design-surface iframe {
     min-height: 340px;
   }
-  .studio-shell .code-surface textarea {
+  .studio-shell .code-surface code-editor {
+    height: 370px;
     min-height: 370px;
   }
   .foundation-layout .studio-nav,

@@ -1,9 +1,21 @@
-import "/code-editor.mjs";
-
 const landing = document.querySelector("#landing");
 const workspace = document.querySelector("#workspace");
 const teamList = document.querySelector("#team-list");
 const systemGrid = document.querySelector("#system-grid");
+let codeEditorLoad;
+async function loadCodeEditor() {
+  if (!codeEditorLoad) {
+    codeEditorLoad = (async () => {
+      const { load } = await import("@li3/web");
+      await load("https://sodium.static.apphor.de/code-editor.html");
+      await customElements.whenDefined("code-editor");
+    })().catch((error) => {
+      codeEditorLoad = null;
+      throw error;
+    });
+  }
+  await codeEditorLoad;
+}
 const icon =
   '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 7.5 12 3l8 4.5v9L12 21l-8-4.5v-9Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="m4.5 7.7 7.5 4.4 7.5-4.4M12 12v8.5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>';
 const arrow =
@@ -305,13 +317,21 @@ async function loadWorkbench(team, repo) {
   const source = await sourceResponse.json();
   let baseRef = source.baseRef;
   status.textContent = `${project.type === "component" ? "Team component" : "Design system"} · ${source.revision} · ${source.sourceMode}`;
+  try {
+    await loadCodeEditor();
+  } catch {
+    status.textContent = "Could not load the remote code editor. Check the connection and reload this workspace.";
+    return;
+  }
   if (project.type === "design-system") {
     const components = projects.filter((item) => item.team === team && item.type === "component");
-    area.innerHTML = `<div class="studio-heading"><div><p class="studio-kicker">${escapeHtml(team)} / ${escapeHtml(repo)} · Foundation</p><h1>${escapeHtml(project.name || repo)}</h1><p>Tokens and shared styles · tokens must be published before components can be added.</p></div><div class="studio-actions"><span class="state-pill" id="foundation-state">Draft · ${escapeHtml(source.revision)}</span><button type="button" id="save-tokens">Commit</button><button type="button" class="secondary-action" id="publish-tokens">Publish</button></div></div><div class="foundation-layout"><nav class="studio-nav" aria-label="Foundation navigation"><details class="project-drawer" open><summary>Foundation navigation</summary><div class="project-nav-content"><strong>System</strong><a class="nav-context" href="/?team=${encodeURIComponent(team)}&amp;repo=${encodeURIComponent(repo)}">${escapeHtml(project.name || repo)}</a><strong>Foundation files</strong><a href="#foundation-tokens">tokens.css</a><a href="#foundation-styles">styles.css</a><strong>Components</strong><div class="component-list">${components.map((item) => `<a href="/?team=${encodeURIComponent(team)}&amp;repo=${encodeURIComponent(item.repo)}">${escapeHtml(item.name || item.repo)}<small>${escapeHtml(item.repo)}</small></a>`).join("") || "<p>No components yet.</p>"}</div></div></details></nav><section class="foundation-main"><div class="foundation-title"><div><h2 id="foundation-tokens">Tokens</h2><p>Canonical CSS source · commit and publish are separate actions.</p></div><span class="state-pill">tokens.css</span></div><pre class="source-facts" id="foundation-styles"></pre><wds-code-editor id="tokens-editor" role="group" aria-label="Design system tokens"><textarea aria-label="CSS tokens source" spellcheck="false"></textarea></wds-code-editor><div class="action-row"><label>Commit message<input id="tokens-message" value="Update design tokens" maxlength="200"></label></div><p id="token-status" role="status" aria-live="polite"></p><section class="foundation-components"><div><h2>Component projects</h2><p>New components use this system’s published tokens at latest.</p></div><p id="token-publication-state" role="status" aria-live="polite">Checking published tokens…</p><form id="component-create" hidden><label>Component name<input name="name" required maxlength="100" autocomplete="off"></label><p>Available after tokens.css is published.</p><button type="submit">Add component</button></form><p id="create-status" role="status" aria-live="polite"></p></section></section></div>`;
+    area.innerHTML = `<div class="studio-heading"><div><p class="studio-kicker">${escapeHtml(team)} / ${escapeHtml(repo)} · Foundation</p><h1>${escapeHtml(project.name || repo)}</h1><p>Tokens and shared styles · tokens must be published before components can be added.</p></div><div class="studio-actions"><span class="state-pill" id="foundation-state">Draft · ${escapeHtml(source.revision)}</span><button type="button" id="save-tokens">Commit</button><button type="button" class="secondary-action" id="publish-tokens">Publish</button></div></div><div class="foundation-layout"><nav class="studio-nav" aria-label="Foundation navigation"><details class="project-drawer" open><summary>Foundation navigation</summary><div class="project-nav-content"><strong>System</strong><a class="nav-context" href="/?team=${encodeURIComponent(team)}&amp;repo=${encodeURIComponent(repo)}">${escapeHtml(project.name || repo)}</a><strong>Foundation files</strong><a href="#foundation-tokens">tokens.css</a><a href="#foundation-styles">styles.css</a><strong>Components</strong><div class="component-list">${components.map((item) => `<a href="/?team=${encodeURIComponent(team)}&amp;repo=${encodeURIComponent(item.repo)}">${escapeHtml(item.name || item.repo)}<small>${escapeHtml(item.repo)}</small></a>`).join("") || "<p>No components yet.</p>"}</div></div></details></nav><section class="foundation-main"><div class="foundation-title"><div><h2 id="foundation-tokens">Tokens</h2><p>Canonical CSS source · commit and publish are separate actions.</p></div><span class="state-pill">tokens.css</span></div><pre class="source-facts" id="foundation-styles"></pre><code-editor id="tokens-editor" role="group" aria-label="Design system tokens"></code-editor><div class="action-row"><label>Commit message<input id="tokens-message" value="Update design tokens" maxlength="200"></label></div><p id="token-status" role="status" aria-live="polite"></p><section class="foundation-components"><div><h2>Component projects</h2><p>New components use this system’s published tokens at latest.</p></div><p id="token-publication-state" role="status" aria-live="polite">Checking published tokens…</p><form id="component-create" hidden><label>Component name<input name="name" required maxlength="100" autocomplete="off"></label><p>Available after tokens.css is published.</p><button type="submit">Add component</button></form><p id="create-status" role="status" aria-live="polite"></p></section></section></div>`;
     area.querySelector("#foundation-styles").textContent = source.files["styles.css"] || "(No shared stylesheet yet)";
     const tokensEditor = area.querySelector("#tokens-editor");
     const tokenStatus = area.querySelector("#token-status");
     tokensEditor.value = source.files["tokens.css"] || "";
+    tokensEditor.language = "css";
+    tokensEditor.status = "tokens.css";
     area.querySelector(".project-drawer").open = !window.matchMedia("(max-width: 760px)").matches;
     const componentForm = area.querySelector("#component-create");
     const artifactUrl = `/static/${encodeURIComponent(team)}/${encodeURIComponent(repo)}/latest/tokens.css`;
@@ -411,7 +431,7 @@ async function loadWorkbench(team, repo) {
     )
     .join(
       "",
-    )}</select><label class="module-toggle"><input type="checkbox" id="enable-module" ${files["component.mjs"] !== undefined ? "checked" : ""}> Include component.mjs</label><details class="history-drawer"><summary>History & status</summary><label>Commit message<input id="commit-message" value="Update component source" maxlength="200"></label><p id="save-status" role="status" aria-live="polite"></p><button type="button" id="refresh-history">Refresh history</button><ol id="history-list"></ol><p id="publish-result" role="status" aria-live="polite"></p></details></div></details></nav><main class="authoring-main"><div class="mode-bar"><div role="tablist" aria-label="Authoring mode"><button type="button" class="mode-button active" data-mode="design" role="tab" aria-selected="true">Design</button><button type="button" class="mode-button" data-mode="code" role="tab" aria-selected="false">Code</button></div><label class="viewport-control">Canvas width <input type="range" id="canvas-width" min="320" max="1200" value="760"><output id="canvas-width-label">760 px</output></label></div><section class="design-surface" data-surface="design"><div class="surface-heading"><h2>Design canvas</h2><span class="preview-limit">Draft preview · sandboxed · scripts are not executed</span></div><iframe title="Draft component preview" sandbox="" id="draft-preview"></iframe></section><section class="code-surface" data-surface="code" hidden><div class="surface-heading"><h2>Code · <span id="active-file-label">component.html</span></h2><span>Edits update the canonical draft source.</span></div><wds-code-editor id="source-editor" role="group" aria-label="Component source"><textarea aria-label="Component source" spellcheck="false"></textarea></wds-code-editor></section></main><aside class="studio-inspector"><details class="inspector-drawer" open><summary>Inspector · selected target</summary><div class="inspector-fields"><p>Template root · <code>data-wds-editable</code></p><p id="selected-classes"></p><label>Padding<select data-utility="padding"><option value="">none</option><option>p-2</option><option>p-4</option><option>p-6</option><option>p-8</option></select></label><label>Margin<select data-utility="margin"><option value="">none</option><option>m-2</option><option>m-4</option><option>mt-4</option><option>mb-4</option><option>mx-auto</option></select></label><label>Background<select data-utility="background"><option value="">none</option><option>bg-indigo-600</option><option>bg-blue-600</option><option>bg-slate-900</option><option>bg-white</option></select></label><label>Text color<select data-utility="text"><option value="">none</option><option>text-white</option><option>text-slate-900</option><option>text-indigo-700</option></select></label><label>Custom Tailwind utility<input id="custom-utility" placeholder="rounded-lg" maxlength="80"></label><button type="button" id="apply-utility">Apply utility</button></div></details></aside></div>`;
+    )}</select><label class="module-toggle"><input type="checkbox" id="enable-module" ${files["component.mjs"] !== undefined ? "checked" : ""}> Include component.mjs</label><details class="history-drawer"><summary>History & status</summary><label>Commit message<input id="commit-message" value="Update component source" maxlength="200"></label><p id="save-status" role="status" aria-live="polite"></p><button type="button" id="refresh-history">Refresh history</button><ol id="history-list"></ol><p id="publish-result" role="status" aria-live="polite"></p></details></div></details></nav><main class="authoring-main"><div class="mode-bar"><div role="tablist" aria-label="Authoring mode"><button type="button" class="mode-button active" data-mode="design" role="tab" aria-selected="true">Design</button><button type="button" class="mode-button" data-mode="code" role="tab" aria-selected="false">Code</button></div><label class="viewport-control">Canvas width <input type="range" id="canvas-width" min="320" max="1200" value="760"><output id="canvas-width-label">760 px</output></label></div><section class="design-surface" data-surface="design"><div class="surface-heading"><h2>Design canvas</h2><span class="preview-limit">Draft preview · sandboxed · scripts are not executed</span></div><iframe title="Draft component preview" sandbox="" id="draft-preview"></iframe></section><section class="code-surface" data-surface="code" hidden><div class="surface-heading"><h2>Code · <span id="active-file-label">component.html</span></h2><span>Edits update the canonical draft source.</span></div><code-editor id="source-editor" role="group" aria-label="Component source"></code-editor></section></main><aside class="studio-inspector"><details class="inspector-drawer" open><summary>Inspector · selected target</summary><div class="inspector-fields"><p>Template root · <code>data-wds-editable</code></p><p id="selected-classes"></p><label>Padding<select data-utility="padding"><option value="">none</option><option>p-2</option><option>p-4</option><option>p-6</option><option>p-8</option></select></label><label>Margin<select data-utility="margin"><option value="">none</option><option>m-2</option><option>m-4</option><option>mt-4</option><option>mb-4</option><option>mx-auto</option></select></label><label>Background<select data-utility="background"><option value="">none</option><option>bg-indigo-600</option><option>bg-blue-600</option><option>bg-slate-900</option><option>bg-white</option></select></label><label>Text color<select data-utility="text"><option value="">none</option><option>text-white</option><option>text-slate-900</option><option>text-indigo-700</option></select></label><label>Custom Tailwind utility<input id="custom-utility" placeholder="rounded-lg" maxlength="80"></label><button type="button" id="apply-utility">Apply utility</button></div></details></aside></div>`;
   area.querySelector("#history-toggle").addEventListener("click", (event) => {
     const navigation = area.querySelector(".project-drawer");
     const history = area.querySelector(".history-drawer");
@@ -428,13 +448,25 @@ async function loadWorkbench(team, repo) {
   window.matchMedia("(max-width: 760px)").addEventListener("change", setResponsiveDrawers);
   const editor = area.querySelector("#source-editor");
   const fileSelect = area.querySelector("#source-file");
+  fileSelect.value = Object.hasOwn(files, "component.html") ? "component.html" : Object.keys(files)[0] || "";
   let activeFile = fileSelect.value;
+  const languageForFile = (file) =>
+    ({
+      ".css": "css",
+      ".html": "html",
+      ".js": "javascript",
+      ".json": "json",
+      ".mjs": "javascript",
+      ".svg": "xml",
+    })[file.slice(file.lastIndexOf(".")).toLowerCase()] || "";
   const updateEditor = ({ saveCurrent = false } = {}) => {
     if (saveCurrent) {
       files[activeFile] = editor.value;
     }
     activeFile = fileSelect.value;
     editor.value = files[fileSelect.value];
+    editor.language = languageForFile(activeFile);
+    editor.status = activeFile;
     area.querySelector("#active-file-label").textContent = fileSelect.value;
   };
   const modeButtons = [...area.querySelectorAll("[data-mode]")];
@@ -505,8 +537,8 @@ async function loadWorkbench(team, repo) {
     updateEditor();
     refreshPreview();
   });
-  editor.addEventListener("input", () => {
-    files[fileSelect.value] = editor.value;
+  editor.addEventListener("change", (event) => {
+    files[activeFile] = typeof event.detail === "string" ? event.detail : editor.value;
     refreshPreview();
   });
   area

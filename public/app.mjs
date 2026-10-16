@@ -1,3 +1,9 @@
+import { createStudio } from "./studio.mjs";
+const studioStyles = document.createElement("link");
+studioStyles.rel = "stylesheet";
+studioStyles.href = "/studio.css";
+document.head.append(studioStyles);
+
 const landing = document.querySelector("#landing");
 const workspace = document.querySelector("#workspace");
 const teamList = document.querySelector("#team-list");
@@ -413,6 +419,7 @@ async function loadWorkbench(team, repo) {
     return;
   }
   const files = {
+    ...source.files,
     "component.html":
       source.files["component.html"] ||
       '<template component="ds-component" shadow-dom="open"><div data-wds-editable class="p-4 bg-indigo-600 text-white">Hello component</div></template>',
@@ -497,28 +504,7 @@ async function loadWorkbench(team, repo) {
     area.querySelector("#draft-preview").style.width = `min(100%, ${width}px)`;
     area.querySelector("#canvas-width-label").value = `${width} px`;
   });
-  const refreshPreview = () => {
-    const template = files["component.html"].match(/<template\b[^>]*>([\s\S]*?)<\/template\s*>/i);
-    const html = (template?.[1] || files["component.html"])
-      .replace(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi, "")
-      .replace(/<link\b[^>]*rel\s*=\s*(['"])stylesheet\1[^>]*>/gi, "")
-      .replace(/\son\w+\s*=\s*(['"]).*?\1/gi, "");
-    const utilityPreview =
-      ".p-2{padding:.5rem}.p-4{padding:1rem}.p-6{padding:1.5rem}.p-8{padding:2rem}.m-2{margin:.5rem}.m-4{margin:1rem}.mt-4{margin-top:1rem}.mb-4{margin-bottom:1rem}.mx-auto{margin-inline:auto}.bg-indigo-600{background-color:#4f46e5}.bg-blue-600{background-color:#2563eb}.bg-slate-900{background-color:#0f172a}.bg-white{background-color:#fff}.text-white{color:#fff}.text-slate-900{color:#0f172a}.text-indigo-700{color:#4338ca}.rounded-lg{border-radius:.5rem}";
-    area.querySelector("#draft-preview").srcdoc =
-      `<!doctype html><meta charset="utf-8"><style>${utilityPreview}${files["styles.css"].replace(/@import[^;]+;/g, "").replace(/<\/style/gi, "<\\/style")}</style>${html}`;
-    const match = files["component.html"].match(/data-wds-editable[^>]*class\s*=\s*["']([^"']*)/i);
-    const classes = match?.[1]?.split(/\s+/).filter(Boolean) || [];
-    area.querySelector("#selected-classes").textContent = `Selected classes: ${classes.join(" ") || "(none)"}`;
-    const utilityPrefixes = { padding: /^p-/, margin: /^(?:m|mt|mb|mx)-/, background: /^bg-/, text: /^text-/ };
-    for (const [group, pattern] of Object.entries(utilityPrefixes)) {
-      const select = area.querySelector(`[data-utility="${group}"]`);
-      const selected = classes.find((item) => pattern.test(item));
-      if (select && [...select.options].some((option) => option.value === selected)) {
-        select.value = selected || "";
-      }
-    }
-  };
+  let refreshPreview;
   fileSelect.addEventListener("change", () => updateEditor({ saveCurrent: true }));
   area.querySelector("#enable-module").addEventListener("change", (event) => {
     if (event.target.checked) {
@@ -541,37 +527,6 @@ async function loadWorkbench(team, repo) {
     files[activeFile] = typeof event.detail === "string" ? event.detail : editor.value;
     refreshPreview();
   });
-  area
-    .querySelectorAll("[data-utility]")
-    .forEach((select) => select.addEventListener("change", () => applyUtility(select.value, select.dataset.utility)));
-  function applyUtility(token, group = "custom") {
-    if (!token || !/^[a-z0-9-]+(?:\[[a-z0-9#.%_-]+\])?$/.test(token)) {
-      return;
-    }
-    const groupPatterns = {
-      padding: /^p-[\w[\].%-]+$/,
-      margin: /^(?:m|mt|mb|mx)-[\w[\].%-]+$/,
-      background: /^bg-[\w[\].%-]+$/,
-      text: /^text-[\w[\].%-]+$/,
-    };
-    files["component.html"] = files["component.html"].replace(
-      /(<[^>]*data-wds-editable[^>]*class\s*=\s*["'])([^"']*)(["'])/i,
-      (_all, before, classes, after) => {
-        const next = classes
-          .split(/\s+/)
-          .filter(Boolean)
-          .filter((item) => !groupPatterns[group]?.test(item));
-        return `${before}${[...new Set([...next, token])].join(" ")}${after}`;
-      },
-    );
-    if (fileSelect.value === "component.html") {
-      editor.value = files["component.html"];
-    }
-    refreshPreview();
-  }
-  area
-    .querySelector("#apply-utility")
-    .addEventListener("click", () => applyUtility(area.querySelector("#custom-utility").value.trim()));
   area.querySelector("#save-source").addEventListener("click", async () => {
     files[fileSelect.value] = editor.value;
     const response = await fetch(`/api/source/${encodeURIComponent(team)}/${encodeURIComponent(repo)}`, {
@@ -640,6 +595,13 @@ async function loadWorkbench(team, repo) {
       result.append(preview, document.createTextNode(" · "), artifactPath);
     }
   });
+  const studio = createStudio(area, files, () => {
+    if (activeFile === "component.html") {
+      editor.value = files[activeFile];
+    }
+    area.querySelector("#draft-state").textContent = "Unsaved changes";
+  });
+  refreshPreview = studio.refresh;
   updateEditor();
   refreshPreview();
   loadHistory();

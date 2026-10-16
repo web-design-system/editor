@@ -81,7 +81,7 @@ spec.mjs
 
 `stories.html` is retained as component source and is published, but the current studio does not render a story gallery. The Design surface renders a limited draft of `component.html` in a sandboxed iframe; scripts, stylesheet links, and inline event handlers are removed. Preview width is adjustable, but breakpoint markers and full Li3 runtime behavior are not currently implemented.
 
-The intended visual direction is a compact technical workspace with project navigation, source editing, an inspector, status, and a live preview canvas. This is a design direction, not a claim that all those surfaces are complete.
+The component studio follows the dark zinc/blue design concept: a layer tree, dotted canvas with zoom and adjustable width, and a Design/Code inspector. Select elements in the tree or canvas to edit layout, spacing, colors, effects, and classes. Property controls write inline CSS to the canonical HTML draft; class editing and the source editor share that same draft. Save Component commits source; Publish remains a separate action. Preview hides editing panels and selection outlines; it does not execute component scripts. The draft includes local styles.css and a limited utility preview, not the full published Tailwind build.
 
 The draft preview does not run component scripts. Published components are intended for browser consumption, but broader untrusted author access still requires a separate-origin full-runtime preview and restrictive deployment policy.
 
@@ -177,6 +177,8 @@ pnpm start
 ```
 
 Open `http://localhost:4173`. Set `PORT` to change the listening port.
+
+Run `pnpm test` for server/source checks and `pnpm exec playwright test` for the studio browser checks (install Chromium with `pnpm exec playwright install chromium` if needed). Browser tests isolate API responses and the remote code-editor loader, and cover layer edits, preserved files, saving, publishing, tabs, zoom, and preview at desktop, tablet, and mobile widths.
 
 ## Container
 

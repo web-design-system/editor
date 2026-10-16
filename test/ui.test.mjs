@@ -10,7 +10,7 @@ test("landing page lists teams and design systems without depending on component
   assert.match(html, /id="team-form"/);
   assert.match(html, /id="system-form"/);
   assert.match(html, /id="creation-controls"[^>]*hidden/);
-  assert.match(html, /Teams own design systems/);
+  assert.match(html, /id="system-filter"/);
   assert.match(html, /Git organization slug/);
   assert.match(app, /fetch\("\/api\/teams"/);
   assert.match(app, /fetch\("\/api\/design-systems"/);

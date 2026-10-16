@@ -195,6 +195,8 @@ Mount `/data` in deployment so authored Git repositories persist across containe
 
 All pages share the studio’s dark zinc/blue visual language. Workspace navigation follows **team → design system → Foundation and components**. The team sidebar scopes the system inventory; selecting a system opens an overview of its Foundation and component repositories. Creation forms open in focused dialogs. Breadcrumbs and repository links connect the overview, Foundation editor, and component studio.
 
+The landing and system views use searchable, compact rows rather than descriptive cards. On mobile, the team switcher collapses into one row so repositories remain visible without scrolling through navigation. Foundation publication status appears inline, with additional guidance only when publication blocks component creation.
+
 - `/`: all design systems, grouped through the team sidebar.
 - `/?teamSlug=<team>`: one metadata team’s systems (the team may own several Git organizations).
 - `/?system=<git-org>`: a design system overview and component creation, unlocked by published Foundation tokens.

@@ -27,39 +27,36 @@
       </header>
       <div class="dashboard-layout">
         <aside class="workspace-sidebar" aria-label="Workspace navigation">
-          <a class="workspace-home" href="/">▦ <span>Workspace overview</span></a>
-          <div class="section-heading">
-            <h2 id="teams-title">Teams</h2>
-            <span class="section-note" id="team-summary"></span>
-          </div>
-          <div class="team-list" id="team-list"><span class="loading">Loading teams…</span></div>
-          <button type="button" class="sidebar-create" data-create="team" hidden>＋ New team</button>
-          <div class="sidebar-guide">
-            <span>YOUR WORKSPACE</span>
-            <p>Team <span>→</span> Design systems</p>
-            <p>Design system <span>→</span> Foundation + components</p>
-            <small>One Git organization per system. One repository per Foundation or component.</small>
-          </div>
+          <details class="team-drawer" open>
+            <summary id="team-navigation-label">All teams</summary>
+            <a class="workspace-home" href="/">▦ <span>Workspace overview</span></a>
+            <div class="section-heading">
+              <h2 id="teams-title">Teams</h2>
+              <span class="section-note" id="team-summary"></span>
+            </div>
+            <div class="team-list" id="team-list"><span class="loading">Loading teams…</span></div>
+            <button type="button" class="sidebar-create" data-create="team" hidden>＋ New team</button>
+          </details>
         </aside>
-        <main class="main dashboard-main">
+        <main class="main dashboard-main" aria-label="Workspace">
           <nav class="breadcrumbs" id="dashboard-breadcrumbs" aria-label="Breadcrumb"><span>Workspace</span></nav>
           <div class="dashboard-heading">
             <div>
-              <p class="eyebrow" id="dashboard-kicker">Your workspace</p>
-              <h1 id="dashboard-title">Design systems</h1>
-              <p class="intro" id="dashboard-description">
-                Teams own design systems. Build a shared foundation, then bring your components to life.
-              </p>
+              <h1 id="dashboard-title" hidden></h1>
             </div>
             <button type="button" class="primary-button" data-create="system" hidden>＋ New design system</button>
           </div>
           <p class="notice" id="notice" role="status" aria-live="polite" hidden></p>
-          <section class="section" aria-labelledby="systems-title">
-            <div class="section-heading">
-              <h2 id="systems-title">All design systems</h2>
-              <span class="section-note" id="system-summary"></span>
+          <section class="section" aria-label="Repositories and systems">
+            <div class="list-toolbar">
+              <input id="system-filter" type="search" aria-label="Find a system" placeholder="Find a system…" /><span
+                class="section-note"
+                id="system-summary"
+              ></span>
+              <h2 id="systems-title" hidden>Design systems</h2>
             </div>
             <div class="system-grid" id="system-grid"><span class="loading">Loading design systems…</span></div>
+            <p id="filter-empty" class="empty" hidden>No matches.</p>
           </section>
         </main>
       </div>

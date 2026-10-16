@@ -1,8 +1,8 @@
 import { test, expect } from "@playwright/test";
 
-for (const width of [1440, 900, 390]) {
+for (const width of [1440, 900, 390, 360]) {
   test(`team, system, Foundation and component navigation at ${width}px`, async ({ page }) => {
-    await page.setViewportSize({ width, height: 1000 });
+    await page.setViewportSize({ width, height: 740 });
     const errors = [];
     page.on("pageerror", (error) => errors.push(error.message));
     const teams = [
@@ -18,6 +18,12 @@ for (const width of [1440, 900, 390]) {
     const projects = [
       { team: "acme-ui", repo: "foundation", type: "design-system", name: "Acme UI" },
       { team: "acme-ui", repo: "button", type: "component", name: "Button" },
+      ...["Input", "Card", "Dialog", "Badge", "Checkbox"].map((name) => ({
+        team: "acme-ui",
+        repo: name.toLowerCase(),
+        type: "component",
+        name,
+      })),
     ];
     let createdSystem;
     let createdComponent;
@@ -87,6 +93,15 @@ for (const width of [1440, 900, 390]) {
     });
     await page.goto("http://127.0.0.1:4175/");
     await expect(page.locator(".system-card")).toHaveCount(3);
+    await page.getByRole("searchbox", { name: "Find a system" }).fill("mobile");
+    await expect(page.locator(".system-card:visible")).toHaveCount(1);
+    await page.getByRole("searchbox", { name: "Find a system" }).fill("");
+    const searchBounds = await page.getByRole("searchbox", { name: "Find a system" }).boundingBox();
+    expect(searchBounds.width).toBeGreaterThan(120);
+    await page.screenshot({ path: test.info().outputPath(`landing-${width}.png`), fullPage: true });
+    if (width <= 760) {
+      await page.locator(".team-drawer > summary").click();
+    }
     await page.getByRole("button", { name: "acme 2", exact: true }).click();
     await expect(page.locator(".system-card")).toHaveCount(2);
     await expect(page).toHaveURL(/teamSlug=acme/);
@@ -100,7 +115,16 @@ for (const width of [1440, 900, 390]) {
     await page.getByRole("link", { name: "Open Acme UI", exact: true }).click();
     await expect(page.locator("#dashboard-title")).toHaveText("Acme UI");
     await expect(page.getByRole("button", { name: "New component" })).toBeEnabled();
-    await expect(page.locator("#overview-components .system-card")).toHaveCount(1);
+    await expect(page.locator("#overview-components .system-card")).toHaveCount(6);
+    const foundationBounds = await page.locator(".foundation-card").boundingBox();
+    const lastRow = await page.locator("#overview-components .system-card").last().boundingBox();
+    expect(foundationBounds.height).toBeLessThanOrEqual(80);
+    expect(lastRow.y + lastRow.height).toBeLessThan(740);
+    await page.getByRole("searchbox", { name: "Find a component" }).fill("checkbox");
+    await expect(page.locator("#overview-components .system-card:visible")).toHaveCount(1);
+    await page.getByRole("searchbox", { name: "Find a component" }).fill("no-match");
+    await expect(page.locator("#filter-empty")).toBeVisible();
+    await page.getByRole("searchbox", { name: "Find a component" }).fill("");
     await page.getByRole("button", { name: "New component" }).click();
     await expect(page.getByRole("dialog", { name: "Create a component" })).toBeVisible();
     await page.getByRole("button", { name: "Close dialog" }).click();
@@ -125,10 +149,13 @@ for (const width of [1440, 900, 390]) {
     expect(saved.files["tokens.css"]).toContain("--brand: blue");
     expect(saved.files["styles.css"]).toBe("body { margin: 4px; }");
     await page.screenshot({ path: test.info().outputPath(`foundation-${width}.png`), fullPage: true });
-    await page.locator(".component-list a").click();
+    await page.locator(".component-list a").first().click();
     await expect(page.locator("#layer-list button")).toHaveCount(1);
     await page.getByRole("link", { name: "Back to design system" }).click();
     await expect(page.locator("#dashboard-title")).toHaveText("Acme UI");
+    if (width <= 760) {
+      await page.locator(".team-drawer > summary").click();
+    }
     await page.getByRole("button", { name: "New team" }).click();
     await page.getByLabel("Team slug", { exact: true }).fill("new-team");
     await page.getByRole("button", { name: "Create team", exact: true }).click();

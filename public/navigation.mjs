@@ -7,6 +7,13 @@ export const systemUrl = (org) => `/?system=${encodeURIComponent(org)}`;
 const projectUrl = (org, repo) => `/?team=${encodeURIComponent(org)}&repo=${encodeURIComponent(repo)}`;
 
 export function initializeNavigation() {
+  document.querySelector("#system-filter").addEventListener("input", filterRepositories);
+  const mobile = window.matchMedia("(max-width: 760px)");
+  const drawer = document.querySelector(".team-drawer");
+  drawer.open = !mobile.matches;
+  mobile.addEventListener("change", () => {
+    drawer.open = !mobile.matches;
+  });
   const dialog = document.querySelector("#creation-dialog");
   document.addEventListener("click", (event) => {
     const trigger = event.target.closest("[data-create]");
@@ -26,33 +33,49 @@ export function initializeNavigation() {
   dialog.querySelector(".dialog-close").addEventListener("click", () => dialog.close());
 }
 
+export function filterRepositories() {
+  const query = document.querySelector("#system-filter").value.trim().toLowerCase();
+  const rows = [...document.querySelectorAll("#system-grid .system-card")];
+  rows.forEach((row) => {
+    row.hidden = !row.textContent.toLowerCase().includes(query);
+  });
+  document.querySelector("#filter-empty").hidden = !query || !rows.length || rows.some((row) => !row.hidden);
+}
+
 export function dashboardHeading(team) {
+  const grid = document.querySelector("#system-grid");
+  grid.before(document.querySelector(".list-toolbar"));
+  const filter = document.querySelector("#system-filter");
+  filter.placeholder = "Find a system…";
+  filter.setAttribute("aria-label", "Find a system");
   const selected = team !== "all";
-  document.querySelector("#dashboard-title").textContent = selected ? team : "Design systems";
-  document.querySelector("#dashboard-kicker").textContent = selected ? "Team workspace" : "Your workspace";
-  document.querySelector("#dashboard-description").textContent = selected
-    ? "Your team’s design systems. Each system has its own Foundation and component repositories."
-    : "Teams own design systems. Build a shared foundation, then bring your components to life.";
-  document.querySelector("#dashboard-breadcrumbs").innerHTML = selected
-    ? `<a href="/">Workspace</a><span>/</span><span>${escape(team)}</span>`
-    : "<span>Workspace</span>";
+  document.querySelector("#dashboard-title").textContent = selected ? team : "";
+  document.querySelector("#dashboard-title").hidden = !selected;
+  document.querySelector("#dashboard-breadcrumbs").hidden = !selected;
+  document.querySelector("#dashboard-breadcrumbs").innerHTML = selected ? '<a href="/">← All teams</a>' : "";
   document.querySelector("#systems-title").textContent = selected ? "Design systems" : "All design systems";
 }
 
 export async function renderSystemOverview(system, grid) {
+  grid.before(document.querySelector(".list-toolbar"));
   const org = system.org || system.team;
   document.title = `${system.name} · WDS`;
   document.querySelector("#dashboard-title").textContent = system.name;
-  document.querySelector("#dashboard-kicker").textContent = "Design system";
-  document.querySelector("#dashboard-description").textContent = `Git organization · ${org}`;
+  document.querySelector("#dashboard-title").hidden = false;
+  document.querySelector("#dashboard-breadcrumbs").hidden = false;
   document.querySelector("#dashboard-breadcrumbs").innerHTML =
-    `<a href="/">Workspace</a><span>/</span><a href="/?teamSlug=${encodeURIComponent(system.team)}">${escape(system.team)}</a><span>/</span><span>${escape(system.name)}</span>`;
+    `<a href="/?teamSlug=${encodeURIComponent(system.team)}">← ${escape(system.team)}</a>`;
   document.querySelector('.dashboard-heading [data-create="system"]').hidden = true;
   document.querySelector("#systems-title").textContent = "Repositories";
-  document.querySelector("#system-summary").textContent = "Foundation + components";
+  document.querySelector("#system-summary").textContent = "";
   grid.classList.add("system-overview");
-  grid.innerHTML = `<a class="foundation-card" href="${projectUrl(org, system.repo)}"><span class="system-icon">◇</span><div><span class="eyebrow">FOUNDATION</span><h2>Design tokens & shared styles</h2><p>The shared language of your system. Colors, spacing, typography, and reusable styles.</p><code>${escape(org)} / ${escape(system.repo)}</code></div><span class="open-label">Open Foundation →</span></a><div class="section-heading components-heading"><div><h2>Components</h2><p class="section-note">Each component is a repository in this design system.</p></div><button class="primary-button" id="new-component" type="button" disabled>＋ New component</button></div><p id="system-publication" class="publication-note" role="status">Checking published Foundation…</p><div id="overview-components" class="system-grid"><span class="loading">Loading components…</span></div><dialog id="component-dialog" aria-labelledby="component-dialog-title"><button class="dialog-close" type="button" aria-label="Close dialog">×</button><form id="overview-component-form" class="creation-form"><h2 id="component-dialog-title">Create a component</h2><p class="form-description">A new repository in ${escape(org)}, connected to this system’s published Foundation.</p><label for="overview-component-name">Component name</label><input id="overview-component-name" name="name" required maxlength="100" autocomplete="off"><button type="submit">Create component</button><p role="status" id="component-create-status"></p></form></dialog>`;
+  grid.innerHTML = `<a class="foundation-card repository-row" aria-label="Open Foundation" href="${projectUrl(org, system.repo)}"><span class="system-icon">◇</span><div class="repository-copy"><h2>Foundation</h2><span class="repository-description">Tokens & styles</span></div><span id="system-publication" class="publication-note" role="status">Checking…</span><span class="row-arrow" aria-hidden="true">→</span></a><div class="section-heading components-heading"><h2>Components <span id="component-count"></span></h2><button class="primary-button" id="new-component" type="button" disabled>＋ New component</button></div><p id="component-hint" class="publication-note" hidden></p><div id="overview-components" class="system-grid"><span class="loading">Loading components…</span></div><dialog id="component-dialog" aria-labelledby="component-dialog-title"><button class="dialog-close" type="button" aria-label="Close dialog">×</button><form id="overview-component-form" class="creation-form"><h2 id="component-dialog-title">Create a component</h2><p class="form-description">A new repository in ${escape(org)}, connected to this system’s published Foundation.</p><label for="overview-component-name">Component name</label><input id="overview-component-name" name="name" required maxlength="100" autocomplete="off"><button type="submit">Create component</button><p role="status" id="component-create-status"></p></form></dialog>`;
   const dialog = grid.querySelector("dialog");
+  const filter = document.querySelector("#system-filter");
+  filter.value = "";
+  filter.placeholder = "Find a component…";
+  filter.setAttribute("aria-label", "Find a component");
+  grid.querySelector(".components-heading").after(filter.parentElement);
   grid.querySelector("#new-component").addEventListener("click", () => dialog.showModal());
   dialog.querySelector(".dialog-close").addEventListener("click", () => dialog.close());
   grid.querySelector("form").addEventListener("submit", async (event) => {
@@ -99,14 +122,18 @@ export async function renderSystemOverview(system, grid) {
           throw new Error("Could not load component repositories. Reload to try again.");
         }
         const projects = (await response.json()).filter((item) => item.team === org && item.type === "component");
+        if (!components.isConnected) {
+          return;
+        }
+        grid.querySelector("#component-count").textContent = projects.length;
         components.innerHTML =
           projects
             .map(
               (item) =>
-                `<a class="system-card" href="${projectUrl(org, item.repo)}"><div class="card-top"><span class="system-icon">▱</span><span class="team-tag">Component</span></div><h3>${escape(item.name || item.repo)}</h3><p>${escape(item.description || "A reusable part of your design system.")}</p><span class="card-footer"><code>${escape(item.repo)}</code><span class="open-label">Open studio →</span></span></a>`,
+                `<a class="system-card repository-row" href="${projectUrl(org, item.repo)}"><span class="system-icon">▱</span><div class="repository-copy"><h3>${escape(item.name || item.repo)}</h3>${item.description ? `<span class="repository-description">${escape(item.description)}</span>` : ""}</div><span class="row-arrow" aria-hidden="true">→</span></a>`,
             )
-            .join("") ||
-          '<div class="empty"><h3>Your first component starts here</h3><p>Publish your Foundation tokens, then create a component to open the design studio.</p></div>';
+            .join("") || '<div class="empty">No components yet.</div>';
+        filterRepositories();
       } catch (error) {
         components.innerHTML = `<div class="empty">${escape(error.message)}</div>`;
       }
@@ -117,12 +144,22 @@ export async function renderSystemOverview(system, grid) {
           `/static/${encodeURIComponent(org)}/${encodeURIComponent(system.repo)}/latest/tokens.css`,
           { method: "HEAD", cache: "no-store" },
         );
+        if (!publication.isConnected) {
+          return;
+        }
         grid.querySelector("#new-component").disabled = !response.ok;
-        publication.innerHTML = response.ok
-          ? '<span class="status-dot"></span> Foundation published · Ready to create components'
-          : `Publish tokens.css from <a href="${projectUrl(org, system.repo)}">Foundation →</a> to unlock component creation.`;
+        publication.innerHTML = response.ok ? '<span class="status-dot"></span> Published' : "Unpublished";
+        const hint = grid.querySelector("#component-hint");
+        hint.hidden = response.ok;
+        hint.textContent = "Publish Foundation tokens to create components.";
       } catch {
-        publication.textContent = "Could not verify Foundation publication. Reload to try again.";
+        if (!publication.isConnected) {
+          return;
+        }
+        publication.textContent = "Unavailable";
+        const hint = grid.querySelector("#component-hint");
+        hint.hidden = false;
+        hint.textContent = "Could not verify Foundation publication. Reload to try again.";
       }
     })(),
   ]);

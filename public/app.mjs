@@ -2,6 +2,7 @@ import { createStudio } from "./studio.mjs";
 import { registerEditorFallback } from "./editor-fallback.mjs";
 import {
   initializeNavigation,
+  filterRepositories,
   dashboardHeading,
   renderSystemOverview,
   workbenchNavigation,
@@ -82,6 +83,7 @@ function setNotice(message, signIn = false) {
     : "";
 }
 function renderTeams() {
+  document.querySelector("#team-navigation-label").textContent = selectedTeam === "all" ? "All teams" : selectedTeam;
   const availableTeams = [
     ...new Set([
       ...teams.map((team) => (typeof team === "string" ? team : team.slug)),
@@ -121,6 +123,9 @@ function renderTeams() {
         return;
       }
       selectedTeam = button.dataset.team;
+      if (window.matchMedia("(max-width: 760px)").matches) {
+        document.querySelector(".team-drawer").open = false;
+      }
       history.replaceState(null, "", selectedTeam === "all" ? "/" : `/?teamSlug=${encodeURIComponent(selectedTeam)}`);
       renderTeams();
       renderSystems();
@@ -128,6 +133,8 @@ function renderTeams() {
   }
 }
 function renderSystems() {
+  document.querySelector("#system-filter").value = "";
+  document.querySelector("#filter-empty").hidden = true;
   const org = new URLSearchParams(location.search).get("system");
   if (org) {
     const system = systems.find((item) => (item.org || item.team) === org);
@@ -140,18 +147,18 @@ function renderSystems() {
   }
   dashboardHeading(selectedTeam);
   const visible = selectedTeam === "all" ? systems : systems.filter((system) => system.team === selectedTeam);
-  document.querySelector("#system-summary").textContent =
-    `${visible.length} ${visible.length === 1 ? "design system" : "design systems"}`;
+  document.querySelector("#system-summary").textContent = "";
   if (!visible.length) {
-    systemGrid.innerHTML = `<div class="empty">${systems.length ? "There are no design systems in this team yet." : "No design systems found in these teams yet. Create one above."}</div>`;
+    systemGrid.innerHTML = '<div class="empty">No systems yet.</div>';
     return;
   }
   systemGrid.innerHTML = visible
     .map(
       (system) =>
-        `<a class="system-card" href="${systemUrl(system.org || system.team)}" aria-label="Open ${escapeHtml(system.name || system.repo)}"><div class="card-top"><span class="system-icon">${icon}</span><span class="team-tag">${escapeHtml(system.team)}</span></div><h3>${escapeHtml(system.name || system.repo)}</h3><p>${escapeHtml(system.description || "Foundation and component repositories.")}</p><span class="card-footer"><span>${escapeHtml(system.org || system.team)}</span><span class="open-label">Open ${arrow}</span></span></a>`,
+        `<a class="system-card repository-row" href="${systemUrl(system.org || system.team)}" aria-label="Open ${escapeHtml(system.name || system.repo)}"><span class="system-icon">${icon}</span><div class="repository-copy"><h3>${escapeHtml(system.name || system.repo)}</h3>${system.description ? `<span class="repository-description">${escapeHtml(system.description)}</span>` : ""}</div>${selectedTeam === "all" ? `<span class="team-tag">${escapeHtml(system.team)}</span>` : ""}<span class="row-arrow">${arrow}</span></a>`,
     )
     .join("");
+  filterRepositories();
 }
 async function loadWorkspace() {
   const authenticated = await loadUser();

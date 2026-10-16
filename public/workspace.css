@@ -611,7 +611,7 @@ dialog::backdrop {
   padding: 24px 32px;
   max-width: 1400px;
   width: 100%;
-  margin: auto;
+  margin: 0 auto;
 }
 .foundation-studio .foundation-title {
   margin-bottom: 16px;
@@ -673,13 +673,182 @@ dialog::backdrop {
   background: #3f3f46;
   border-radius: 4px;
 }
+/* Repository browsing is a compact work surface, not a gallery of promotional cards. */
+.team-drawer > summary {
+  display: none;
+}
+.list-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.list-toolbar input {
+  width: min(280px, 100%);
+  min-width: 0;
+  height: 36px;
+  padding: 8px 10px;
+  border: 1px solid #27272a;
+  border-radius: 4px;
+  background: #18181b;
+  color: #e4e4e7;
+  font-size: 12px;
+}
+.list-toolbar .section-note {
+  margin-left: auto;
+  font-size: 11px;
+}
+.dashboard-heading:has(#dashboard-title[hidden]) {
+  float: right;
+  position: relative;
+  z-index: 1;
+}
+.dashboard-heading:has(#dashboard-title[hidden]) > div {
+  display: none;
+}
+.dashboard-main:has(#dashboard-title[hidden]) > .section {
+  margin-top: 0;
+}
+.dashboard-main:has(#dashboard-title[hidden]) .list-toolbar {
+  padding-right: 12px;
+}
+.dashboard-main:has(#dashboard-title[hidden]) #system-summary {
+  display: none;
+}
+.team-drawer .team-list {
+  margin: 12px 0;
+}
+.team-drawer .sidebar-create {
+  width: 100%;
+}
+.dashboard-layout {
+  grid-template-columns: 220px minmax(0, 1fr);
+}
+.dashboard-main {
+  max-width: none;
+  margin: 0;
+  padding: 16px 24px 32px;
+}
+.breadcrumbs {
+  margin-bottom: 16px;
+}
+.dashboard-heading {
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+}
+.dashboard-heading h1 {
+  font-size: 22px;
+}
+.dashboard-main .section {
+  margin-top: 20px;
+}
+.dashboard-main .section-heading {
+  margin-bottom: 10px;
+}
+.dashboard-main .section:has(.system-overview) > .section-heading {
+  display: none;
+}
+.dashboard-main .system-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.dashboard-main .repository-row {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 12px;
+  min-height: 60px;
+  padding: 12px;
+  border: 1px solid #27272a;
+  border-radius: 0;
+  background: #18181b;
+}
+.dashboard-main .repository-row + .repository-row {
+  border-top: 0;
+}
+.dashboard-main .repository-row:first-child {
+  border-radius: 5px 5px 0 0;
+}
+.dashboard-main .repository-row:last-child {
+  border-radius: 0 0 5px 5px;
+}
+.dashboard-main .repository-row:only-child {
+  border-radius: 5px;
+}
+.dashboard-main .foundation-card.repository-row {
+  border-radius: 5px;
+}
+.dashboard-main .repository-row:hover {
+  background: #202024;
+}
+.dashboard-main .repository-row .system-icon {
+  flex: 0 0 30px;
+  width: 30px;
+  height: 30px;
+  font-size: 18px;
+}
+.dashboard-main .repository-copy {
+  flex: 1;
+  min-width: 0;
+}
+.dashboard-main .repository-copy h2,
+.dashboard-main .repository-copy h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.repository-description {
+  display: block;
+  font-size: 11px;
+  color: #a1a1aa;
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.row-arrow {
+  color: #71717a;
+  flex-shrink: 0;
+  font-size: 16px;
+}
+.row-arrow svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+.dashboard-main .publication-note {
+  margin: 0;
+  font-size: 10px;
+  white-space: nowrap;
+}
+.dashboard-main .components-heading {
+  margin: 20px 0 10px;
+}
+#component-count {
+  color: #71717a;
+  margin-left: 6px;
+}
+.dashboard-main #component-hint {
+  margin: 0 0 10px;
+  white-space: normal;
+}
+.dashboard-main .empty {
+  padding: 20px 12px;
+  text-align: left;
+  font-size: 12px;
+}
 @media (max-width: 1000px) {
   .dashboard-layout {
     grid-template-columns: 210px minmax(0, 1fr);
   }
   .dashboard-heading {
-    align-items: flex-start;
-    flex-direction: column;
+    align-items: center;
+    flex-direction: row;
   }
   .foundation-card {
     flex-wrap: wrap;
@@ -692,14 +861,52 @@ dialog::backdrop {
   }
 }
 @media (max-width: 760px) {
+  .dashboard-main:has(.system-overview) .breadcrumbs {
+    display: none;
+  }
+  .system-overview .list-toolbar input {
+    width: 100%;
+  }
   .dashboard-layout {
     display: block;
   }
   .workspace-sidebar {
     border-right: 0;
     border-bottom: 1px solid #27272a;
-    padding: 12px 16px;
-    gap: 10px;
+    padding: 0 12px;
+    gap: 0;
+  }
+  .team-drawer > summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 44px;
+    font-size: 12px;
+    list-style: none;
+  }
+  .team-drawer > summary::after {
+    content: "⌄";
+    color: #a1a1aa;
+  }
+  .team-drawer[open] > summary::after {
+    content: "⌃";
+  }
+  .team-drawer > summary::-webkit-details-marker {
+    display: none;
+  }
+  .team-drawer .team-list {
+    flex-direction: column;
+  }
+  .team-drawer .team-button {
+    min-height: 44px;
+  }
+  .team-drawer .sidebar-create {
+    min-height: 44px;
+    margin-bottom: 12px;
+  }
+  #landing .header .user-copy,
+  #landing .header .user-avatar {
+    display: none;
   }
   .workspace-sidebar .team-list {
     flex-direction: row;
@@ -716,13 +923,19 @@ dialog::backdrop {
     align-self: flex-start;
   }
   .dashboard-main {
-    padding: 20px 16px 40px;
+    padding: 12px 12px 24px;
   }
   .breadcrumbs {
-    margin-bottom: 28px;
+    margin-bottom: 12px;
+    font-size: 11px;
   }
   .dashboard-heading h1 {
-    font-size: 26px;
+    font-size: 20px;
+  }
+  .dashboard-main .primary-button {
+    min-height: 36px;
+    padding: 7px 9px;
+    font-size: 11px;
   }
   .foundation-card {
     padding: 18px;

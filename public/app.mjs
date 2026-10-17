@@ -44,10 +44,10 @@ function escapeHtml(value) {
 }
 function setUserCard(target, user, authenticated) {
   if (!authenticated) {
-    target.innerHTML =
-      '<span class="user-avatar">?</span><span class="user-copy"><span class="user-name">Guest</span><span class="user-label">Sign in to browse design systems</span></span><a class="user-action" href="/api/oidc/login">Sign in</a>';
+    target.hidden = true;
     return;
   }
+  target.hidden = false;
   const label = user.name || user.preferred_username || user.email || "Signed in";
   const initials =
     label
@@ -81,6 +81,19 @@ function setNotice(message, signIn = false) {
   notice.innerHTML = message
     ? `${escapeHtml(message)}${signIn ? ' <a href="/api/oidc/login">Sign in</a> to continue.' : ""}`
     : "";
+}
+function showGuestWelcome(message, footnote) {
+  landing.hidden = false;
+  workspace.style.display = "none";
+  const dashboardLayout = document.querySelector("#dashboard-layout");
+  dashboardLayout.hidden = true;
+  dashboardLayout.setAttribute("aria-busy", "false");
+  document.querySelector("#guest-welcome").hidden = false;
+  const error = document.querySelector("#welcome-error");
+  error.textContent = message;
+  error.hidden = !message;
+  document.querySelector("#welcome-footnote").textContent = footnote;
+  document.querySelector("#welcome-footnote").hidden = !footnote;
 }
 function renderTeams() {
   document.querySelector("#team-navigation-label").textContent = selectedTeam === "all" ? "All teams" : selectedTeam;
@@ -163,19 +176,25 @@ function renderSystems() {
 async function loadWorkspace() {
   const authenticated = await loadUser();
   authenticatedUser = authenticated;
+  const dashboardLayout = document.querySelector("#dashboard-layout");
   if (!authenticated) {
-    landing.hidden = false;
     const authError = new URLSearchParams(location.search).get("auth_error") === "1";
-    setNotice(
-      authError
-        ? "Sign-in could not be completed. Please try again."
-        : "Sign in to browse design systems in this workspace.",
-      true,
+    const isProjectLink = Boolean(
+      new URLSearchParams(location.search).get("team") && new URLSearchParams(location.search).get("repo"),
     );
-    teamList.innerHTML = '<span class="section-note">Sign in to load teams.</span>';
-    systemGrid.innerHTML = '<div class="empty">Your design systems will appear here after sign-in.</div>';
+    showGuestWelcome(
+      authError
+        ? "We couldn’t complete sign-in. Please try again."
+        : isProjectLink
+          ? "Sign in to open this project. After signing in, return to your project link."
+          : "",
+      isProjectLink ? "Your project link will still be here when you’re ready." : "",
+    );
     return;
   }
+  dashboardLayout.hidden = false;
+  dashboardLayout.setAttribute("aria-busy", "false");
+  document.querySelector("#guest-welcome").hidden = true;
   document.querySelector("#creation-controls").hidden = false;
   document.querySelectorAll("[data-create]").forEach((button) => {
     button.hidden = false;
@@ -337,7 +356,10 @@ async function loadWorkbench(team, repo) {
   const area = document.querySelector("#project-content");
   const user = await loadUser();
   if (!user) {
-    status.textContent = "Sign in to open this project.";
+    showGuestWelcome(
+      "Sign in to open this project. After signing in, return to your project link.",
+      "Your project link will still be here when you’re ready.",
+    );
     return;
   }
   const projectResponse = await fetch("/api/projects", { credentials: "same-origin" });

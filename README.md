@@ -197,6 +197,8 @@ All pages share the studio’s dark zinc/blue visual language. Workspace navigat
 
 The landing and system views use searchable, compact rows rather than descriptive cards. On mobile, the team switcher collapses into one row so repositories remain visible without scrolling through navigation. Foundation publication status appears inline, with additional guidance only when publication blocks component creation.
 
+Signed-out visitors see a separate welcome page with one sign-in action, not an empty workspace. To verify the deployed welcome and real OIDC journey, run `WDS_LAB_SMOKE=true pnpm exec playwright test test/welcome.lab.browser.spec.mjs` with `AUTH_LAB_KEY` provided through the environment. It uses the existing lab OIDC client, checks mobile/desktop welcome, PKCE sign-in, authenticated team/system access, and logout, and closes both sessions. It creates no persistent test data. These live checks are skipped by default.
+
 - `/`: all design systems, grouped through the team sidebar.
 - `/?teamSlug=<team>`: one metadata team’s systems (the team may own several Git organizations).
 - `/?system=<git-org>`: a design system overview and component creation, unlocked by published Foundation tokens.

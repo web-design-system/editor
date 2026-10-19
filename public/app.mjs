@@ -1,5 +1,6 @@
 import { createStudio } from "./studio.mjs";
 import { registerEditorFallback } from "./editor-fallback.mjs";
+import { createRepositoryCard, createTeamItem, initializeUiComponents } from "./ui-components.mjs";
 import {
   initializeNavigation,
   filterRepositories,
@@ -10,6 +11,14 @@ import {
   systemUrl,
 } from "./navigation.mjs";
 initializeNavigation();
+let uiComponentsReady = false;
+const uiComponentsLoad = Promise.race([
+  initializeUiComponents(),
+  new Promise((resolve) => window.setTimeout(() => resolve(false), 2000)),
+]).then((ready) => {
+  uiComponentsReady = ready;
+  return ready;
+});
 
 const landing = document.querySelector("#landing");
 const workspace = document.querySelector("#workspace");
@@ -122,14 +131,22 @@ function renderTeams() {
       selector.value = selectedTeam;
     }
   }
-  teamList.innerHTML = buttons.length
-    ? buttons
-        .map(
-          (team) =>
-            `<button class="team-button flex w-full items-center gap-2 rounded px-2 py-2 text-left text-[13px] text-zinc-300 hover:bg-zinc-800 aria-pressed:bg-blue-500/10 aria-pressed:text-blue-400" type="button" data-team="${escapeHtml(team.id)}" aria-pressed="${selectedTeam === team.id}"><span class="team-dot size-1.5 shrink-0 rounded-full bg-zinc-500"></span><span class="min-w-0 flex-1 truncate">${escapeHtml(team.label)}</span><span class="team-count text-[11px] text-zinc-500">${team.count}</span></button>`,
-        )
-        .join("")
-    : '<span class="section-note text-sm text-zinc-500">Teams will appear here when you have access to a design system.</span>';
+  if (buttons.length && uiComponentsReady) {
+    teamList.replaceChildren(
+      ...buttons.map((team) =>
+        createTeamItem({ id: team.id, label: team.label, count: team.count, selected: selectedTeam === team.id }),
+      ),
+    );
+  } else {
+    teamList.innerHTML = buttons.length
+      ? buttons
+          .map(
+            (team) =>
+              `<button class="team-button flex w-full items-center gap-2 rounded px-2 py-2 text-left text-[13px] text-zinc-300 hover:bg-zinc-800 aria-pressed:bg-blue-500/10 aria-pressed:text-blue-400" type="button" data-team="${escapeHtml(team.id)}" aria-pressed="${selectedTeam === team.id}"><span class="team-dot size-1.5 shrink-0 rounded-full bg-zinc-500"></span><span class="min-w-0 flex-1 truncate">${escapeHtml(team.label)}</span><span class="team-count text-[11px] text-zinc-500">${team.count}</span></button>`,
+          )
+          .join("")
+      : '<span class="section-note text-sm text-zinc-500">Teams will appear here when you have access to a design system.</span>';
+  }
   for (const button of teamList.querySelectorAll("[data-team]")) {
     button.addEventListener("click", () => {
       if (new URLSearchParams(location.search).has("system")) {
@@ -169,12 +186,28 @@ function renderSystems() {
       '<div class="empty rounded border border-dashed border-zinc-700 bg-zinc-900/50 p-5 text-left text-xs text-zinc-400">No systems yet.</div>';
     return;
   }
-  systemGrid.innerHTML = visible
-    .map(
-      (system) =>
-        `<a class="system-card repository-row flex min-h-[60px] min-w-0 items-center gap-3 rounded-[5px] border border-zinc-800 bg-zinc-900 p-3 text-left transition-colors hover:bg-[#202024]" href="${systemUrl(system.org || system.team)}" aria-label="Open ${escapeHtml(system.name || system.repo)}"><span class="system-icon flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[5px] border border-zinc-700 bg-zinc-800 text-lg text-zinc-400">${icon}</span><div class="repository-copy min-w-0 flex-1"><h3 class="m-0 [overflow-wrap:anywhere] text-[13px] font-medium leading-[1.4] text-zinc-100">${escapeHtml(system.name || system.repo)}</h3>${system.description ? `<span class="repository-description mt-0.5 block overflow-hidden text-ellipsis whitespace-nowrap text-[11px] text-zinc-400">${escapeHtml(system.description)}</span>` : ""}</div>${selectedTeam === "all" ? `<span class="team-tag max-w-[65%] overflow-hidden text-ellipsis whitespace-nowrap text-[11px] text-zinc-500">${escapeHtml(system.team)}</span>` : ""}<span class="row-arrow shrink-0 text-base text-zinc-500">${arrow}</span></a>`,
-    )
-    .join("");
+  if (uiComponentsReady) {
+    systemGrid.replaceChildren(
+      ...visible.map((system) =>
+        createRepositoryCard({
+          href: systemUrl(system.org || system.team),
+          name: system.name || system.repo,
+          description: system.description,
+          team: selectedTeam === "all" ? system.team : "",
+          icon: "▱",
+          accessibleName: `Open ${system.name || system.repo}`,
+          className: "system-card",
+        }),
+      ),
+    );
+  } else {
+    systemGrid.innerHTML = visible
+      .map(
+        (system) =>
+          `<a class="system-card repository-row flex min-h-[60px] min-w-0 items-center gap-3 rounded-[5px] border border-zinc-800 bg-zinc-900 p-3 text-left transition-colors hover:bg-[#202024]" href="${systemUrl(system.org || system.team)}" aria-label="Open ${escapeHtml(system.name || system.repo)}"><span class="system-icon flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[5px] border border-zinc-700 bg-zinc-800 text-lg text-zinc-400">${icon}</span><div class="repository-copy min-w-0 flex-1"><h3 class="m-0 [overflow-wrap:anywhere] text-[13px] font-medium leading-[1.4] text-zinc-100">${escapeHtml(system.name || system.repo)}</h3>${system.description ? `<span class="repository-description mt-0.5 block overflow-hidden text-ellipsis whitespace-nowrap text-[11px] text-zinc-400">${escapeHtml(system.description)}</span>` : ""}</div>${selectedTeam === "all" ? `<span class="team-tag max-w-[65%] overflow-hidden text-ellipsis whitespace-nowrap text-[11px] text-zinc-500">${escapeHtml(system.team)}</span>` : ""}<span class="row-arrow shrink-0 text-base text-zinc-500">${arrow}</span></a>`,
+      )
+      .join("");
+  }
   filterRepositories();
 }
 async function loadWorkspace() {
@@ -196,6 +229,7 @@ async function loadWorkspace() {
     );
     return;
   }
+  await uiComponentsLoad;
   dashboardLayout.hidden = false;
   dashboardLayout.setAttribute("aria-busy", "false");
   document.querySelector("#guest-welcome").hidden = true;

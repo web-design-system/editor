@@ -1,0 +1,107 @@
+<!-- Atoms: the smallest reusable presentation primitives. -->
+<template component="wds-icon" shadow-dom="open">
+  <link rel="stylesheet" href="/css/tailwind.css" />
+  <span aria-hidden="true" class="inline-flex items-center justify-center"><span>{{ glyph }}</span></span>
+  <script setup>
+    import { defineProp } from "@li3/web";
+    export default function () {
+      const glyph = defineProp("glyph", { default: "" });
+      return { glyph };
+    }
+  </script>
+</template>
+
+<!-- Molecules: composed, independently reusable interface units. -->
+<template component="wds-team-item" shadow-dom="open">
+  <link rel="stylesheet" href="/css/tailwind.css" />
+  <button
+    type="button"
+    class="flex w-full items-center gap-2 rounded px-2 py-2 text-left text-[13px] text-zinc-300 hover:bg-zinc-800 aria-pressed:bg-blue-500/10 aria-pressed:text-blue-400"
+    attr-aria-pressed="selected"
+  >
+    <span class="size-1.5 shrink-0 rounded-full bg-zinc-500"></span>
+    <span class="min-w-0 flex-1 truncate">{{ label }}</span
+    ><span class="shrink-0 text-[11px] text-zinc-500">{{ count }}</span>
+  </button>
+  <script setup>
+    import { defineProp } from "@li3/web";
+    export default function () {
+      const teamId = defineProp("team-id", { default: "" });
+      const label = defineProp("label", { default: "" });
+      const count = defineProp("count", { default: "" });
+      const selected = defineProp("selected", { default: false });
+      return { teamId, label, count, selected };
+    }
+  </script>
+</template>
+
+<template component="wds-repository-card" shadow-dom="open">
+  <link rel="stylesheet" href="/css/tailwind.css" />
+  <a
+    class="repository-row flex min-h-[60px] items-center gap-3 rounded-[5px] border border-zinc-800 bg-zinc-900 p-3 text-left transition-colors hover:bg-[#202024]"
+    bind-href="href"
+    attr-aria-label="accessibleName"
+  >
+    <wds-icon
+      class="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[5px] border border-zinc-700 bg-zinc-800 text-lg text-zinc-400"
+      bind-glyph="icon"
+    ></wds-icon>
+    <span class="min-w-0 flex-1">
+      <span class="block [overflow-wrap:anywhere] text-[13px] font-medium leading-[1.4] text-zinc-100">{{ name }}</span>
+      <template if="description"
+        ><span class="mt-0.5 block overflow-hidden text-ellipsis whitespace-nowrap text-[11px] text-zinc-400"
+          >{{ description }}</span
+        ></template
+      >
+      <template if="team"
+        ><span class="mt-2 block max-w-[65%] overflow-hidden text-ellipsis whitespace-nowrap text-[11px] text-zinc-500"
+          >{{ team }}</span
+        ></template
+      >
+    </span>
+    <slot name="status"></slot>
+    <span class="shrink-0 text-base text-zinc-500" aria-hidden="true">→</span>
+  </a>
+  <script setup>
+    import { defineProp } from "@li3/web";
+    export default function () {
+      const href = defineProp("href", { default: "" });
+      const name = defineProp("name", { default: "" });
+      const description = defineProp("description", { default: "" });
+      const team = defineProp("team", { default: "" });
+      const icon = defineProp("icon", { default: "" });
+      const kind = defineProp("kind", { default: "component" });
+      const accessibleName = defineProp("accessible-name", { default: "" });
+      return { href, name, description, team, icon, kind, accessibleName };
+    }
+  </script>
+</template>
+
+<!-- Organisms: larger semantic regions that compose molecules. -->
+<template component="wds-sidebar-panel" shadow-dom="open">
+  <link rel="stylesheet" href="/css/tailwind.css" />
+  <aside
+    class="flex h-full flex-col gap-4 border-r border-zinc-800 bg-zinc-900 px-3 py-5 max-[760px]:gap-0 max-[760px]:border-r-0 max-[760px]:border-b max-[760px]:px-3 max-[760px]:py-0"
+    attr-aria-label="ariaLabel"
+  >
+    <slot></slot>
+  </aside>
+  <script setup>
+    import { defineProp } from "@li3/web";
+    export default function () {
+      const ariaLabel = defineProp("aria-label", { default: "Sidebar" });
+      return { ariaLabel };
+    }
+  </script>
+</template>
+
+<!-- Layouts: named structural regions; host supplies page-level grid utilities. -->
+<template component="wds-dashboard-layout" shadow-dom="open">
+  <link rel="stylesheet" href="/css/tailwind.css" />
+  <div
+    class="grid min-h-dvh grid-cols-[220px_minmax(0,1fr)] max-[1000px]:grid-cols-[210px_minmax(0,1fr)] max-[760px]:block"
+  >
+    <slot name="sidebar" class="contents"></slot>
+    <slot name="main" class="contents"></slot>
+  </div>
+</template>

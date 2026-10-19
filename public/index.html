@@ -93,15 +93,12 @@
           </div>
         </div>
       </section>
-      <div
+      <wds-dashboard-layout
         class="dashboard-layout grid min-h-dvh grid-cols-[220px_minmax(0,1fr)] aria-busy:invisible max-[760px]:block"
         id="dashboard-layout"
         aria-busy="true"
       >
-        <aside
-          class="workspace-sidebar flex flex-col gap-4 border-r border-zinc-800 bg-zinc-900 px-3 py-5 max-[760px]:gap-0 max-[760px]:border-r-0 max-[760px]:border-b max-[760px]:px-3 max-[760px]:py-0"
-          aria-label="Workspace navigation"
-        >
+        <wds-sidebar-panel class="workspace-sidebar block min-w-0" slot="sidebar" aria-label="Workspace navigation">
           <details class="team-drawer" open>
             <summary
               class="hidden max-[760px]:flex max-[760px]:min-h-11 max-[760px]:items-center max-[760px]:justify-between max-[760px]:text-xs max-[760px]:list-none"
@@ -130,9 +127,10 @@
               ＋ New team
             </button>
           </details>
-        </aside>
+        </wds-sidebar-panel>
         <main
           class="main dashboard-main min-w-0 w-full max-w-none px-6 py-4 pb-8 max-[760px]:px-3 max-[760px]:py-3"
+          slot="main"
           aria-label="Workspace"
         >
           <nav
@@ -185,7 +183,7 @@
             </p>
           </section>
         </main>
-      </div>
+      </wds-dashboard-layout>
       <dialog
         class="mx-auto my-auto w-[min(480px,calc(100%-32px))] max-h-[calc(100dvh-48px)] overflow-auto rounded-lg border border-zinc-700 bg-zinc-900 p-7 text-zinc-300 shadow-[0_24px_80px_#0008] backdrop:bg-[#09090bcc] backdrop:backdrop-blur"
         id="creation-dialog"

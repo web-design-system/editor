@@ -2,3 +2,4 @@
 
 @source "./public/index.html";
 @source "./public/**/*.mjs";
+@source "./public/components/**/*.html";

@@ -22,7 +22,8 @@ test("landing page lists teams and design systems without depending on component
   assert.match(app, /systemForm\.addEventListener\("submit"/);
   assert.match(app, /couldn’t complete sign-in/);
   assert.match(html, /id="guest-welcome"/);
-  assert.doesNotMatch(html, /<wds-[a-z-]+/);
+  const guestLanding = html.match(/<section[\s\S]*?id="guest-welcome"[\s\S]*?<\/section>/)?.[0] || "";
+  assert.doesNotMatch(guestLanding, /<wds-[a-z-]+/);
 });
 
 test("workbench exposes project source and authoring workflows", async () => {

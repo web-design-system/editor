@@ -14,26 +14,14 @@
   </head>
   <body>
     <div class="shell" id="landing">
-      <header class="header">
-        <a class="brand" href="/" aria-label="WDS home"
-          ><span class="brand-mark">W</span><span class="brand-name">Workbench</span></a
-        >
-        <div class="user-card" id="user-card" aria-live="polite" hidden>
-          <span class="user-avatar">·</span
-          ><span class="user-copy"
-            ><span class="user-name">Loading account…</span><span class="user-label">Design systems</span></span
-          >
-        </div>
-      </header>
       <section class="guest-welcome" id="guest-welcome" aria-labelledby="welcome-title" hidden>
         <div class="welcome-copy">
-          <p class="welcome-eyebrow"><span></span> WDS · DESIGN STUDIO</p>
-          <h1 id="welcome-title">A home for your team’s UI.</h1>
+          <h1 id="welcome-title">A home for your team’s UX</h1>
           <p class="welcome-description" id="welcome-description">
             Design components, edit code, and share the foundations of your product—all in one studio.
           </p>
           <p class="welcome-error" id="welcome-error" role="status" hidden></p>
-          <a class="welcome-action" href="/api/oidc/login">Sign in to WDS <span aria-hidden="true">→</span></a>
+          <a class="welcome-action" href="/api/oidc/login">Get started <span aria-hidden="true">→</span></a>
           <p class="welcome-footnote" id="welcome-footnote" hidden></p>
         </div>
         <div class="welcome-preview" aria-hidden="true">
@@ -46,7 +34,6 @@
               <div class="preview-component"><span></span><b></b><i></i></div>
             </div>
           </div>
-          <p class="preview-caption">Tokens · Components · Code</p>
         </div>
       </section>
       <div class="dashboard-layout" id="dashboard-layout" aria-busy="true">

@@ -28,7 +28,7 @@ test.describe("deployed Auth Lab welcome journey", () => {
         await page.goto("https://wds.lab.apphor.de/");
         await expect(page.locator("#guest-welcome")).toBeVisible();
         await expect(page.locator("#dashboard-layout")).toBeHidden();
-        await expect(page.getByRole("link", { name: "Sign in to WDS" })).toHaveCount(1);
+        await expect(page.getByRole("link", { name: "Get started" })).toHaveCount(1);
         const unauthorized = await context.request.get("https://wds.lab.apphor.de/api/teams");
         expect(unauthorized.status()).toBe(401);
         await page.screenshot({ path: test.info().outputPath(`lab-welcome-${width}.png`), fullPage: true });
@@ -38,7 +38,7 @@ test.describe("deployed Auth Lab welcome journey", () => {
           data: { key: process.env.AUTH_LAB_KEY },
         });
         expect(login.ok()).toBe(true);
-        await page.getByRole("link", { name: "Sign in to WDS" }).click();
+        await page.getByRole("link", { name: "Get started" }).click();
         await page.waitForURL((url) => url.origin === "https://wds.lab.apphor.de" && url.pathname === "/");
         await expect(page.locator("#dashboard-layout")).toBeVisible();
         await expect(page.locator("#guest-welcome")).toBeHidden();

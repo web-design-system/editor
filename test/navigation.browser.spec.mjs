@@ -7,9 +7,12 @@ for (const width of [1440, 360]) {
     page.on("pageerror", (error) => errors.push(error.message));
     await page.route("**/api/oidc/me", (route) => route.fulfill({ json: { authenticated: false } }));
     await page.goto("http://127.0.0.1:4175/");
-    await expect(page.getByRole("heading", { name: "A home for your team’s UI." })).toBeVisible();
-    await expect(page.getByRole("link", { name: /Sign in to WDS/ })).toHaveAttribute("href", "/api/oidc/login");
+    await expect(page.getByRole("heading", { name: "A home for your team’s UX" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Get started" })).toHaveAttribute("href", "/api/oidc/login");
     await expect(page.locator('a[href="/api/oidc/login"]')).toHaveCount(1);
+    await expect(page.locator("#landing > .header")).toHaveCount(0);
+    await expect(page.locator(".welcome-eyebrow, .preview-caption")).toHaveCount(0);
+    await expect(page.getByText("Tokens · Components · Code")).toHaveCount(0);
     await expect(page.locator("#dashboard-layout")).toBeHidden();
     await expect(page.getByRole("searchbox", { name: "Find a system" })).toBeHidden();
     await expect(page.locator("#notice")).toBeHidden();
@@ -18,13 +21,20 @@ for (const width of [1440, 360]) {
     if (width === 360) {
       const welcome = await page.locator("#guest-welcome").boundingBox();
       expect(welcome.y + welcome.height).toBeLessThanOrEqual(740);
+    } else {
+      const lineCount = await page.locator("#welcome-title").evaluate((element) => {
+        const range = document.createRange();
+        range.selectNodeContents(element);
+        return range.getClientRects().length;
+      });
+      expect(lineCount).toBe(1);
     }
     await page.screenshot({ path: test.info().outputPath(`guest-${width}.png`), fullPage: true });
 
     await page.goto("http://127.0.0.1:4175/?auth_error=1");
     await expect(page.locator("#welcome-error")).toBeVisible();
     await expect(page.locator("#welcome-error")).toContainText("couldn’t complete sign-in");
-    await expect(page.getByRole("link", { name: /Sign in to WDS/ })).toHaveAttribute("href", "/api/oidc/login");
+    await expect(page.getByRole("link", { name: "Get started" })).toHaveAttribute("href", "/api/oidc/login");
     await page.screenshot({ path: test.info().outputPath(`guest-auth-error-${width}.png`), fullPage: true });
 
     await page.goto("http://127.0.0.1:4175/?team=acme&repo=button");

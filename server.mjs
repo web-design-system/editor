@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { mkdir, readFile, writeFile, readdir, cp, mkdtemp, rm, lstat } from "node:fs/promises";
+import { mkdir, readFile, writeFile, readdir, cp, mkdtemp, rm, lstat, symlink } from "node:fs/promises";
 import { existsSync, lstatSync } from "node:fs";
 import { dirname, join, normalize, extname, relative, resolve, sep } from "node:path";
 import { execFile } from "node:child_process";
@@ -1439,7 +1439,13 @@ async function publishSnapshot(path, team, repo, version = null, sourceRevisionO
         path,
         Object.fromEntries(Object.entries(files).filter(([file]) => extname(file) === ".css")),
       );
-      await exec(tailwind, ["-i", "styles.css", "-o", "editor.css", "--minify"], { cwd: artifactPath });
+      const dependenciesPath = join(artifactPath, "node_modules");
+      await symlink(join(root, "node_modules"), dependenciesPath, "dir");
+      try {
+        await exec(tailwind, ["-i", "styles.css", "-o", "editor.css", "--minify"], { cwd: artifactPath });
+      } finally {
+        await rm(dependenciesPath, { force: true });
+      }
       const generated = await readFile(join(artifactPath, "editor.css"));
       await rm(join(artifactPath, "editor.css"));
       await rm(join(artifactPath, "styles.css"));

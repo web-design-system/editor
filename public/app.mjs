@@ -57,7 +57,8 @@ function setUserCard(target, user, authenticated) {
       .map((part) => part[0])
       .join("")
       .toUpperCase() || "W";
-  target.innerHTML = `<span class="user-avatar">${escapeHtml(initials)}</span><span class="user-copy"><span class="user-name">${escapeHtml(label)}</span><span class="user-label">${escapeHtml(user.email || "WDS account")}</span></span><a class="user-action" href="/api/oidc/logout">Sign out</a>`;
+  const studio = target.closest("#workspace")?.classList.contains("design-studio");
+  target.innerHTML = `<span class="user-avatar ${studio ? "hidden" : "inline-flex size-9 max-[560px]:size-7"} shrink-0 items-center justify-center rounded-full bg-zinc-800 text-[11px] font-medium text-zinc-400">${escapeHtml(initials)}</span><span class="user-copy ${studio ? "hidden" : "flex"} min-w-0 flex-col"><span class="user-name truncate font-semibold">${escapeHtml(label)}</span><span class="user-label truncate text-xs text-zinc-500 max-[560px]:hidden">${escapeHtml(user.email || "WDS account")}</span></span><a class="user-action shrink-0 text-sm font-semibold text-blue-400 hover:underline max-[560px]:text-xs" href="/api/oidc/logout">Sign out</a>`;
 }
 async function loadUser() {
   let data = {};
@@ -79,12 +80,12 @@ function setNotice(message, signIn = false) {
   const notice = document.querySelector("#notice");
   notice.hidden = !message;
   notice.innerHTML = message
-    ? `${escapeHtml(message)}${signIn ? ' <a href="/api/oidc/login">Sign in</a> to continue.' : ""}`
+    ? `${escapeHtml(message)}${signIn ? ' <a class="font-semibold text-blue-400 hover:underline" href="/api/oidc/login">Sign in</a> to continue.' : ""}`
     : "";
 }
 function showGuestWelcome(message, footnote) {
   landing.hidden = false;
-  workspace.style.display = "none";
+  workspace.classList.add("hidden");
   const dashboardLayout = document.querySelector("#dashboard-layout");
   dashboardLayout.hidden = true;
   dashboardLayout.setAttribute("aria-busy", "false");
@@ -125,10 +126,10 @@ function renderTeams() {
     ? buttons
         .map(
           (team) =>
-            `<button class="team-button" type="button" data-team="${escapeHtml(team.id)}" aria-pressed="${selectedTeam === team.id}"><span class="team-dot"></span><span>${escapeHtml(team.label)}</span><span class="team-count">${team.count}</span></button>`,
+            `<button class="team-button flex w-full items-center gap-2 rounded px-2 py-2 text-left text-[13px] text-zinc-300 hover:bg-zinc-800 aria-pressed:bg-blue-500/10 aria-pressed:text-blue-400" type="button" data-team="${escapeHtml(team.id)}" aria-pressed="${selectedTeam === team.id}"><span class="team-dot size-1.5 shrink-0 rounded-full bg-zinc-500"></span><span class="min-w-0 flex-1 truncate">${escapeHtml(team.label)}</span><span class="team-count text-[11px] text-zinc-500">${team.count}</span></button>`,
         )
         .join("")
-    : '<span class="section-note">Teams will appear here when you have access to a design system.</span>';
+    : '<span class="section-note text-sm text-zinc-500">Teams will appear here when you have access to a design system.</span>';
   for (const button of teamList.querySelectorAll("[data-team]")) {
     button.addEventListener("click", () => {
       if (new URLSearchParams(location.search).has("system")) {
@@ -146,6 +147,7 @@ function renderTeams() {
   }
 }
 function renderSystems() {
+  systemGrid.classList.add("flex", "flex-col", "gap-0");
   document.querySelector("#system-filter").value = "";
   document.querySelector("#filter-empty").hidden = true;
   const org = new URLSearchParams(location.search).get("system");
@@ -154,7 +156,8 @@ function renderSystems() {
     if (system) {
       renderSystemOverview(system, systemGrid);
     } else {
-      systemGrid.innerHTML = '<div class="empty">Design system not found. <a href="/">Return to workspace →</a></div>';
+      systemGrid.innerHTML =
+        '<div class="empty rounded border border-dashed border-zinc-700 bg-zinc-900/50 p-5 text-left text-xs text-zinc-400">Design system not found. <a class="font-semibold text-blue-400 hover:underline" href="/">Return to workspace →</a></div>';
     }
     return;
   }
@@ -162,13 +165,14 @@ function renderSystems() {
   const visible = selectedTeam === "all" ? systems : systems.filter((system) => system.team === selectedTeam);
   document.querySelector("#system-summary").textContent = "";
   if (!visible.length) {
-    systemGrid.innerHTML = '<div class="empty">No systems yet.</div>';
+    systemGrid.innerHTML =
+      '<div class="empty rounded border border-dashed border-zinc-700 bg-zinc-900/50 p-5 text-left text-xs text-zinc-400">No systems yet.</div>';
     return;
   }
   systemGrid.innerHTML = visible
     .map(
       (system) =>
-        `<a class="system-card repository-row" href="${systemUrl(system.org || system.team)}" aria-label="Open ${escapeHtml(system.name || system.repo)}"><span class="system-icon">${icon}</span><div class="repository-copy"><h3>${escapeHtml(system.name || system.repo)}</h3>${system.description ? `<span class="repository-description">${escapeHtml(system.description)}</span>` : ""}</div>${selectedTeam === "all" ? `<span class="team-tag">${escapeHtml(system.team)}</span>` : ""}<span class="row-arrow">${arrow}</span></a>`,
+        `<a class="system-card repository-row flex min-h-[60px] min-w-0 items-center gap-3 rounded-[5px] border border-zinc-800 bg-zinc-900 p-3 text-left transition-colors hover:bg-[#202024]" href="${systemUrl(system.org || system.team)}" aria-label="Open ${escapeHtml(system.name || system.repo)}"><span class="system-icon flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[5px] border border-zinc-700 bg-zinc-800 text-lg text-zinc-400">${icon}</span><div class="repository-copy min-w-0 flex-1"><h3 class="m-0 [overflow-wrap:anywhere] text-[13px] font-medium leading-[1.4] text-zinc-100">${escapeHtml(system.name || system.repo)}</h3>${system.description ? `<span class="repository-description mt-0.5 block overflow-hidden text-ellipsis whitespace-nowrap text-[11px] text-zinc-400">${escapeHtml(system.description)}</span>` : ""}</div>${selectedTeam === "all" ? `<span class="team-tag max-w-[65%] overflow-hidden text-ellipsis whitespace-nowrap text-[11px] text-zinc-500">${escapeHtml(system.team)}</span>` : ""}<span class="row-arrow shrink-0 text-base text-zinc-500">${arrow}</span></a>`,
     )
     .join("");
   filterRepositories();
@@ -211,8 +215,9 @@ async function loadWorkspace() {
     if (!teamsResponse.ok || !systemsResponse.ok) {
       const data = await responseData(teamsResponse.ok ? systemsResponse : teamsResponse);
       setNotice(data.error || "Could not load teams and design systems.");
-      teamList.innerHTML = '<span class="section-note">Teams are unavailable.</span>';
-      systemGrid.innerHTML = '<div class="empty">Could not load design systems. Please try again.</div>';
+      teamList.innerHTML = '<span class="section-note text-sm text-zinc-500">Teams are unavailable.</span>';
+      systemGrid.innerHTML =
+        '<div class="empty rounded border border-dashed border-zinc-700 bg-zinc-900/50 p-5 text-left text-xs text-zinc-400">Could not load design systems. Please try again.</div>';
       return;
     }
     const teamData = await teamsResponse.json();
@@ -233,8 +238,9 @@ async function loadWorkspace() {
     renderSystems();
   } catch {
     setNotice("Could not connect to the design-system service.");
-    teamList.innerHTML = '<span class="section-note">Teams are unavailable.</span>';
-    systemGrid.innerHTML = '<div class="empty">Could not load design systems. Please try again.</div>';
+    teamList.innerHTML = '<span class="section-note text-sm text-zinc-500">Teams are unavailable.</span>';
+    systemGrid.innerHTML =
+      '<div class="empty rounded border border-dashed border-zinc-700 bg-zinc-900/50 p-5 text-left text-xs text-zinc-400">Could not load design systems. Please try again.</div>';
   }
 }
 async function responseData(response) {
@@ -343,7 +349,7 @@ const team = params.get("team");
 const repo = params.get("repo");
 if (team && repo) {
   landing.hidden = true;
-  workspace.style.display = "block";
+  workspace.classList.remove("hidden");
   document.querySelector("#workspace-name").textContent = `${team} / ${repo}`;
   document.title = `${repo} · Workbench`;
   loadWorkbench(team, repo);
@@ -393,10 +399,44 @@ async function loadWorkbench(team, repo) {
   }
   if (project.type === "design-system") {
     const components = projects.filter((item) => item.team === team && item.type === "component");
-    area.innerHTML = `<div class="studio-heading"><div><p class="studio-kicker">${escapeHtml(team)} / ${escapeHtml(repo)} · Foundation</p><h1>${escapeHtml(project.name || repo)}</h1><p>Shared tokens and a CSS reset for every page that uses this styleguide.</p></div><div class="studio-actions"><span class="state-pill" id="foundation-state">Ready</span><button type="button" id="save-tokens" disabled>Save Foundation</button><button type="button" class="secondary-action" id="publish-tokens">Publish</button></div></div><div class="foundation-layout"><nav class="studio-nav" aria-label="Foundation navigation"><details class="project-drawer" open><summary>Foundation navigation</summary><div class="project-nav-content"><strong>System</strong><a class="nav-context" href="/?team=${encodeURIComponent(team)}&amp;repo=${encodeURIComponent(repo)}">${escapeHtml(project.name || repo)}</a><strong>Foundation files</strong><a href="#foundation-tokens">tokens.css</a><a href="#foundation-reset">reset.css</a><strong>Components</strong><div class="component-list">${components.map((item) => `<a href="/?team=${encodeURIComponent(team)}&amp;repo=${encodeURIComponent(item.repo)}">${escapeHtml(item.name || item.repo)}<small>${escapeHtml(item.repo)}</small></a>`).join("") || "<p>No components yet.</p>"}</div></div></details></nav><section class="foundation-main"><div class="foundation-title"><div><p class="eyebrow">FOUNDATION REPOSITORY</p><h2 id="foundation-tokens">tokens.css</h2><p>Shared source for every component in this system.</p></div></div><div id="foundation-urls" class="foundation-urls" aria-label="Published Foundation stylesheet URLs"></div><code-editor id="tokens-editor" role="group" aria-label="Foundation CSS"></code-editor><div class="action-row"><label><span class="visually-hidden">Describe your changes</span><input aria-label="Describe your changes" id="tokens-message" placeholder="Describe your changes" maxlength="200"></label></div><p id="token-status" role="status" aria-live="polite"></p><section class="foundation-components"><div><h2>Component projects</h2><p>New components use this system’s published tokens at latest.</p></div><p id="token-publication-state" role="status" aria-live="polite">Checking published tokens…</p><form id="component-create" hidden><label>Component name<input name="name" required maxlength="100" autocomplete="off"></label><p>Available after tokens.css is published.</p><button type="submit">Add component</button></form><p id="create-status" role="status" aria-live="polite"></p></section></section></div>`;
+    area.innerHTML = `<div class="studio-heading flex w-full max-w-none items-center justify-between gap-5 border-b border-zinc-800 bg-zinc-900 px-5 py-3 max-[600px]:items-start max-[600px]:flex-col"><div class="min-w-0"><p class="studio-kicker hidden">${escapeHtml(team)} / ${escapeHtml(repo)} · Foundation</p><h1 class="text-[15px] font-medium tracking-normal text-zinc-100">${escapeHtml(project.name || repo)}</h1><p class="hidden">Shared tokens and a CSS reset for every page that uses this styleguide.</p></div><div class="studio-actions flex-wrap"><span class="state-pill whitespace-nowrap px-2.5 py-1.5 text-xs text-zinc-400" id="foundation-state">Ready</span><button type="button" id="save-tokens" disabled>Save Foundation</button><button class="secondary-action" type="button" id="publish-tokens">Publish</button></div></div><div class="foundation-layout grid min-h-[calc(100dvh-110px)] w-full max-w-none grid-cols-[256px_minmax(0,1fr)] overflow-hidden bg-zinc-950 max-[760px]:grid-cols-1"><nav class="studio-nav flex min-w-0 flex-col gap-3 bg-zinc-900 px-3 py-4 max-[760px]:border-b max-[760px]:border-zinc-800" aria-label="Foundation navigation"><details class="project-drawer border-t border-slate-700 pt-3" open><summary class="cursor-pointer text-xs font-bold text-slate-300">Foundation navigation</summary><div class="project-nav-content flex flex-col gap-3 border-t border-slate-700 pt-3"><strong class="text-xs font-bold uppercase tracking-wide text-slate-400">System</strong><a class="nav-context rounded-md bg-indigo-950 p-2 text-indigo-200" href="/?team=${encodeURIComponent(team)}&amp;repo=${encodeURIComponent(repo)}">${escapeHtml(project.name || repo)}</a><strong class="text-xs font-bold uppercase tracking-wide text-slate-400">Foundation files</strong><a class="rounded-md px-2 py-1 text-sm text-slate-300 hover:bg-slate-800" href="#foundation-tokens">tokens.css</a><a class="rounded-md px-2 py-1 text-sm text-slate-300 hover:bg-slate-800" href="#foundation-reset">reset.css</a><strong class="text-xs font-bold uppercase tracking-wide text-slate-400">Components</strong><div class="component-list flex flex-col gap-2">${components.map((item) => `<a class="rounded-lg border border-slate-700 p-2 text-sm font-medium text-slate-200 hover:border-indigo-400 hover:bg-slate-800" href="/?team=${encodeURIComponent(team)}&amp;repo=${encodeURIComponent(item.repo)}">${escapeHtml(item.name || item.repo)}<small class="mt-1 block truncate text-xs text-slate-400">${escapeHtml(item.repo)}</small></a>`).join("") || '<p class="text-sm text-slate-400">No components yet.</p>'}</div></div></details></nav><section class="foundation-main mx-auto w-full max-w-[1400px] min-w-0 px-8 py-6 max-[760px]:px-4 max-[760px]:py-5"><div class="foundation-title mb-4"><div><p class="eyebrow text-[10px] font-semibold tracking-[.12em] text-zinc-500">FOUNDATION REPOSITORY</p><h2 class="font-mono text-base font-normal text-zinc-100" id="foundation-tokens">tokens.css</h2><p class="mt-1 text-xs text-zinc-400">Shared source for every component in this system.</p></div></div><div id="foundation-urls" class="foundation-urls my-4 grid min-w-0 grid-cols-1 items-end gap-2 sm:grid-cols-[minmax(0,1fr)_auto]" aria-label="Published Foundation stylesheet URLs"></div><code-editor class="my-4 block h-[430px] min-h-[430px] w-full overflow-hidden rounded border border-zinc-800" id="tokens-editor" role="group" aria-label="Foundation CSS"></code-editor><div class="action-row mt-3 flex items-end gap-2"><label class="grid max-w-xs gap-1 text-xs text-slate-300"><span class="visually-hidden">Describe your changes</span><input class="w-full rounded-md border border-slate-600 bg-slate-800 p-2 text-sm text-slate-100" aria-label="Describe your changes" id="tokens-message" placeholder="Describe your changes" maxlength="200"></label></div><p class="text-xs text-zinc-400" id="token-status" role="status" aria-live="polite"></p><section class="foundation-components mt-7 border-t border-slate-700 pt-5"><div><h2 class="text-sm font-medium text-zinc-100">Component projects</h2><p class="mt-1 text-xs text-zinc-400">New components use this system’s published tokens at latest.</p></div><p class="rounded border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs text-zinc-400" id="token-publication-state" role="status" aria-live="polite">Checking published tokens…</p><form class="mt-4 grid gap-3 rounded border border-zinc-800 bg-zinc-900 p-3" id="component-create" hidden><label class="grid min-w-0 gap-1 text-xs text-zinc-400">Component name<input class="w-full rounded border border-zinc-700 bg-zinc-950 px-2.5 py-2 text-[13px] text-zinc-300" name="name" required maxlength="100" autocomplete="off"></label><p class="text-xs text-zinc-400">Available after tokens.css is published.</p><button class="min-h-[30px] justify-self-start rounded bg-zinc-100 px-3 py-1.5 text-xs font-medium text-zinc-900" type="submit">Add component</button></form><p class="text-xs text-zinc-400" id="create-status" role="status" aria-live="polite"></p></section></section></div>`;
 
     const tokensEditor = area.querySelector("#tokens-editor");
     const tokenStatus = area.querySelector("#token-status");
+    document.querySelector("#work-status").classList.add("hidden");
+    document.querySelector("#work-area").classList.remove("p-6");
+    document.querySelector("#work-area").classList.add("p-0");
+    const foundationActions = area.querySelector(".studio-actions");
+    foundationActions.classList.add("flex", "items-center", "justify-end", "gap-2", "max-[600px]:flex-wrap");
+    area
+      .querySelector("#save-tokens")
+      .classList.add(
+        "min-h-[30px]",
+        "rounded",
+        "bg-zinc-100",
+        "px-3",
+        "py-1.5",
+        "text-xs",
+        "font-medium",
+        "text-zinc-900",
+        "hover:bg-white",
+        "disabled:cursor-not-allowed",
+        "disabled:opacity-30",
+      );
+    area.querySelector("#foundation-state").classList.add("border-0", "bg-transparent");
+    area
+      .querySelector("#publish-tokens")
+      .classList.add(
+        "min-h-[30px]",
+        "rounded",
+        "bg-zinc-700",
+        "px-3",
+        "py-1.5",
+        "text-xs",
+        "font-medium",
+        "text-white",
+        "hover:bg-zinc-600",
+      );
     tokensEditor.value = source.files["tokens.css"] || "";
     tokensEditor.language = "css";
     tokensEditor.status = "tokens.css";
@@ -409,7 +449,8 @@ async function loadWorkbench(team, repo) {
     const artifactUrl = `/static/${encodeURIComponent(team)}/${encodeURIComponent(repo)}/latest/tokens.css`;
     const resetUrl = `/static/${encodeURIComponent(team)}/${encodeURIComponent(repo)}/latest/reset.css`;
     const urls = area.querySelector("#foundation-urls");
-    urls.innerHTML = `<label>Public tokens.css URL<input readonly value="${escapeHtml(new URL(artifactUrl, location.origin).href)}"></label><button type="button" aria-label="Copy tokens.css URL" data-copy-url="tokens.css">Copy</button><label>Public reset.css URL<input readonly value="${escapeHtml(new URL(resetUrl, location.origin).href)}"></label><button type="button" aria-label="Copy reset.css URL" data-copy-url="reset.css">Copy</button><span role="status" aria-live="polite"></span>`;
+    urls.classList.add("p-4");
+    urls.innerHTML = `<label class="grid min-w-0 gap-1 text-sm text-zinc-400">Public tokens.css URL<input class="h-9 w-full min-w-0 rounded border border-zinc-700 bg-zinc-950 px-2.5 py-2 text-xs text-zinc-300" readonly value="${escapeHtml(new URL(artifactUrl, location.origin).href)}"></label><button class="min-h-[30px] rounded bg-zinc-100 px-3 py-1.5 text-xs font-medium text-zinc-900 hover:bg-white" type="button" aria-label="Copy tokens.css URL" data-copy-url="tokens.css">Copy</button><label class="grid min-w-0 gap-1 text-sm text-zinc-400">Public reset.css URL<input class="h-9 w-full min-w-0 rounded border border-zinc-700 bg-zinc-950 px-2.5 py-2 text-xs text-zinc-300" readonly value="${escapeHtml(new URL(resetUrl, location.origin).href)}"></label><button class="min-h-[30px] rounded bg-zinc-100 px-3 py-1.5 text-xs font-medium text-zinc-900 hover:bg-white" type="button" aria-label="Copy reset.css URL" data-copy-url="reset.css">Copy</button><span role="status" aria-live="polite"></span>`;
     urls.querySelectorAll("button[data-copy-url]").forEach((button) =>
       button.addEventListener("click", async () => {
         try {
@@ -519,7 +560,7 @@ async function loadWorkbench(team, repo) {
   if (source.files["component.mjs"] !== undefined) {
     files["component.mjs"] = source.files["component.mjs"];
   }
-  area.innerHTML = `<div class="studio-heading"><div><p class="studio-kicker"><a href="/?team=${encodeURIComponent(team)}&amp;repo=${encodeURIComponent(project.designSystem?.repo || "foundation")}">${escapeHtml(project.designSystem?.repo || "Workspace")}</a> / ${escapeHtml(repo)} · Component</p><h1>${escapeHtml(project.name || repo)}</h1><p>Component authoring · canonical source</p></div><div class="studio-actions"><span class="state-pill" id="draft-state">Draft · ${escapeHtml(source.revision)}</span><button type="button" id="history-toggle" aria-expanded="false">History</button><button type="button" id="save-source">Commit</button><button type="button" class="secondary-action" id="publish-source">Publish</button></div></div><div class="studio-shell"><nav class="studio-nav" aria-label="Project navigation"><details class="project-drawer" open><summary>Project & files</summary><div class="project-nav-content"><strong>System</strong><a class="nav-context" href="/?team=${encodeURIComponent(team)}&amp;repo=${encodeURIComponent(project.designSystem?.repo || "foundation")}">${escapeHtml(project.designSystem?.repo || "Design system")}</a><strong>Current component</strong><span class="current-component">${escapeHtml(project.name || repo)}</span><strong>Files</strong><label class="file-label" for="source-file">Select source file</label><select id="source-file" size="${Object.keys(files).length}">${Object.keys(
+  area.innerHTML = `<div class="studio-heading mx-auto mb-5 flex max-w-screen-2xl flex-wrap items-center justify-between gap-5"><div class="min-w-0"><p class="studio-kicker text-sm font-bold text-indigo-700"><a href="/?team=${encodeURIComponent(team)}&amp;repo=${encodeURIComponent(project.designSystem?.repo || "foundation")}">${escapeHtml(project.designSystem?.repo || "Workspace")}</a> / ${escapeHtml(repo)} · Component</p><h1 class="text-3xl font-semibold tracking-tight text-slate-900">${escapeHtml(project.name || repo)}</h1><p class="mt-1 text-sm text-slate-500">Component authoring · canonical source</p></div><div class="studio-actions flex flex-wrap items-center justify-end gap-2"><span class="state-pill whitespace-nowrap rounded-full border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-600" id="draft-state">Draft · ${escapeHtml(source.revision)}</span><button class="min-h-10 rounded-md bg-indigo-600 px-4 font-semibold text-white hover:bg-indigo-700" type="button" id="history-toggle" aria-expanded="false">History</button><button class="min-h-10 rounded-md bg-indigo-600 px-4 font-semibold text-white hover:bg-indigo-700" type="button" id="save-source">Commit</button><button class="secondary-action min-h-10 rounded-md bg-slate-700 px-4 font-semibold text-white" type="button" id="publish-source">Publish</button></div></div><div class="studio-shell mx-auto grid min-h-[650px] max-w-screen-2xl grid-cols-1 overflow-hidden rounded-xl border border-slate-200 bg-white lg:grid-cols-[205px_minmax(0,1fr)_235px]"><nav class="studio-nav flex min-w-0 flex-col gap-3 border-b border-slate-200 bg-slate-50 p-4 md:border-r md:border-b-0" aria-label="Project navigation"><details class="project-drawer border-t border-slate-200 pt-3" open><summary class="cursor-pointer text-xs font-bold text-slate-600">Project & files</summary><div class="project-nav-content flex flex-col gap-3 border-t border-slate-200 pt-3"><strong class="text-xs font-bold uppercase tracking-wide text-slate-500">System</strong><a class="nav-context rounded-md bg-indigo-50 p-2 text-indigo-800" href="/?team=${encodeURIComponent(team)}&amp;repo=${encodeURIComponent(project.designSystem?.repo || "foundation")}">${escapeHtml(project.designSystem?.repo || "Design system")}</a><strong>Current component</strong><span class="current-component break-words text-sm text-slate-600">${escapeHtml(project.name || repo)}</span><strong>Files</strong><label class="file-label text-xs text-slate-600" for="source-file">Select source file</label><select class="min-h-24 w-full rounded-md border border-slate-300 bg-white p-1" id="source-file" size="${Object.keys(files).length}">${Object.keys(
     files,
   )
     .concat(files["component.mjs"] === undefined ? ["component.mjs"] : [])
@@ -529,7 +570,7 @@ async function loadWorkbench(team, repo) {
     )
     .join(
       "",
-    )}</select><label class="module-toggle"><input type="checkbox" id="enable-module" ${files["component.mjs"] !== undefined ? "checked" : ""}> Include component.mjs</label><details class="history-drawer"><summary>History & status</summary><label>Commit message<input id="commit-message" value="Update component source" maxlength="200"></label><p id="save-status" role="status" aria-live="polite"></p><button type="button" id="refresh-history">Refresh history</button><ol id="history-list"></ol><p id="publish-result" role="status" aria-live="polite"></p></details></div></details></nav><main class="authoring-main"><div class="mode-bar"><div role="tablist" aria-label="Authoring mode"><button type="button" class="mode-button active" data-mode="design" role="tab" aria-selected="true">Design</button><button type="button" class="mode-button" data-mode="code" role="tab" aria-selected="false">Code</button></div><label class="viewport-control">Canvas width <input type="range" id="canvas-width" min="320" max="1200" value="760"><output id="canvas-width-label">760 px</output></label></div><section class="design-surface" data-surface="design"><div class="surface-heading"><h2>Design canvas</h2><span class="preview-limit">Draft preview · sandboxed · scripts are not executed</span></div><iframe title="Draft component preview" sandbox="" id="draft-preview"></iframe></section><section class="code-surface" data-surface="code" hidden><div class="surface-heading"><h2>Code · <span id="active-file-label">component.html</span></h2><span>Edits update the canonical draft source.</span></div><code-editor id="source-editor" role="group" aria-label="Component source"></code-editor></section></main><aside class="studio-inspector"><details class="inspector-drawer" open><summary>Inspector · selected target</summary><div class="inspector-fields"><p>Template root · <code>data-wds-editable</code></p><p id="selected-classes"></p><label>Padding<select data-utility="padding"><option value="">none</option><option>p-2</option><option>p-4</option><option>p-6</option><option>p-8</option></select></label><label>Margin<select data-utility="margin"><option value="">none</option><option>m-2</option><option>m-4</option><option>mt-4</option><option>mb-4</option><option>mx-auto</option></select></label><label>Background<select data-utility="background"><option value="">none</option><option>bg-indigo-600</option><option>bg-blue-600</option><option>bg-slate-900</option><option>bg-white</option></select></label><label>Text color<select data-utility="text"><option value="">none</option><option>text-white</option><option>text-slate-900</option><option>text-indigo-700</option></select></label><label>Custom Tailwind utility<input id="custom-utility" placeholder="rounded-lg" maxlength="80"></label><button type="button" id="apply-utility">Apply utility</button></div></details></aside></div>`;
+    )}</select><label class="module-toggle flex items-center gap-2 text-xs text-slate-600"><input type="checkbox" id="enable-module" ${files["component.mjs"] !== undefined ? "checked" : ""}> Include component.mjs</label><details class="history-drawer mt-2 border-t border-slate-200 pt-3"><summary class="cursor-pointer text-xs font-bold text-indigo-800">History & status</summary><label class="grid gap-1 text-xs text-slate-600">Commit message<input class="w-full rounded-md border border-slate-300 bg-white p-2" id="commit-message" value="Update component source" maxlength="200"></label><p class="text-xs text-slate-600" id="save-status" role="status" aria-live="polite"></p><button class="min-h-10 rounded-md bg-indigo-600 px-4 font-semibold text-white" type="button" id="refresh-history">Refresh history</button><ol class="max-h-48 list-decimal space-y-2 overflow-auto pl-5 text-xs text-slate-600" id="history-list"></ol><p class="text-xs text-slate-600" id="publish-result" role="status" aria-live="polite"></p></details></div></details></nav><main class="authoring-main order-1 min-w-0 p-4 lg:order-none"><div class="mode-bar flex flex-wrap items-center justify-between gap-3"><div class="flex gap-0.5 rounded-lg border border-slate-200 p-1" role="tablist" aria-label="Authoring mode"><button type="button" class="mode-button active rounded-md px-3.5 py-2 aria-selected:bg-indigo-50 aria-selected:text-indigo-800" data-mode="design" role="tab" aria-selected="true">Design</button><button type="button" class="mode-button rounded-md px-3.5 py-2 aria-selected:bg-indigo-50 aria-selected:text-indigo-800" data-mode="code" role="tab" aria-selected="false">Code</button></div><label class="viewport-control flex items-center gap-2 text-xs text-slate-500">Canvas width <input class="w-[min(180px,24vw)]" type="range" id="canvas-width" min="320" max="1200" value="760"><output id="canvas-width-label">760 px</output></label></div><section class="design-surface min-w-0" data-surface="design"><div class="surface-heading my-4 flex items-baseline justify-between gap-3"><h2>Design canvas</h2><span class="preview-limit text-xs text-slate-500">Draft preview · sandboxed · scripts are not executed</span></div><iframe class="mx-auto block min-h-[340px] w-full transition-[width] duration-150 md:min-h-[470px]" title="Draft component preview" sandbox="" id="draft-preview"></iframe></section><section class="code-surface min-w-0" data-surface="code" hidden><div class="surface-heading my-4 flex items-baseline justify-between gap-3"><h2>Code · <span id="active-file-label">component.html</span></h2><span>Edits update the canonical draft source.</span></div><code-editor class="block h-[370px] min-h-[370px] w-full md:h-[500px] md:min-h-[500px]" id="source-editor" role="group" aria-label="Component source"></code-editor></section></main><aside class="studio-inspector order-2 border-t border-slate-200 bg-slate-50 p-4 lg:order-none lg:border-t-0 lg:border-l"><details class="inspector-drawer" open><summary class="cursor-pointer text-xs font-bold text-slate-600">Inspector · selected target</summary><div class="inspector-fields flex flex-col gap-3 border-t border-slate-200 pt-3"><p class="text-xs text-slate-600">Template root · <code class="rounded bg-slate-200 px-1 py-0.5 font-mono">data-wds-editable</code></p><p class="break-all rounded bg-white p-2 font-mono text-xs text-slate-600" id="selected-classes"></p><label class="grid gap-1 text-xs text-slate-600">Padding<select class="w-full rounded-md border border-slate-300 bg-white p-2" data-utility="padding"><option value="">none</option><option>p-2</option><option>p-4</option><option>p-6</option><option>p-8</option></select></label><label class="grid gap-1 text-xs text-slate-600">Margin<select class="w-full rounded-md border border-slate-300 bg-white p-2" data-utility="margin"><option value="">none</option><option>m-2</option><option>m-4</option><option>mt-4</option><option>mb-4</option><option>mx-auto</option></select></label><label class="grid gap-1 text-xs text-slate-600">Background<select class="w-full rounded-md border border-slate-300 bg-white p-2" data-utility="background"><option value="">none</option><option>bg-indigo-600</option><option>bg-blue-600</option><option>bg-slate-900</option><option>bg-white</option></select></label><label class="grid gap-1 text-xs text-slate-600">Text color<select class="w-full rounded-md border border-slate-300 bg-white p-2" data-utility="text"><option value="">none</option><option>text-white</option><option>text-slate-900</option><option>text-indigo-700</option></select></label><label class="grid gap-1 text-xs text-slate-600">Custom Tailwind utility<input class="w-full rounded-md border border-slate-300 bg-white p-2" id="custom-utility" placeholder="rounded-lg" maxlength="80"></label><button class="min-h-10 rounded-md bg-indigo-600 px-4 font-semibold text-white" type="button" id="apply-utility">Apply utility</button></div></details></aside></div>`;
   area.querySelector("#history-toggle").addEventListener("click", (event) => {
     const navigation = area.querySelector(".project-drawer");
     const history = area.querySelector(".history-drawer");
@@ -581,12 +622,10 @@ async function loadWorkbench(team, repo) {
   area.querySelectorAll("[data-mode]").forEach((button) =>
     button.addEventListener("click", () => {
       area.querySelectorAll("[data-mode]").forEach((item) => {
-        item.classList.toggle("active", item === button);
         item.setAttribute("aria-selected", String(item === button));
       });
-      area.querySelector(".studio-shell").classList.toggle("code-mode", button.dataset.mode === "code");
       area.querySelectorAll("[data-surface]").forEach((surface) => {
-        surface.hidden = surface.dataset.surface !== button.dataset.mode;
+        surface.hidden = surface.dataset.surface === "code" && button.dataset.mode !== "code";
       });
     }),
   );

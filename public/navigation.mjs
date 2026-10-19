@@ -71,12 +71,28 @@ export async function renderSystemOverview(system, grid) {
   document.querySelector("#systems-title").textContent = "Repositories";
   document.querySelector("#system-summary").textContent = "";
   grid.classList.add("system-overview");
-  grid.innerHTML = `<a class="foundation-card repository-row" aria-label="Open Foundation" href="${projectUrl(org, system.repo)}"><span class="system-icon">◇</span><div class="repository-copy"><h2>Foundation</h2><span class="repository-description">Shared design tokens & styles</span></div><span id="system-publication" class="publication-note" role="status">Checking…</span><span class="row-arrow" aria-hidden="true">→</span></a><section id="foundation-setup" class="foundation-setup" hidden><span class="eyebrow">FIRST, SET UP FOUNDATION</span><h2>Give every component the same design language.</h2><p>Foundation holds the shared design tokens—CSS variables for color, spacing, and type. Components use these variables to stay consistent and update together.</p><a class="setup-action" href="${projectUrl(org, system.repo)}">Open Foundation <span aria-hidden="true">→</span></a><p class="setup-footnote">Add your values to <code>tokens.css</code>, save, then publish. You can create components once the published tokens are ready.</p></section><section id="component-area" class="component-area" hidden><div class="section-heading components-heading"><h2>Components <span id="component-count"></span></h2></div><div class="component-toolbar"><div class="component-search"></div><button class="primary-button" id="new-component" type="button">＋ New component</button></div><div id="overview-components" class="system-grid"></div><p id="filter-empty" class="empty" hidden>No matches.</p></section><dialog id="component-dialog" aria-labelledby="component-dialog-title"><button class="dialog-close" type="button" aria-label="Close dialog">×</button><form id="overview-component-form" class="creation-form"><h2 id="component-dialog-title">Create a component</h2><p class="form-description">A new repository in ${escape(org)}, connected to this system’s published Foundation.</p><label for="overview-component-name">Component name</label><input id="overview-component-name" name="name" required maxlength="100" autocomplete="off"><button type="submit">Create component</button><p role="status" id="component-create-status"></p></form></dialog>`;
+  grid.classList.add("flex", "flex-col", "gap-0");
+  grid.innerHTML = `<a class="foundation-card repository-row flex min-h-[60px] flex-nowrap items-center gap-3 border border-zinc-800 bg-zinc-900 p-3 hover:bg-[#202024] rounded-[5px]" aria-label="Open Foundation" href="${projectUrl(org, system.repo)}"><span class="system-icon flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[5px] border border-blue-500/25 bg-blue-500/10 text-xl text-blue-400">◇</span><div class="repository-copy min-w-0 flex-1"><h2 class="m-0 text-[13px] font-medium leading-[1.4] [overflow-wrap:anywhere]">Foundation</h2><span class="repository-description mt-0.5 block overflow-hidden text-ellipsis whitespace-nowrap text-[11px] text-zinc-400">Shared design tokens & styles</span></div><span id="system-publication" class="publication-note m-0 whitespace-nowrap text-[10px] text-zinc-400" role="status">Checking…</span><span class="row-arrow shrink-0 text-base text-zinc-500" aria-hidden="true">→</span></a><section id="foundation-setup" class="foundation-setup mt-[18px] max-w-[760px] rounded-[5px] border border-zinc-700 bg-gradient-to-br from-zinc-900 to-[#141417] p-5 sm:px-[22px]" hidden><span class="eyebrow mb-[9px] block text-[10px] font-semibold tracking-[.12em] text-blue-400">FIRST, SET UP FOUNDATION</span><h2 class="m-0 text-base font-medium tracking-[-.02em] text-zinc-100">Give every component the same design language.</h2><p class="max-w-[620px] text-xs leading-[1.7] text-zinc-400">Foundation holds the shared design tokens—CSS variables for color, spacing, and type. Components use these variables to stay consistent and update together.</p><a class="setup-action mt-1 inline-flex items-center gap-2.5 rounded border border-blue-500 bg-blue-500/10 px-[11px] py-2 text-xs font-medium text-blue-200 hover:bg-blue-500/20">Open Foundation <span aria-hidden="true">→</span></a><p class="setup-footnote mb-0 mt-3 text-[11px] text-zinc-400">Add your values to <code class="font-mono text-[11px] text-zinc-300">tokens.css</code>, save, then publish. You can create components once the published tokens are ready.</p></section><section id="component-area" class="component-area" hidden><div class="section-heading components-heading my-5 flex items-center justify-between gap-3"><h2 class="text-sm font-medium text-zinc-100">Components <span id="component-count" class="ml-1.5 text-zinc-500"></span></h2></div><div class="component-toolbar mb-2.5 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2.5 sm:gap-2"><div class="component-search"></div><button class="primary-button min-h-9 rounded border border-zinc-100 bg-zinc-100 px-3 py-2 text-xs font-medium text-zinc-900 hover:bg-white" id="new-component" type="button">＋ New component</button></div><div id="overview-components" class="system-grid flex flex-col gap-0"></div><p id="filter-empty" class="empty m-0 rounded border border-dashed border-zinc-700 bg-zinc-900/50 p-5 text-left text-xs text-zinc-400" hidden>No matches.</p></section><dialog id="component-dialog" class="fixed inset-0 m-auto max-h-[calc(100dvh-48px)] w-[min(480px,calc(100%-32px))] overflow-auto rounded-lg border border-zinc-700 bg-zinc-900 p-7 text-zinc-300 shadow-[0_24px_80px_#0008] backdrop:bg-[#09090bcc] backdrop:backdrop-blur" aria-labelledby="component-dialog-title"><button class="dialog-close absolute right-3 top-2.5 h-7 w-7 border-0 bg-transparent text-[22px] text-zinc-400" type="button" aria-label="Close dialog">×</button><form id="overview-component-form" class="creation-form grid gap-2.5 border-0 bg-transparent p-0"><h2 class="m-0 text-xl font-medium tracking-[-.03em] text-zinc-100" id="component-dialog-title">Create a component</h2><p class="form-description mb-3 mt-0 text-xs leading-[1.7] text-zinc-400">A new repository in ${escape(org)}, connected to this system’s published Foundation.</p><label class="text-xs text-zinc-400" for="overview-component-name">Component name</label><input class="rounded border border-zinc-700 bg-zinc-950 px-2.5 py-[9px] text-[13px] text-zinc-200" id="overview-component-name" name="name" required maxlength="100" autocomplete="off"><button class="mt-2 justify-self-stretch rounded border border-zinc-100 bg-zinc-100 px-3 py-2 text-xs font-medium text-zinc-900 hover:bg-white" type="submit">Create component</button><p role="status" class="text-xs leading-[1.6] text-zinc-400" id="component-create-status"></p></form></dialog>`;
   const dialog = grid.querySelector("dialog");
+  const createComponentButton = grid.querySelector("#new-component");
+  createComponentButton.classList.add(
+    "h-9",
+    "rounded-sm",
+    "border",
+    "border-zinc-100",
+    "bg-zinc-100",
+    "px-3",
+    "py-0",
+    "text-xs",
+    "font-medium",
+    "text-zinc-900",
+    "hover:bg-white",
+  );
   const filter = document.querySelector("#system-filter");
   filter.value = "";
   filter.placeholder = "Find a component…";
   filter.setAttribute("aria-label", "Find a component");
+  filter.parentElement.classList.remove("mb-2.5");
   grid.querySelector(".component-search").append(filter.parentElement);
   grid.querySelector("#new-component").addEventListener("click", () => dialog.showModal());
   dialog.querySelector(".dialog-close").addEventListener("click", () => dialog.close());
@@ -115,6 +131,18 @@ export async function renderSystemOverview(system, grid) {
     }
   });
   const components = grid.querySelector("#overview-components");
+  components.classList.add(
+    "flex",
+    "flex-col",
+    "gap-0",
+    "overflow-hidden",
+    "rounded-[5px]",
+    "border",
+    "border-zinc-800",
+  );
+  components.querySelectorAll(".repository-row").forEach((row) => {
+    row.classList.add("rounded-none", "border-0", "border-b", "border-zinc-800", "last:border-b-0");
+  });
   const componentArea = grid.querySelector("#component-area");
   const setup = grid.querySelector("#foundation-setup");
   const publication = grid.querySelector("#system-publication");
@@ -145,9 +173,10 @@ export async function renderSystemOverview(system, grid) {
       projects
         .map(
           (item) =>
-            `<a class="system-card repository-row" href="${projectUrl(org, item.repo)}"><span class="system-icon">▱</span><div class="repository-copy"><h3>${escape(item.name || item.repo)}</h3>${item.description ? `<span class="repository-description">${escape(item.description)}</span>` : ""}</div><span class="row-arrow" aria-hidden="true">→</span></a>`,
+            `<a class="system-card repository-row flex min-h-[60px] flex-nowrap items-center gap-3 border border-zinc-800 bg-zinc-900 p-3 transition-colors hover:bg-[#202024]" href="${projectUrl(org, item.repo)}"><span class="system-icon grid h-[30px] w-[30px] shrink-0 place-items-center rounded-[5px] border border-zinc-700 bg-zinc-800 text-zinc-400">▱</span><div class="repository-copy min-w-0 flex-1"><h3 class="m-0 text-[13px] font-medium leading-[1.4] [overflow-wrap:anywhere] text-zinc-100">${escape(item.name || item.repo)}</h3>${item.description ? `<span class="repository-description mt-0.5 block overflow-hidden text-ellipsis whitespace-nowrap text-[11px] text-zinc-400">${escape(item.description)}</span>` : ""}</div><span class="row-arrow shrink-0 text-base text-zinc-500" aria-hidden="true">→</span></a>`,
         )
-        .join("") || '<div class="empty">No components yet.</div>';
+        .join("") ||
+      '<div class="empty rounded border border-dashed border-zinc-700 bg-zinc-900/50 p-5 text-left text-xs text-zinc-400">No components yet.</div>';
     filterRepositories();
   } catch {
     if (!publication.isConnected) {
@@ -193,12 +222,12 @@ export function workbenchNavigation(area, project, projects, org, repo) {
   }
   if (project.type === "component" && navigation) {
     const links = document.createElement("div");
-    links.className = "repository-nav";
-    links.innerHTML = `<strong>Design system repositories</strong><a href="${projectUrl(org, foundation)}">◇ Foundation</a>${projects
+    links.className = "repository-nav flex flex-col gap-1.5 border-t border-zinc-800 pt-4";
+    links.innerHTML = `<strong class="mb-1 text-xs font-medium text-zinc-400">Design system repositories</strong><a class="block rounded px-2 py-1.5 text-xs text-zinc-400 hover:bg-blue-500/10 hover:text-blue-400 aria-[current=page]:bg-blue-500/10 aria-[current=page]:text-blue-400" href="${projectUrl(org, foundation)}">◇ Foundation</a>${projects
       .filter((item) => item.team === org && item.type === "component")
       .map(
         (item) =>
-          `<a href="${projectUrl(org, item.repo)}" ${item.repo === repo ? 'aria-current="page"' : ""}>▱ ${escape(item.name || item.repo)}</a>`,
+          `<a class="block rounded px-2 py-1.5 text-xs text-zinc-400 hover:bg-blue-500/10 hover:text-blue-400 aria-[current=page]:bg-blue-500/10 aria-[current=page]:text-blue-400" href="${projectUrl(org, item.repo)}" ${item.repo === repo ? 'aria-current="page"' : ""}>▱ ${escape(item.name || item.repo)}</a>`,
       )
       .join("")}`;
     navigation.append(links);
@@ -213,6 +242,38 @@ export function enhanceFoundation(area, source, onEdit) {
   const components = area.querySelector(".foundation-components");
   const form = area.querySelector("#component-create");
   const createStatus = area.querySelector("#create-status");
+  area.querySelector(".project-drawer").classList.remove("border-t", "pt-3");
+  area.querySelector(".project-nav-content").classList.remove("border-t", "pt-3");
+  area.querySelector(".nav-context").classList.remove("bg-indigo-950", "text-indigo-200", "rounded-md");
+  area.querySelector(".nav-context").classList.add("rounded", "bg-zinc-800", "text-zinc-300", "text-xs");
+  area.querySelectorAll(".component-list > a").forEach((link) => {
+    link.classList.remove(
+      "rounded-lg",
+      "border",
+      "border-slate-700",
+      "p-2",
+      "text-sm",
+      "font-medium",
+      "text-slate-200",
+      "hover:border-indigo-400",
+      "hover:bg-slate-800",
+    );
+    link.classList.add("block", "rounded", "px-2.5", "py-2", "text-xs", "text-zinc-400", "hover:bg-zinc-800");
+    link.querySelector("small")?.classList.add("mt-1", "block", "text-[10px]", "text-zinc-500");
+  });
+  components
+    .querySelector("div")
+    .classList.add(
+      "flex",
+      "items-center",
+      "justify-between",
+      "gap-3",
+      "max-[760px]:items-start",
+      "max-[760px]:flex-col",
+    );
+  area
+    .querySelector("#token-publication-state")
+    .classList.add("rounded", "border", "border-zinc-800", "bg-zinc-900", "px-3", "py-2", "text-xs", "text-zinc-400");
   components.querySelector("h2").textContent = "Components";
   components.querySelector("form > p").remove();
   const createButton = document.createElement("button");
@@ -220,12 +281,26 @@ export function enhanceFoundation(area, source, onEdit) {
   createButton.type = "button";
   createButton.textContent = "＋ New component";
   createButton.disabled = true;
+  createButton.classList.add(
+    "min-h-[30px]",
+    "rounded",
+    "bg-zinc-100",
+    "px-3",
+    "py-1.5",
+    "text-xs",
+    "font-medium",
+    "text-zinc-900",
+    "hover:bg-white",
+    "disabled:opacity-30",
+  );
   components.querySelector("div").append(createButton);
   const dialog = document.createElement("dialog");
   dialog.setAttribute("aria-label", "Create a component");
+  dialog.className =
+    "fixed inset-0 m-auto max-h-[calc(100%-3rem)] w-[min(480px,calc(100%-2rem))] overflow-auto rounded-lg border border-zinc-700 bg-zinc-900 p-7 text-zinc-300 shadow-2xl backdrop:bg-zinc-950/80";
   dialog.innerHTML =
-    '<button class="dialog-close" type="button" aria-label="Close dialog">×</button><h2>Create a component</h2>';
-  form.classList.add("creation-form");
+    '<button class="dialog-close absolute right-3 top-2.5 h-7 w-7 border-0 bg-transparent p-0 text-[22px] text-zinc-400" type="button" aria-label="Close dialog">×</button><h2 class="mb-5 text-xl font-medium tracking-tight text-zinc-100">Create a component</h2>';
+  form.classList.add("creation-form", "grid", "gap-2.5", "border-0", "bg-transparent", "p-0");
   dialog.append(form, createStatus);
   components.append(dialog);
   createButton.addEventListener("click", () => dialog.showModal());
@@ -245,11 +320,11 @@ export function enhanceFoundation(area, source, onEdit) {
   let deleteFiles = source.files["styles.css"] && !source.files["reset.css"] ? ["styles.css"] : [];
   const title = area.querySelector(".foundation-title");
   title.innerHTML =
-    '<div><p class="eyebrow">FOUNDATION REPOSITORY</p><h2 id="foundation-tokens">tokens.css</h2><p>Shared source for every component in this system.</p></div>';
+    '<div><p class="eyebrow text-[10px] font-semibold tracking-[0.12em] text-zinc-500">FOUNDATION REPOSITORY</p><h2 class="font-mono text-base font-normal" id="foundation-tokens">tokens.css</h2><p class="text-xs leading-relaxed text-zinc-400">Shared source for every component in this system.</p></div>';
   const nav = area.querySelector(".project-nav-content");
   nav.querySelectorAll('a[href^="#foundation-"]').forEach((link) => link.remove());
   const fileList = document.createElement("div");
-  fileList.className = "foundation-files";
+  fileList.className = "foundation-files flex flex-col gap-1";
   fileList.setAttribute("aria-label", "Foundation files");
   nav.append(fileList);
   const saveDraft = () => {
@@ -263,6 +338,8 @@ export function enhanceFoundation(area, source, onEdit) {
   saveButton.disabled = true;
   Object.keys(files).forEach((file) => {
     const button = document.createElement("button");
+    button.className =
+      "min-h-[30px] rounded px-2.5 py-1.5 text-left text-xs font-normal text-zinc-400 aria-pressed:bg-blue-500/10 aria-pressed:text-blue-400";
     button.type = "button";
     button.textContent = file;
     button.setAttribute("aria-label", file);

@@ -30,7 +30,7 @@ test("workbench exposes project source and authoring workflows", async () => {
   const app = await readFile(new URL("../public/app.mjs", import.meta.url), "utf8");
   assert.match(app, /const team = params\.get\("team"\)/);
   assert.match(app, /const repo = params\.get\("repo"\)/);
-  assert.match(app, /workspace\.style\.display = "block"/);
+  assert.match(app, /workspace\.classList\.remove\("hidden"\)/);
   assert.match(html, /id="workspace-user-card"/);
   assert.match(html, /id="project-content"/);
   assert.match(app, /api\/source/);

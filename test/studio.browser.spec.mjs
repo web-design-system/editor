@@ -64,8 +64,11 @@ for (const width of [1440, 900, 390]) {
     await page.getByRole("button", { name: "Zoom in", exact: true }).click();
     await expect(page.locator("#zoom-reset")).toHaveText("125%");
     await page.getByRole("button", { name: "Preview", exact: true }).click();
+    await expect(page.locator(".studio-nav")).toHaveCSS("visibility", "hidden");
+    await expect(page.locator(".studio-inspector")).toHaveCSS("visibility", "hidden");
     await expect(preview.locator("[data-studio-selected]")).toHaveCount(0);
     await page.getByRole("button", { name: "Preview", exact: true }).click();
+    await expect(page.locator(".studio-nav")).toHaveCSS("visibility", "visible");
     await page.getByRole("button", { name: "Publish", exact: true }).click();
     await expect(page.locator("#draft-state")).toContainText("Published");
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);

@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "echo true",
+    "build": "tailwindcss -i ./tailwind.input.css -o ./public/css/tailwind.css --minify",
     "start": "node server.mjs",
     "check": "node --check server.mjs",
     "test": "node --test test/*.test.mjs",
@@ -11,7 +11,8 @@
   },
   "dependencies": {
     "@tailwindcss/cli": "^4.3.3",
-    "openid-client": "^6.8.8"
+    "openid-client": "^6.8.8",
+    "tailwindcss": "^4.3.3"
   },
   "devDependencies": {
     "@playwright/test": "^1.64.1"

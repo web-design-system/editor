@@ -684,7 +684,7 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
       const files = (await foundationSource.json()).files;
       assert.match(files["design-system.json"], /design-system/);
       assert.match(files["tokens.css"], /:root/);
-      assert.match(files["styles.css"], /tokens\.css/);
+      assert.match(files["reset.css"], /tokens\.css/);
     }
     const projectInventory = await fetch(`${base}/api/projects`, { headers });
     assert.equal(projectInventory.status, 200, await projectInventory.clone().text());
@@ -693,6 +693,29 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
       projects.some((project) => project.team === "org-one" && project.repo === "foundation"),
       "a newly registered Foundation is immediately available to the project workbench",
     );
+    const foundationUrl = `${base}/api/source/org-one/foundation`;
+    const initialFoundation = await (await fetch(foundationUrl, { headers })).json();
+    const legacyStyles = '/* Existing Foundation reset */\n@import "./tokens.css";\n';
+    const addLegacyStyle = await fetch(foundationUrl, {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({ files: { "styles.css": legacyStyles }, baseRef: initialFoundation.baseRef }),
+    });
+    assert.equal(addLegacyStyle.status, 200);
+    const legacyFoundation = await (await fetch(foundationUrl, { headers })).json();
+    const migrateLegacyStyle = await fetch(foundationUrl, {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({
+        files: { "reset.css": legacyStyles },
+        deleteFiles: ["styles.css"],
+        baseRef: legacyFoundation.baseRef,
+      }),
+    });
+    assert.equal(migrateLegacyStyle.status, 200);
+    const migratedFoundation = await (await fetch(foundationUrl, { headers })).json();
+    assert.equal(migratedFoundation.files["reset.css"], legacyStyles);
+    assert.equal(migratedFoundation.files["styles.css"], undefined);
     const smartGitRequestsBeforeMetadataLists = smartGitRequests;
     const systemsListResponse = await fetch(`${base}/api/design-systems`, { headers });
     assert.match(systemsListResponse.headers.get("server-timing"), /^app;dur=\d/);
@@ -1058,8 +1081,8 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
     );
     const systemUrl = `${base}/api/source/test-team/sample-system`;
     const systemSource = await (await fetch(systemUrl, { headers })).json();
-    assert.deepEqual(Object.keys(systemSource.files).sort(), ["design-system.json", "styles.css", "tokens.css"]);
-    assert.match(systemSource.files["styles.css"], /@import "\.\/tokens\.css"/);
+    assert.deepEqual(Object.keys(systemSource.files).sort(), ["design-system.json", "reset.css", "tokens.css"]);
+    assert.match(systemSource.files["reset.css"], /@import "\.\/tokens\.css"/);
     assert.match(systemSource.files["tokens.css"], /--color-primary/);
     assert.match(systemSource.files["design-system.json"], /"name": "Shared Foundation"/);
     assert.equal(systemSource.files["component.html"], undefined);
@@ -1068,7 +1091,7 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
       method: "PUT",
       headers,
       body: JSON.stringify({
-        files: { ...systemSource.files, "styles.css": tokenStyles },
+        files: { ...systemSource.files, "reset.css": tokenStyles },
         baseRef: systemSource.baseRef,
         message: "Define shared tokens",
       }),
@@ -1088,9 +1111,9 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
     });
     const releaseData = await systemRelease.json();
     assert.equal(systemRelease.status, 201, JSON.stringify(releaseData));
-    const publishedSystemStyles = await fetch(`${base}/static/test-team/sample-system/latest/styles.css`);
-    assert.equal(publishedSystemStyles.status, 200);
-    assert.equal(await publishedSystemStyles.text(), tokenStyles);
+    const publishedSystemReset = await fetch(`${base}/static/test-team/sample-system/latest/reset.css`);
+    assert.equal(publishedSystemReset.status, 200);
+    assert.equal(await publishedSystemReset.text(), tokenStyles);
     assert.equal(tagWrites.length, 1);
     assert.deepEqual(tagWrites[0], { name: releaseData.version, target: releaseData.revision });
     assert.ok(
@@ -1118,7 +1141,7 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
     assert.ok(restHeadRequests > 0);
     assert.equal((await fetch(`${base}/static/test-team/sample-system/latest/component.html`)).status, 404);
     assert.equal((await fetch(`${base}/static/test-team/sample-system/latest/design-system.json`)).status, 404);
-    const versionedStyles = await fetch(`${base}/static/test-team/sample-system/${releaseData.version}/styles.css`);
+    const versionedStyles = await fetch(`${base}/static/test-team/sample-system/${releaseData.version}/reset.css`);
     assert.equal(versionedStyles.status, 200);
     assert.equal(await versionedStyles.text(), tokenStyles);
     const systemSourceAfterRelease = await (
@@ -1153,7 +1176,7 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
       JSON.stringify({ type: "design-system", name: "Mounted Foundation" }),
     );
     await writeFile(join(mountedFoundationPath, "tokens.css"), ":root { --mounted-color: navy; }\n");
-    await writeFile(join(mountedFoundationPath, "styles.css"), '@import "./tokens.css";\n');
+    await writeFile(join(mountedFoundationPath, "reset.css"), '@import "./tokens.css";\n');
     const publishMountedFoundation = await fetch(`${base}/api/publish/mounted-team/foundation`, {
       method: "POST",
       headers,

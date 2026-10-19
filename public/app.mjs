@@ -393,8 +393,8 @@ async function loadWorkbench(team, repo) {
   }
   if (project.type === "design-system") {
     const components = projects.filter((item) => item.team === team && item.type === "component");
-    area.innerHTML = `<div class="studio-heading"><div><p class="studio-kicker">${escapeHtml(team)} / ${escapeHtml(repo)} · Foundation</p><h1>${escapeHtml(project.name || repo)}</h1><p>Tokens and shared styles · tokens must be published before components can be added.</p></div><div class="studio-actions"><span class="state-pill" id="foundation-state">Draft · ${escapeHtml(source.revision)}</span><button type="button" id="save-tokens">Commit</button><button type="button" class="secondary-action" id="publish-tokens">Publish</button></div></div><div class="foundation-layout"><nav class="studio-nav" aria-label="Foundation navigation"><details class="project-drawer" open><summary>Foundation navigation</summary><div class="project-nav-content"><strong>System</strong><a class="nav-context" href="/?team=${encodeURIComponent(team)}&amp;repo=${encodeURIComponent(repo)}">${escapeHtml(project.name || repo)}</a><strong>Foundation files</strong><a href="#foundation-tokens">tokens.css</a><a href="#foundation-styles">styles.css</a><strong>Components</strong><div class="component-list">${components.map((item) => `<a href="/?team=${encodeURIComponent(team)}&amp;repo=${encodeURIComponent(item.repo)}">${escapeHtml(item.name || item.repo)}<small>${escapeHtml(item.repo)}</small></a>`).join("") || "<p>No components yet.</p>"}</div></div></details></nav><section class="foundation-main"><div class="foundation-title"><div><h2 id="foundation-tokens">Tokens</h2><p>Canonical CSS source · commit and publish are separate actions.</p></div><span class="state-pill">tokens.css</span></div><pre class="source-facts" id="foundation-styles"></pre><code-editor id="tokens-editor" role="group" aria-label="Design system tokens"></code-editor><div class="action-row"><label>Commit message<input id="tokens-message" value="Update design tokens" maxlength="200"></label></div><p id="token-status" role="status" aria-live="polite"></p><section class="foundation-components"><div><h2>Component projects</h2><p>New components use this system’s published tokens at latest.</p></div><p id="token-publication-state" role="status" aria-live="polite">Checking published tokens…</p><form id="component-create" hidden><label>Component name<input name="name" required maxlength="100" autocomplete="off"></label><p>Available after tokens.css is published.</p><button type="submit">Add component</button></form><p id="create-status" role="status" aria-live="polite"></p></section></section></div>`;
-    area.querySelector("#foundation-styles").textContent = source.files["styles.css"] || "(No shared stylesheet yet)";
+    area.innerHTML = `<div class="studio-heading"><div><p class="studio-kicker">${escapeHtml(team)} / ${escapeHtml(repo)} · Foundation</p><h1>${escapeHtml(project.name || repo)}</h1><p>Shared tokens and a CSS reset for every page that uses this styleguide.</p></div><div class="studio-actions"><span class="state-pill" id="foundation-state">Ready</span><button type="button" id="save-tokens" disabled>Save Foundation</button><button type="button" class="secondary-action" id="publish-tokens">Publish</button></div></div><div class="foundation-layout"><nav class="studio-nav" aria-label="Foundation navigation"><details class="project-drawer" open><summary>Foundation navigation</summary><div class="project-nav-content"><strong>System</strong><a class="nav-context" href="/?team=${encodeURIComponent(team)}&amp;repo=${encodeURIComponent(repo)}">${escapeHtml(project.name || repo)}</a><strong>Foundation files</strong><a href="#foundation-tokens">tokens.css</a><a href="#foundation-reset">reset.css</a><strong>Components</strong><div class="component-list">${components.map((item) => `<a href="/?team=${encodeURIComponent(team)}&amp;repo=${encodeURIComponent(item.repo)}">${escapeHtml(item.name || item.repo)}<small>${escapeHtml(item.repo)}</small></a>`).join("") || "<p>No components yet.</p>"}</div></div></details></nav><section class="foundation-main"><div class="foundation-title"><div><p class="eyebrow">FOUNDATION REPOSITORY</p><h2 id="foundation-tokens">tokens.css</h2><p>Shared source for every component in this system.</p></div></div><div id="foundation-urls" class="foundation-urls" aria-label="Published Foundation stylesheet URLs"></div><code-editor id="tokens-editor" role="group" aria-label="Foundation CSS"></code-editor><div class="action-row"><label><span class="visually-hidden">Describe your changes</span><input aria-label="Describe your changes" id="tokens-message" placeholder="Describe your changes" maxlength="200"></label></div><p id="token-status" role="status" aria-live="polite"></p><section class="foundation-components"><div><h2>Component projects</h2><p>New components use this system’s published tokens at latest.</p></div><p id="token-publication-state" role="status" aria-live="polite">Checking published tokens…</p><form id="component-create" hidden><label>Component name<input name="name" required maxlength="100" autocomplete="off"></label><p>Available after tokens.css is published.</p><button type="submit">Add component</button></form><p id="create-status" role="status" aria-live="polite"></p></section></section></div>`;
+
     const tokensEditor = area.querySelector("#tokens-editor");
     const tokenStatus = area.querySelector("#token-status");
     tokensEditor.value = source.files["tokens.css"] || "";
@@ -407,6 +407,26 @@ async function loadWorkbench(team, repo) {
     area.querySelector(".project-drawer").open = !window.matchMedia("(max-width: 760px)").matches;
     const componentForm = area.querySelector("#component-create");
     const artifactUrl = `/static/${encodeURIComponent(team)}/${encodeURIComponent(repo)}/latest/tokens.css`;
+    const resetUrl = `/static/${encodeURIComponent(team)}/${encodeURIComponent(repo)}/latest/reset.css`;
+    const urls = area.querySelector("#foundation-urls");
+    urls.innerHTML = `<label>Public tokens.css URL<input readonly value="${escapeHtml(new URL(artifactUrl, location.origin).href)}"></label><button type="button" aria-label="Copy tokens.css URL" data-copy-url="tokens.css">Copy</button><label>Public reset.css URL<input readonly value="${escapeHtml(new URL(resetUrl, location.origin).href)}"></label><button type="button" aria-label="Copy reset.css URL" data-copy-url="reset.css">Copy</button><span role="status" aria-live="polite"></span>`;
+    urls.querySelectorAll("button[data-copy-url]").forEach((button) =>
+      button.addEventListener("click", async () => {
+        try {
+          await navigator.clipboard.writeText(urls.querySelector(`input[value*="/${button.dataset.copyUrl}"]`).value);
+          urls.querySelector('[role="status"]').textContent = `${button.dataset.copyUrl} URL copied.`;
+        } catch {
+          urls.querySelector('[role="status"]').textContent = "Copy unavailable; select and copy the URL above.";
+        }
+      }),
+    );
+    const saveButton = area.querySelector("#save-tokens");
+    const publishButton = area.querySelector("#publish-tokens");
+    const updateFoundationState = () => {
+      saveButton.disabled = !foundationDraft.isDirty();
+      publishButton.disabled = !saveButton.disabled;
+      area.querySelector("#foundation-state").textContent = saveButton.disabled ? "Ready" : "Unsaved changes";
+    };
     const probePublishedTokens = async () => {
       componentForm.hidden = true;
       area.querySelector("#foundation-new-component").disabled = true;
@@ -424,22 +444,26 @@ async function loadWorkbench(team, repo) {
       }
     };
     probePublishedTokens();
-    area.querySelector("#save-tokens").addEventListener("click", async () => {
+    saveButton.addEventListener("click", async () => {
+      const files = { ...foundationDraft() };
+      const deleteFiles = [...foundationDraft.deleteFiles];
       const response = await fetch(`/api/source/${encodeURIComponent(team)}/${encodeURIComponent(repo)}`, {
         method: "PUT",
         credentials: "same-origin",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          files: foundationDraft(),
+          files,
+          deleteFiles,
           baseRef,
-          message: area.querySelector("#tokens-message").value.trim() || "Update design tokens",
+          message: area.querySelector("#tokens-message").value.trim() || "Update Foundation",
         }),
       });
       const data = await responseData(response);
-      tokenStatus.textContent = response.ok ? `Committed ${data.revision}.` : data.error || "Could not save tokens.";
+      tokenStatus.textContent = response.ok ? "" : data.error || "Could not save Foundation.";
       if (response.ok) {
         baseRef = data.baseRef || baseRef;
-        area.querySelector("#foundation-state").textContent = `Committed · ${data.revision}`;
+        foundationDraft.markSaved(files);
+        updateFoundationState();
       }
     });
     area.querySelector("#publish-tokens").addEventListener("click", async () => {
@@ -448,14 +472,13 @@ async function loadWorkbench(team, repo) {
         credentials: "same-origin",
       });
       const data = await responseData(response);
-      tokenStatus.textContent = response.ok
-        ? `Published tokens revision ${data.revision}.`
-        : data.error || "Could not publish tokens.";
+      tokenStatus.textContent = response.ok ? "" : data.error || "Could not publish tokens.";
       if (response.ok) {
-        area.querySelector("#foundation-state").textContent = `Published · ${data.revision}`;
+        area.querySelector("#foundation-state").textContent = "Published";
         await probePublishedTokens();
       }
     });
+    updateFoundationState();
     area.querySelector("#component-create").addEventListener("submit", async (event) => {
       event.preventDefault();
       const values = Object.fromEntries(new FormData(event.currentTarget));

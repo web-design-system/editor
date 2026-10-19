@@ -122,12 +122,16 @@ for (const width of [1440, 900, 390, 360]) {
           saved = route.request().postDataJSON();
           body = { revision: "saved", baseRef: "saved" };
         } else {
+          const legacyFoundation = width === 1440 && path.endsWith("/acme-ui/foundation");
+          const resetFile = legacyFoundation
+            ? { "styles.css": "body { margin: 0; }" }
+            : { "reset.css": "body { margin: 0; }" };
           body = {
             revision: "original",
             baseRef: "original",
             files: {
               "tokens.css": ":root { --brand: blue; }",
-              "styles.css": "body { margin: 0; }",
+              ...resetFile,
               "component.json": '{"type":"design-system"}',
               "component.html": '<template component="acme-button"><button>Button</button></template>',
             },
@@ -179,22 +183,40 @@ for (const width of [1440, 900, 390, 360]) {
     if (width <= 760) {
       await page.locator(".project-drawer > summary").click();
     }
-    await page.getByRole("button", { name: "styles.css", exact: true }).click();
+    if (width === 1440) {
+      await expect(page.getByRole("button", { name: "Save Foundation" })).toBeEnabled();
+    } else {
+      await expect(page.getByRole("button", { name: "Save Foundation" })).toBeDisabled();
+    }
+    await expect(page.getByRole("textbox", { name: "Describe your changes" })).toBeVisible();
+    await expect(page.getByLabel("Public tokens.css URL")).toHaveValue(
+      /^http:\/\/127\.0\.0\.1:4175\/static\/acme-ui\/foundation\/latest\/tokens\.css$/,
+    );
+    await expect(page.getByLabel("Public reset.css URL")).toHaveValue(
+      /^http:\/\/127\.0\.0\.1:4175\/static\/acme-ui\/foundation\/latest\/reset\.css$/,
+    );
+    await page.getByRole("button", { name: "reset.css", exact: true }).click();
     if (width === 900) {
-      await page.getByRole("textbox", { name: "Source code: styles.css", exact: true }).fill("body { margin: 4px; }");
+      await page.getByRole("textbox", { name: "Source code: reset.css", exact: true }).fill("body { margin: 4px; }");
     } else {
       await page.locator("#tokens-editor").evaluate((editor) => {
         editor.value = "body { margin: 4px; }";
         editor.dispatchEvent(new CustomEvent("change", { detail: editor.value }));
       });
     }
+    await expect(page.getByRole("button", { name: "Save Foundation" })).toBeEnabled();
     await page.getByRole("button", { name: "tokens.css", exact: true }).click();
     await page.getByRole("button", { name: "Save Foundation" }).click();
-    await expect(page.locator("#token-status")).toHaveText("Committed saved.");
+    await expect(page.locator("#token-status")).toBeEmpty();
+    await expect(page.getByRole("button", { name: "Save Foundation" })).toBeDisabled();
     expect(saved.files["tokens.css"]).toContain("--brand: blue");
-    expect(saved.files["styles.css"]).toBe("body { margin: 4px; }");
+    expect(saved.files["reset.css"]).toBe("body { margin: 4px; }");
+    if (width === 1440) {
+      expect(saved.deleteFiles).toEqual(["styles.css"]);
+    }
     await page.getByRole("button", { name: "Publish latest" }).click();
     await expect(page.locator("#foundation-state")).toContainText("Published");
+    await expect(page.locator("#token-publication-state")).toContainText("tokens.css is available");
     await page.screenshot({ path: test.info().outputPath(`foundation-${width}.png`), fullPage: true });
     await page.locator(".component-list a").first().click();
     await expect(page.locator("#layer-list button")).toHaveCount(1);

@@ -1030,7 +1030,7 @@ function blankProjectFiles(repo, name, description, designSystem) {
 function blankDesignSystemFiles(name, description) {
   return {
     "design-system.json": `${JSON.stringify({ type: "design-system", name, description }, null, 2)}\n`,
-    "styles.css": `/* Shared design tokens for ${name}. */\n@import "./tokens.css";\n`,
+    "reset.css": `/* Shared foundation styles for ${name}. */\n@import "./tokens.css";\n`,
     "tokens.css": `:root {\n  /* --color-primary: #2563eb; */\n  /* --spacing-unit: 0.25rem; */\n  /* --breakpoint-wide: 80rem; */\n}\n\n@theme {\n  /* --color-primary: #2563eb; */\n}\n`,
   };
 }
@@ -1337,6 +1337,11 @@ async function publishSnapshot(path, team, repo, version = null, sourceRevisionO
   if (isDesignSystem) {
     if (files["tokens.css"] === undefined) {
       const error = new Error("Design systems must publish tokens.css.");
+      error.status = 400;
+      throw error;
+    }
+    if (files["reset.css"] === undefined) {
+      const error = new Error("Design systems must publish reset.css.");
       error.status = 400;
       throw error;
     }
@@ -2037,12 +2042,19 @@ createServer(async (request, response) => {
         return;
       }
       const [, , team, repo] = parts;
-      const { files, message = "Update component source", baseRef: requestedBaseRef } = await body(request);
+      const {
+        files,
+        deleteFiles = [],
+        message = "Update component source",
+        baseRef: requestedBaseRef,
+      } = await body(request);
       if (
         !valid(team, repo) ||
         !files ||
         typeof files !== "object" ||
         Array.isArray(files) ||
+        !Array.isArray(deleteFiles) ||
+        deleteFiles.some((file) => !safeFile(file, sourceExtensions) || Object.hasOwn(files, file)) ||
         Object.entries(files).some(
           ([file, content]) => !safeFile(file, sourceExtensions) || typeof content !== "string",
         )
@@ -2053,6 +2065,14 @@ createServer(async (request, response) => {
         const path = mountedPath(team, repo);
         const currentFiles = await readSourceFiles(path);
         const proposedFiles = { ...currentFiles, ...files };
+        for (const file of deleteFiles) {
+          delete proposedFiles[file];
+        }
+        if (await isDesignSystemProject(path)) {
+          if (typeof proposedFiles["tokens.css"] !== "string" || typeof proposedFiles["reset.css"] !== "string") {
+            return reply(response, 400, { error: "Foundation source must include tokens.css and reset.css." });
+          }
+        }
         await validateRelativeReferences(path, proposedFiles);
         await validateCssImports(
           path,
@@ -2063,6 +2083,9 @@ createServer(async (request, response) => {
             continue;
           }
           await writeSafeFile(path, file, content);
+        }
+        for (const file of deleteFiles) {
+          await rm(join(path, file), { force: true });
         }
         return reply(response, 200, {
           revision: revisionFor(await discoverAssets(path)),
@@ -2083,12 +2106,30 @@ createServer(async (request, response) => {
       }
       const currentFiles = await readRemoteFiles(team, repo, currentHead);
       const proposedFiles = { ...currentFiles, ...files };
+      for (const file of deleteFiles) {
+        delete proposedFiles[file];
+      }
+      let foundation = false;
+      try {
+        foundation = JSON.parse(String(proposedFiles["design-system.json"])).type === "design-system";
+      } catch {
+        foundation = false;
+      }
+      if (
+        foundation &&
+        (typeof proposedFiles["tokens.css"] !== "string" || typeof proposedFiles["reset.css"] !== "string")
+      ) {
+        return reply(response, 400, { error: "Foundation source must include tokens.css and reset.css." });
+      }
       await validateRemoteFiles(proposedFiles);
       const revision = await atomicCommit(
         team,
         repo,
         currentHead,
-        Object.entries(files).map(([path, content]) => ({ path, content })),
+        [
+          ...Object.entries(files).map(([path, content]) => ({ path, content })),
+          ...deleteFiles.map((path) => ({ path, delete: true })),
+        ],
         message,
       );
       invalidateInventory();

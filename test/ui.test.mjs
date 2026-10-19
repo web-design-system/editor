@@ -56,7 +56,7 @@ test("workbench exposes project source and authoring workflows", async () => {
   assert.match(app, /api\/publish/);
   assert.match(app, /component-create/);
   assert.match(app, /designSystem: \{ team, repo, revision: "latest" \}/);
-  assert.match(app, /tokens must be published before components can be added/);
+  assert.match(app, /tokens\.css is not published yet; publish it to unlock component creation/);
   assert.match(app, /tokens-editor/);
   assert.match(app, /save-tokens/);
   assert.match(app, /publish-tokens/);
@@ -65,8 +65,11 @@ test("workbench exposes project source and authoring workflows", async () => {
   assert.match(app, /area\.querySelector\("#foundation-state"\).*?Published.*?await probePublishedTokens\(\)/s);
   assert.match(app, /Foundation files/);
   assert.match(app, /Component projects/);
-  assert.match(app, /id="save-tokens">Commit/);
+  assert.match(app, /id="save-tokens" disabled>Save Foundation/);
   assert.match(app, /id="publish-tokens">Publish/);
+  assert.match(app, /Public tokens\.css URL/);
+  assert.match(app, /Public reset\.css URL/);
+  assert.match(app, /Describe your changes/);
   assert.match(app, /Component name/);
   assert.match(app, /repo: slug,\s+name,/);
   assert.doesNotMatch(app, /name="description"|Repository slug<input name="repo"/);

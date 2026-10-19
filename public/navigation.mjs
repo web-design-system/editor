@@ -210,7 +210,6 @@ export function enhanceFoundation(area, source, onEdit) {
   area.querySelector(".studio-heading h1").textContent = "Foundation";
   area.querySelector("#save-tokens").textContent = "Save Foundation";
   area.querySelector("#publish-tokens").textContent = "Publish latest";
-  area.querySelector("#foundation-styles").hidden = true;
   const components = area.querySelector(".foundation-components");
   const form = area.querySelector("#component-create");
   const createStatus = area.querySelector("#create-status");
@@ -231,9 +230,19 @@ export function enhanceFoundation(area, source, onEdit) {
   components.append(dialog);
   createButton.addEventListener("click", () => dialog.showModal());
   dialog.querySelector(".dialog-close").addEventListener("click", () => dialog.close());
-  const files = { ...source.files };
+  const files = {
+    "tokens.css": source.files["tokens.css"] || "",
+    "reset.css": source.files["reset.css"] ?? source.files["styles.css"] ?? "",
+  };
+  // Foundation files are canonical and always present, even for older repositories.
+  files["tokens.css"] ??= "";
+  files["reset.css"] ??= "";
   const editor = area.querySelector("#tokens-editor");
   let active = "tokens.css";
+  editor.value = source.files[active] || "";
+  const originalFiles = { ...files, "tokens.css": editor.value };
+  files["tokens.css"] = editor.value;
+  let deleteFiles = source.files["styles.css"] && !source.files["reset.css"] ? ["styles.css"] : [];
   const title = area.querySelector(".foundation-title");
   title.innerHTML =
     '<div><p class="eyebrow">FOUNDATION REPOSITORY</p><h2 id="foundation-tokens">tokens.css</h2><p>Shared source for every component in this system.</p></div>';
@@ -242,19 +251,27 @@ export function enhanceFoundation(area, source, onEdit) {
   const fileList = document.createElement("div");
   fileList.className = "foundation-files";
   fileList.setAttribute("aria-label", "Foundation files");
-  nav.querySelector("strong:nth-of-type(2)").after(fileList);
+  nav.append(fileList);
   const saveDraft = () => {
     files[active] = editor.value;
   };
+  const saveButton = area.querySelector("#save-tokens");
+  const updateSaveButton = () => {
+    saveDraft();
+    saveButton.disabled = !draft.isDirty();
+  };
+  saveButton.disabled = true;
   Object.keys(files).forEach((file) => {
     const button = document.createElement("button");
     button.type = "button";
     button.textContent = file;
+    button.setAttribute("aria-label", file);
     button.setAttribute("aria-pressed", String(file === active));
     button.addEventListener("click", () => {
       saveDraft();
       active = file;
       editor.value = files[file];
+      updateSaveButton();
       editor.language = file.endsWith(".css")
         ? "css"
         : file.endsWith(".json")
@@ -264,16 +281,36 @@ export function enhanceFoundation(area, source, onEdit) {
             : "javascript";
       editor.status = file;
       title.querySelector("h2").textContent = file;
+      title.querySelector("h2").id = file === "reset.css" ? "foundation-reset" : "foundation-tokens";
       fileList.querySelectorAll("button").forEach((item) => item.setAttribute("aria-pressed", String(item === button)));
     });
     fileList.append(button);
   });
+  editor.addEventListener("input", () => {
+    files[active] = editor.value;
+    onEdit();
+    updateSaveButton();
+  });
   editor.addEventListener("change", (event) => {
     files[active] = typeof event.detail === "string" ? event.detail : editor.value;
     onEdit();
+    updateSaveButton();
   });
-  return () => {
+  const draft = () => {
     saveDraft();
     return files;
   };
+  draft.isDirty = () =>
+    deleteFiles.length > 0 || Object.keys(files).some((file) => files[file] !== originalFiles[file]);
+  draft.deleteFiles = deleteFiles;
+  draft.markSaved = (savedFiles) => {
+    Object.assign(originalFiles, savedFiles);
+    deleteFiles = [];
+    draft.deleteFiles = deleteFiles;
+    updateSaveButton();
+  };
+  if (deleteFiles.length) {
+    onEdit();
+  }
+  return draft;
 }

@@ -79,6 +79,61 @@
   outline: 2px solid #60a5fa;
   outline-offset: 2px;
 }
+.foundation-studio .visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+.foundation-studio #save-tokens {
+  background: #f4f4f5;
+  color: #18181b;
+}
+.foundation-studio #save-tokens:disabled {
+  background: #3f3f46;
+  color: #a1a1aa;
+  cursor: not-allowed;
+}
+.foundation-studio .foundation-files button {
+  cursor: default;
+}
+.foundation-studio .foundation-urls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: end;
+  max-width: 100%;
+  padding: 16px;
+}
+.foundation-studio .foundation-urls label {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.foundation-studio .foundation-urls input {
+  width: 100%;
+}
+.foundation-studio .foundation-urls [role="status"] {
+  grid-column: 1 / -1;
+}
+.foundation-studio .action-row label {
+  display: block;
+  width: min(100%, 50%);
+}
+.foundation-studio #tokens-message {
+  display: block;
+  width: 100%;
+}
+@media (max-width: 760px) {
+  .foundation-studio .action-row label {
+    width: 100%;
+  }
+}
 .design-studio .studio-actions button,
 .design-studio .studio-nav button,
 .design-studio .studio-inspector button {

@@ -1048,6 +1048,77 @@ dialog::backdrop {
   margin: 0 0 10px;
   white-space: normal;
 }
+.foundation-setup {
+  max-width: 760px;
+  margin-top: 18px;
+  padding: 20px 22px;
+  border: 1px solid #3f3f46;
+  border-radius: 5px;
+  background: linear-gradient(135deg, #18181b 0%, #141417 100%);
+}
+.foundation-setup .eyebrow {
+  display: block;
+  margin-bottom: 9px;
+  color: #60a5fa;
+}
+.foundation-setup h2 {
+  margin: 0;
+  color: #f4f4f5;
+  font-size: 16px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+}
+.foundation-setup > p {
+  max-width: 620px;
+  color: #a1a1aa;
+  font-size: 12px;
+  line-height: 1.7;
+}
+.foundation-setup code {
+  color: #d4d4d8;
+  font:
+    11px ui-monospace,
+    monospace;
+}
+.setup-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+  padding: 8px 11px;
+  border: 1px solid #3b82f6;
+  border-radius: 4px;
+  color: #bfdbfe;
+  background: #3b82f61a;
+  font-size: 12px;
+  font-weight: 500;
+}
+.setup-action:hover {
+  background: #3b82f62b;
+}
+.foundation-setup .setup-footnote {
+  margin: 12px 0 0;
+  font-size: 11px;
+}
+.component-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.component-toolbar .list-toolbar {
+  margin: 0;
+}
+.component-toolbar .list-toolbar input {
+  width: 100%;
+}
+.component-toolbar .primary-button {
+  min-height: 36px;
+}
+.component-area .empty {
+  margin: 0;
+}
 .dashboard-main .empty {
   padding: 20px 12px;
   text-align: left;
@@ -1182,6 +1253,18 @@ dialog::backdrop {
     min-height: 36px;
     padding: 7px 9px;
     font-size: 11px;
+  }
+  .foundation-setup {
+    margin-top: 12px;
+    padding: 16px;
+  }
+  .component-toolbar {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 7px;
+  }
+  .component-toolbar .primary-button {
+    padding-inline: 8px;
+    font-size: 10px;
   }
   .foundation-card {
     padding: 18px;

@@ -39,7 +39,9 @@ export function filterRepositories() {
   rows.forEach((row) => {
     row.hidden = !row.textContent.toLowerCase().includes(query);
   });
-  document.querySelector("#filter-empty").hidden = !query || !rows.length || rows.some((row) => !row.hidden);
+  const empty =
+    document.querySelector("#system-grid.system-overview #filter-empty") || document.querySelector("#filter-empty");
+  empty.hidden = !query || !rows.length || rows.some((row) => !row.hidden);
 }
 
 export function dashboardHeading(team) {
@@ -69,13 +71,13 @@ export async function renderSystemOverview(system, grid) {
   document.querySelector("#systems-title").textContent = "Repositories";
   document.querySelector("#system-summary").textContent = "";
   grid.classList.add("system-overview");
-  grid.innerHTML = `<a class="foundation-card repository-row" aria-label="Open Foundation" href="${projectUrl(org, system.repo)}"><span class="system-icon">◇</span><div class="repository-copy"><h2>Foundation</h2><span class="repository-description">Tokens & styles</span></div><span id="system-publication" class="publication-note" role="status">Checking…</span><span class="row-arrow" aria-hidden="true">→</span></a><div class="section-heading components-heading"><h2>Components <span id="component-count"></span></h2><button class="primary-button" id="new-component" type="button" disabled>＋ New component</button></div><p id="component-hint" class="publication-note" hidden></p><div id="overview-components" class="system-grid"><span class="loading">Loading components…</span></div><dialog id="component-dialog" aria-labelledby="component-dialog-title"><button class="dialog-close" type="button" aria-label="Close dialog">×</button><form id="overview-component-form" class="creation-form"><h2 id="component-dialog-title">Create a component</h2><p class="form-description">A new repository in ${escape(org)}, connected to this system’s published Foundation.</p><label for="overview-component-name">Component name</label><input id="overview-component-name" name="name" required maxlength="100" autocomplete="off"><button type="submit">Create component</button><p role="status" id="component-create-status"></p></form></dialog>`;
+  grid.innerHTML = `<a class="foundation-card repository-row" aria-label="Open Foundation" href="${projectUrl(org, system.repo)}"><span class="system-icon">◇</span><div class="repository-copy"><h2>Foundation</h2><span class="repository-description">Shared design tokens & styles</span></div><span id="system-publication" class="publication-note" role="status">Checking…</span><span class="row-arrow" aria-hidden="true">→</span></a><section id="foundation-setup" class="foundation-setup" hidden><span class="eyebrow">FIRST, SET UP FOUNDATION</span><h2>Give every component the same design language.</h2><p>Foundation holds the shared design tokens—CSS variables for color, spacing, and type. Components use these variables to stay consistent and update together.</p><a class="setup-action" href="${projectUrl(org, system.repo)}">Open Foundation <span aria-hidden="true">→</span></a><p class="setup-footnote">Add your values to <code>tokens.css</code>, save, then publish. You can create components once the published tokens are ready.</p></section><section id="component-area" class="component-area" hidden><div class="section-heading components-heading"><h2>Components <span id="component-count"></span></h2></div><div class="component-toolbar"><div class="component-search"></div><button class="primary-button" id="new-component" type="button">＋ New component</button></div><div id="overview-components" class="system-grid"></div><p id="filter-empty" class="empty" hidden>No matches.</p></section><dialog id="component-dialog" aria-labelledby="component-dialog-title"><button class="dialog-close" type="button" aria-label="Close dialog">×</button><form id="overview-component-form" class="creation-form"><h2 id="component-dialog-title">Create a component</h2><p class="form-description">A new repository in ${escape(org)}, connected to this system’s published Foundation.</p><label for="overview-component-name">Component name</label><input id="overview-component-name" name="name" required maxlength="100" autocomplete="off"><button type="submit">Create component</button><p role="status" id="component-create-status"></p></form></dialog>`;
   const dialog = grid.querySelector("dialog");
   const filter = document.querySelector("#system-filter");
   filter.value = "";
   filter.placeholder = "Find a component…";
   filter.setAttribute("aria-label", "Find a component");
-  grid.querySelector(".components-heading").after(filter.parentElement);
+  grid.querySelector(".component-search").append(filter.parentElement);
   grid.querySelector("#new-component").addEventListener("click", () => dialog.showModal());
   dialog.querySelector(".dialog-close").addEventListener("click", () => dialog.close());
   grid.querySelector("form").addEventListener("submit", async (event) => {
@@ -113,56 +115,50 @@ export async function renderSystemOverview(system, grid) {
     }
   });
   const components = grid.querySelector("#overview-components");
+  const componentArea = grid.querySelector("#component-area");
+  const setup = grid.querySelector("#foundation-setup");
   const publication = grid.querySelector("#system-publication");
-  await Promise.all([
-    (async () => {
-      try {
-        const response = await fetch("/api/projects");
-        if (!response.ok) {
-          throw new Error("Could not load component repositories. Reload to try again.");
-        }
-        const projects = (await response.json()).filter((item) => item.team === org && item.type === "component");
-        if (!components.isConnected) {
-          return;
-        }
-        grid.querySelector("#component-count").textContent = projects.length;
-        components.innerHTML =
-          projects
-            .map(
-              (item) =>
-                `<a class="system-card repository-row" href="${projectUrl(org, item.repo)}"><span class="system-icon">▱</span><div class="repository-copy"><h3>${escape(item.name || item.repo)}</h3>${item.description ? `<span class="repository-description">${escape(item.description)}</span>` : ""}</div><span class="row-arrow" aria-hidden="true">→</span></a>`,
-            )
-            .join("") || '<div class="empty">No components yet.</div>';
-        filterRepositories();
-      } catch (error) {
-        components.innerHTML = `<div class="empty">${escape(error.message)}</div>`;
-      }
-    })(),
-    (async () => {
-      try {
-        const response = await fetch(
-          `/static/${encodeURIComponent(org)}/${encodeURIComponent(system.repo)}/latest/tokens.css`,
-          { method: "HEAD", cache: "no-store" },
-        );
-        if (!publication.isConnected) {
-          return;
-        }
-        grid.querySelector("#new-component").disabled = !response.ok;
-        publication.innerHTML = response.ok ? '<span class="status-dot"></span> Published' : "Unpublished";
-        const hint = grid.querySelector("#component-hint");
-        hint.hidden = response.ok;
-        hint.textContent = "Publish Foundation tokens to create components.";
-      } catch {
-        if (!publication.isConnected) {
-          return;
-        }
-        publication.textContent = "Unavailable";
-        const hint = grid.querySelector("#component-hint");
-        hint.hidden = false;
-        hint.textContent = "Could not verify Foundation publication. Reload to try again.";
-      }
-    })(),
-  ]);
+  try {
+    const published = await fetch(
+      `/static/${encodeURIComponent(org)}/${encodeURIComponent(system.repo)}/latest/tokens.css`,
+      { method: "HEAD", cache: "no-store" },
+    );
+    if (!publication.isConnected) {
+      return;
+    }
+    publication.innerHTML = published.ok ? '<span class="status-dot"></span> Published' : "Not published";
+    componentArea.hidden = !published.ok;
+    setup.hidden = published.ok;
+    if (!published.ok) {
+      return;
+    }
+    const response = await fetch("/api/projects");
+    if (!response.ok) {
+      throw new Error("Could not load component repositories. Reload to try again.");
+    }
+    const projects = (await response.json()).filter((item) => item.team === org && item.type === "component");
+    if (!components.isConnected) {
+      return;
+    }
+    grid.querySelector("#component-count").textContent = projects.length;
+    components.innerHTML =
+      projects
+        .map(
+          (item) =>
+            `<a class="system-card repository-row" href="${projectUrl(org, item.repo)}"><span class="system-icon">▱</span><div class="repository-copy"><h3>${escape(item.name || item.repo)}</h3>${item.description ? `<span class="repository-description">${escape(item.description)}</span>` : ""}</div><span class="row-arrow" aria-hidden="true">→</span></a>`,
+        )
+        .join("") || '<div class="empty">No components yet.</div>';
+    filterRepositories();
+  } catch {
+    if (!publication.isConnected) {
+      return;
+    }
+    publication.textContent = "Could not check";
+    componentArea.hidden = true;
+    setup.hidden = false;
+    setup.querySelector(".setup-footnote").textContent =
+      "We couldn't check whether Foundation is published. Open Foundation to review its tokens, or try reloading.";
+  }
 }
 
 export function workbenchNavigation(area, project, projects, org, repo) {

@@ -1970,6 +1970,7 @@ createServer(async (request, response) => {
         }
         throw Object.assign(new Error("System repository is ready; retry to persist its metadata."), { status: 503 });
       }
+      invalidateInventory();
       return reply(response, 201, {
         designSystem: { team: gitOrg, repo: "foundation", slug, name, revision: revision.slice(0, 12) },
       });

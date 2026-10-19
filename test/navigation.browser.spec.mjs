@@ -71,6 +71,7 @@ for (const width of [1440, 900, 390, 360]) {
     ];
     let createdSystem;
     let createdComponent;
+    let foundationPublished = false;
     await page.route("https://cdn.li3.dev/**", (route) =>
       width === 900
         ? route.abort("failed")
@@ -79,7 +80,9 @@ for (const width of [1440, 900, 390, 360]) {
             body: `export async function load() { if (!customElements.get('code-editor')) customElements.define('code-editor', class extends HTMLElement { value = ''; }); }`,
           }),
     );
-    await page.route("**/static/**", (route) => route.fulfill({ status: 200, body: ":root { --brand: blue; }" }));
+    await page.route("**/static/**", (route) =>
+      route.fulfill({ status: foundationPublished ? 200 : 404, body: ":root { --brand: blue; }" }),
+    );
     await page.route("**/api/**", async (route) => {
       const path = new URL(route.request().url()).pathname;
       let body = {};
@@ -132,6 +135,9 @@ for (const width of [1440, 900, 390, 360]) {
         }
       } else if (path.startsWith("/api/history/")) {
         body = { history: [] };
+      } else if (path.startsWith("/api/publish/")) {
+        foundationPublished = true;
+        body = { revision: "published" };
       }
       await route.fulfill({ json: body });
     });
@@ -158,22 +164,17 @@ for (const width of [1440, 900, 390, 360]) {
     await page.screenshot({ path: test.info().outputPath(`team-${width}.png`), fullPage: true });
     await page.getByRole("link", { name: "Open Acme UI", exact: true }).click();
     await expect(page.locator("#dashboard-title")).toHaveText("Acme UI");
-    await expect(page.getByRole("button", { name: "New component" })).toBeEnabled();
-    await expect(page.locator("#overview-components .system-card")).toHaveCount(6);
+    await expect(page.locator("#foundation-setup")).toBeVisible();
+    await expect(page.locator("#foundation-setup")).toContainText("CSS variables for color, spacing, and type");
+    await expect(page.locator("#component-area")).toBeHidden();
+    await expect(page.locator("#component-count")).toBeHidden();
+    await expect(page.getByRole("searchbox", { name: "Find a component" })).toBeHidden();
+    await expect(page.getByRole("button", { name: "New component" })).toHaveCount(0);
+    await page.screenshot({ path: test.info().outputPath(`system-foundation-setup-${width}.png`), fullPage: true });
     const foundationBounds = await page.locator(".foundation-card").boundingBox();
-    const lastRow = await page.locator("#overview-components .system-card").last().boundingBox();
     expect(foundationBounds.height).toBeLessThanOrEqual(80);
-    expect(lastRow.y + lastRow.height).toBeLessThan(740);
-    await page.getByRole("searchbox", { name: "Find a component" }).fill("checkbox");
-    await expect(page.locator("#overview-components .system-card:visible")).toHaveCount(1);
-    await page.getByRole("searchbox", { name: "Find a component" }).fill("no-match");
-    await expect(page.locator("#filter-empty")).toBeVisible();
-    await page.getByRole("searchbox", { name: "Find a component" }).fill("");
-    await page.getByRole("button", { name: "New component" }).click();
-    await expect(page.getByRole("dialog", { name: "Create a component" })).toBeVisible();
-    await page.getByRole("button", { name: "Close dialog" }).click();
-    await page.screenshot({ path: test.info().outputPath(`system-${width}.png`), fullPage: true });
-    await page.getByRole("link", { name: /Open Foundation/ }).click();
+    await page.locator(".foundation-card").click();
+    await expect(page).toHaveURL(/team=acme-ui&repo=foundation/);
     await expect(page.getByRole("button", { name: "Save Foundation" })).toBeVisible();
     if (width <= 760) {
       await page.locator(".project-drawer > summary").click();
@@ -192,11 +193,32 @@ for (const width of [1440, 900, 390, 360]) {
     await expect(page.locator("#token-status")).toHaveText("Committed saved.");
     expect(saved.files["tokens.css"]).toContain("--brand: blue");
     expect(saved.files["styles.css"]).toBe("body { margin: 4px; }");
+    await page.getByRole("button", { name: "Publish latest" }).click();
+    await expect(page.locator("#foundation-state")).toContainText("Published");
     await page.screenshot({ path: test.info().outputPath(`foundation-${width}.png`), fullPage: true });
     await page.locator(".component-list a").first().click();
     await expect(page.locator("#layer-list button")).toHaveCount(1);
     await page.getByRole("link", { name: "Back to design system" }).click();
     await expect(page.locator("#dashboard-title")).toHaveText("Acme UI");
+    await expect(page.locator("#foundation-setup")).toBeHidden();
+    await expect(page.locator("#component-area")).toBeVisible();
+    await expect(page.getByRole("button", { name: "New component" })).toBeEnabled();
+    await expect(page.locator("#overview-components .system-card")).toHaveCount(6);
+    const searchRow = await page.locator(".component-toolbar").boundingBox();
+    const searchInput = await page.getByRole("searchbox", { name: "Find a component" }).boundingBox();
+    const createButton = await page.getByRole("button", { name: "New component" }).boundingBox();
+    expect(Math.abs(searchInput.y - createButton.y)).toBeLessThan(3);
+    expect(searchInput.x + searchInput.width).toBeLessThanOrEqual(createButton.x);
+    expect(searchRow.height).toBeLessThan(60);
+    await page.getByRole("searchbox", { name: "Find a component" }).fill("checkbox");
+    await expect(page.locator("#overview-components .system-card:visible")).toHaveCount(1);
+    await page.getByRole("searchbox", { name: "Find a component" }).fill("no-match");
+    await expect(page.locator("#system-grid #filter-empty")).toBeVisible();
+    await page.getByRole("searchbox", { name: "Find a component" }).fill("");
+    await page.getByRole("button", { name: "New component" }).click();
+    await expect(page.getByRole("dialog", { name: "Create a component" })).toBeVisible();
+    await page.getByRole("button", { name: "Close dialog" }).click();
+    await page.screenshot({ path: test.info().outputPath(`system-${width}.png`), fullPage: true });
     if (width <= 760) {
       await page.locator(".team-drawer > summary").click();
     }

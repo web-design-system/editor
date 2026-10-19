@@ -681,6 +681,13 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
       assert.match(files["tokens.css"], /:root/);
       assert.match(files["styles.css"], /tokens\.css/);
     }
+    const projectInventory = await fetch(`${base}/api/projects`, { headers });
+    assert.equal(projectInventory.status, 200, await projectInventory.clone().text());
+    const projects = await projectInventory.json();
+    assert.ok(
+      projects.some((project) => project.team === "org-one" && project.repo === "foundation"),
+      "a newly registered Foundation is immediately available to the project workbench",
+    );
     const smartGitRequestsBeforeMetadataLists = smartGitRequests;
     const systemsListResponse = await fetch(`${base}/api/design-systems`, { headers });
     assert.match(systemsListResponse.headers.get("server-timing"), /^app;dur=\d/);

@@ -329,6 +329,11 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
         const gitDir = join(bareRoot, org, `${repo}.git`);
         const ref = parsedUrl.searchParams.get("ref") || "main";
         try {
+          if (kind === "tree" && !parsedUrl.searchParams.has("ref")) {
+            res.writeHead(200, { "content-type": "application/json" });
+            res.end(JSON.stringify([]));
+            return;
+          }
           if (kind === "tree") {
             const names = (await run("git", ["--git-dir", gitDir, "ls-tree", "-r", "--name-only", ref], { cwd: temp }))
               .split("\n")

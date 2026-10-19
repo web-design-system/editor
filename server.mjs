@@ -711,7 +711,7 @@ async function remoteRepositories() {
 function remoteRoute(team, repo, suffix) {
   return `/api/v1/orgs/${encodeURIComponent(team)}/repos/${encodeURIComponent(repo)}/${suffix}`;
 }
-async function remoteTree(team, repo, ref = null) {
+async function remoteTree(team, repo, ref = "main") {
   return measurePerformance("git-rest.tree", {}, async () => {
     const query = ref ? `?${new URLSearchParams({ ref })}` : "";
     const result = await api(`${remoteRoute(team, repo, "tree")}${query}`);

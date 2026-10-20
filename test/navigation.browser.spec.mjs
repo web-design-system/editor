@@ -249,20 +249,22 @@ for (const width of [1440, 900, 390, 360]) {
     await page.getByRole("button", { name: "Create team", exact: true }).click();
     await expect(page.getByRole("dialog")).not.toBeVisible();
     await expect(page.locator("#dashboard-title")).toHaveText("new-team");
-    await page.getByRole("button", { name: "New design system" }).click();
-    await page.getByLabel("Design-system slug", { exact: true }).fill("web");
-    await page.getByLabel("Git organization slug", { exact: true }).fill("new-team-web");
-    await page.getByLabel("Display name (optional)").fill("Web System");
-    await page.getByRole("button", { name: "Create design system", exact: true }).click();
+    await expect(page.locator("#first-system-empty")).toBeVisible();
+    await page.getByPlaceholder("Name").fill("Web System");
+    await page.getByRole("button", { name: "Create", exact: true }).click();
     await expect(page.locator("#dashboard-title")).toHaveText("Web System");
     expect(createdSystem.team).toBe("new-team");
-    expect(createdSystem.gitOrg).toBe("new-team-web");
+    expect(createdSystem.gitOrg).toBe("web-system-new-team");
     await page.getByRole("button", { name: "New component" }).click();
     await page.getByLabel("Component name", { exact: true }).fill("New Card");
     await page.getByRole("button", { name: "Create component", exact: true }).click();
     await expect(page.locator("#layer-list button")).toHaveCount(1);
-    expect(createdComponent.team).toBe("new-team-web");
-    expect(createdComponent.designSystem).toEqual({ team: "new-team-web", repo: "foundation", revision: "latest" });
+    expect(createdComponent.team).toBe("web-system-new-team");
+    expect(createdComponent.designSystem).toEqual({
+      team: "web-system-new-team",
+      repo: "foundation",
+      revision: "latest",
+    });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     expect(errors).toEqual([]);
   });

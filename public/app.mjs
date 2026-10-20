@@ -43,6 +43,7 @@ const arrow =
   '<svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3.5 8h9m-4-4 4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 let systems = [];
 let teams = [];
+let systemsLoaded = false;
 let selectedTeam = new URLSearchParams(location.search).get("teamSlug") || "all";
 let authenticatedUser = false;
 function escapeHtml(value) {
@@ -167,6 +168,10 @@ function renderSystems() {
   systemGrid.classList.add("flex", "flex-col", "gap-0");
   document.querySelector("#system-filter").value = "";
   document.querySelector("#filter-empty").hidden = true;
+  const emptyState = document.querySelector("#first-system-empty");
+  const dashboardLayout = document.querySelector("#dashboard-layout");
+  emptyState.hidden = true;
+  dashboardLayout.hidden = false;
   const org = new URLSearchParams(location.search).get("system");
   if (org) {
     const system = systems.find((item) => (item.org || item.team) === org);
@@ -182,6 +187,12 @@ function renderSystems() {
   const visible = selectedTeam === "all" ? systems : systems.filter((system) => system.team === selectedTeam);
   document.querySelector("#system-summary").textContent = "";
   if (!visible.length) {
+    const availableTeams = teams.map((team) => (typeof team === "string" ? team : team.slug));
+    if (systemsLoaded && availableTeams.length > 0) {
+      dashboardLayout.hidden = true;
+      emptyState.hidden = false;
+      return;
+    }
     systemGrid.innerHTML =
       '<div class="empty rounded border border-dashed border-zinc-700 bg-zinc-900/50 p-5 text-left text-xs text-zinc-400">No systems yet.</div>';
     return;
@@ -264,6 +275,7 @@ async function loadWorkspace() {
       name: system.name,
       type: "design-system",
     }));
+    systemsLoaded = true;
     const currentSystem = systems.find((item) => item.org === new URLSearchParams(location.search).get("system"));
     if (currentSystem) {
       selectedTeam = currentSystem.team;
@@ -298,6 +310,7 @@ async function refreshWorkspace() {
     name: system.name,
     type: "design-system",
   }));
+  systemsLoaded = true;
   renderTeams();
   renderSystems();
 }
@@ -376,6 +389,56 @@ systemForm.addEventListener("submit", async (event) => {
     setNotice(error.message || "Could not create design system.");
   } finally {
     button.disabled = false;
+  }
+});
+const firstSystemForm = document.querySelector("#first-system-form");
+firstSystemForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const input = firstSystemForm.querySelector("input[name=name]");
+  const status = document.querySelector("#first-system-status");
+  const button = firstSystemForm.querySelector("button[type=submit]");
+  const name = input.value.trim();
+  const teamSlug = selectedTeam === "all" ? (typeof teams[0] === "string" ? teams[0] : teams[0]?.slug) : selectedTeam;
+  const teamExists = teams.some((team) => (typeof team === "string" ? team : team.slug) === teamSlug);
+  const nameSlug = name
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 100)
+    .replace(/-+$/g, "");
+  status.textContent = "";
+  if (!nameSlug) {
+    status.textContent = "Enter a name with at least one letter or number.";
+    input.focus();
+    return;
+  }
+  if (!teamExists) {
+    status.textContent = "Create a team before creating a design system.";
+    return;
+  }
+  const slug = `${nameSlug}-${teamSlug}`.slice(0, 100).replace(/[-.]+$/g, "");
+  button.disabled = true;
+  button.textContent = "Creating…";
+  status.textContent = "Creating your design system…";
+  try {
+    const response = await fetch("/api/design-systems", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ team: teamSlug, slug, gitOrg: slug, name, type: "design-system" }),
+    });
+    const data = await responseData(response);
+    if (!response.ok) {
+      throw new Error(data.error || `Could not create design system (HTTP ${response.status}).`);
+    }
+    location.href = systemUrl(data.designSystem?.team || slug);
+  } catch (error) {
+    status.textContent = error.message || "Could not create your design system.";
+  } finally {
+    button.disabled = false;
+    button.textContent = "Create";
   }
 });
 const params = new URLSearchParams(location.search);

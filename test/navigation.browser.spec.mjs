@@ -166,18 +166,24 @@ for (const width of [1440, 900, 390, 360]) {
     await expect(page.locator("#system-team")).toHaveValue("acme");
     await page.getByRole("button", { name: "Close dialog" }).click();
     await page.screenshot({ path: test.info().outputPath(`team-${width}.png`), fullPage: true });
+    await page.evaluate(() => {
+      if (!customElements.get("wds-repository-card")) {
+        customElements.define("wds-repository-card", class extends HTMLElement {});
+      }
+    });
     await page.getByRole("link", { name: "Open Acme UI", exact: true }).click();
     await expect(page.locator("#dashboard-title")).toHaveText("Acme UI");
+    await expect(page.getByRole("link", { name: "All design systems" })).toHaveAttribute("href", "/");
     await expect(page.locator("#foundation-setup")).toBeVisible();
     await expect(page.locator("#foundation-setup")).toContainText("CSS variables for color, spacing, and type");
+    await expect(page.locator("#foundation-setup")).not.toContainText("Add your values to tokens.css");
     await expect(page.locator("#component-area")).toBeHidden();
     await expect(page.locator("#component-count")).toBeHidden();
     await expect(page.getByRole("searchbox", { name: "Find a component" })).toBeHidden();
     await expect(page.getByRole("button", { name: "New component" })).toHaveCount(0);
+    await expect(page.locator(".foundation-card")).toBeHidden();
     await page.screenshot({ path: test.info().outputPath(`system-foundation-setup-${width}.png`), fullPage: true });
-    const foundationBounds = await page.locator(".foundation-card").boundingBox();
-    expect(foundationBounds.height).toBeLessThanOrEqual(80);
-    await page.locator(".foundation-card").click();
+    await page.locator(".setup-action").click();
     await expect(page).toHaveURL(/team=acme-ui&repo=foundation/);
     await expect(page.getByRole("button", { name: "Save Foundation" })).toBeVisible();
     if (width <= 760) {
@@ -222,6 +228,7 @@ for (const width of [1440, 900, 390, 360]) {
     await expect(page.locator("#layer-list button")).toHaveCount(1);
     await page.getByRole("link", { name: "Back to design system" }).click();
     await expect(page.locator("#dashboard-title")).toHaveText("Acme UI");
+    await expect(page.locator(".foundation-card")).toBeVisible();
     await expect(page.locator("#foundation-setup")).toBeHidden();
     await expect(page.locator("#component-area")).toBeVisible();
     await expect(page.getByRole("button", { name: "New component" })).toBeEnabled();

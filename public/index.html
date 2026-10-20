@@ -133,101 +133,105 @@
           slot="main"
           aria-label="Workspace"
         >
-          <nav
-            class="breadcrumbs mb-4 flex flex-wrap items-center gap-2.5 text-xs text-zinc-500"
-            id="dashboard-breadcrumbs"
-            aria-label="Breadcrumb"
-          >
-            <span class="text-zinc-300">Workspace</span>
-          </nav>
-          <div class="dashboard-heading flex items-center justify-between gap-3">
-            <div>
-              <h1 class="text-[22px] font-semibold text-zinc-100" id="dashboard-title" hidden></h1>
-            </div>
-            <button
-              type="button"
-              class="primary-button rounded border border-zinc-100 bg-zinc-100 px-3 py-2 text-xs font-medium text-zinc-900 hover:bg-white"
-              data-create="system"
-              hidden
+          <div id="dashboard-content">
+            <nav
+              class="breadcrumbs mb-4 flex flex-wrap items-center gap-2.5 text-xs text-zinc-500"
+              id="dashboard-breadcrumbs"
+              aria-label="Breadcrumb"
             >
-              ＋ New design system
-            </button>
-          </div>
-          <p
-            class="notice rounded border border-zinc-700 bg-zinc-900 p-3 px-4"
-            id="notice"
-            role="status"
-            aria-live="polite"
-            hidden
-          ></p>
-          <section class="section mt-5" aria-label="Repositories and systems">
-            <div class="list-toolbar mb-2.5 flex items-center gap-3">
-              <input
-                class="min-w-0 h-9 w-[min(280px,100%)] rounded border border-zinc-800 bg-zinc-900 px-2.5 py-2 text-xs text-zinc-200"
-                id="system-filter"
-                type="search"
-                aria-label="Find a system"
-                placeholder="Find a system…"
-              /><span class="section-note ml-auto text-[11px] text-zinc-400" id="system-summary"></span>
-              <h2 id="systems-title" hidden>Design systems</h2>
-            </div>
-            <div class="system-grid flex flex-col gap-0" id="system-grid">
-              <span class="loading text-xs text-zinc-400">Loading design systems…</span>
+              <span class="text-zinc-300">Workspace</span>
+            </nav>
+            <div class="dashboard-heading flex items-center justify-between gap-3">
+              <div>
+                <h1 class="text-[22px] font-semibold text-zinc-100" id="dashboard-title" hidden></h1>
+              </div>
+              <button
+                type="button"
+                class="primary-button rounded border border-zinc-100 bg-zinc-100 px-3 py-2 text-xs font-medium text-zinc-900 hover:bg-white"
+                data-create="system"
+                hidden
+              >
+                ＋ New design system
+              </button>
             </div>
             <p
-              id="filter-empty"
-              class="empty rounded border border-dashed border-zinc-700 bg-zinc-900/50 p-5 text-center text-xs"
+              class="notice rounded border border-zinc-700 bg-zinc-900 p-3 px-4"
+              id="notice"
+              role="status"
+              aria-live="polite"
               hidden
-            >
-              No matches.
+            ></p>
+            <section class="section mt-5" aria-label="Repositories and systems">
+              <div class="list-toolbar mb-2.5 flex items-center gap-3">
+                <input
+                  class="min-w-0 h-9 w-[min(280px,100%)] rounded border border-zinc-800 bg-zinc-900 px-2.5 py-2 text-xs text-zinc-200"
+                  id="system-filter"
+                  type="search"
+                  aria-label="Find a system"
+                  placeholder="Find a system…"
+                /><span class="section-note ml-auto text-[11px] text-zinc-400" id="system-summary"></span>
+                <h2 id="systems-title" hidden>Design systems</h2>
+              </div>
+              <div class="system-grid flex flex-col gap-0" id="system-grid">
+                <span class="loading text-xs text-zinc-400">Loading design systems…</span>
+              </div>
+              <p
+                id="filter-empty"
+                class="empty rounded border border-dashed border-zinc-700 bg-zinc-900/50 p-5 text-center text-xs"
+                hidden
+              >
+                No matches.
+              </p>
+            </section>
+          </div>
+          <section
+            class="mx-auto grid min-h-[calc(100dvh-80px)] w-[min(560px,calc(100%-36px))] content-center justify-items-center py-12 text-center"
+            id="first-system-empty"
+            aria-labelledby="first-system-title"
+            hidden
+          >
+            <svg class="mb-8 h-40 w-48" viewBox="0 0 192 160" fill="none" aria-hidden="true">
+              <circle cx="96" cy="82" r="70" fill="#2563EB" fill-opacity=".08" />
+              <path d="M48 52.5 96 34l48 18.5v56L96 127l-48-18.5v-56Z" fill="#18181B" stroke="#3F3F46" />
+              <path d="m49 53 47 18 47-18M96 72v54" stroke="#52525B" stroke-linejoin="round" />
+              <rect x="63" y="54" width="66" height="39" rx="5" fill="#27272A" stroke="#52525B" />
+              <rect x="72" y="64" width="28" height="5" rx="2.5" fill="#60A5FA" />
+              <rect x="72" y="75" width="46" height="4" rx="2" fill="#71717A" />
+              <rect x="72" y="84" width="34" height="4" rx="2" fill="#52525B" />
+              <circle cx="132" cy="41" r="10" fill="#2563EB" fill-opacity=".2" />
+              <path d="M132 36v10m-5-5h10" stroke="#93C5FD" stroke-linecap="round" stroke-width="1.5" />
+            </svg>
+            <p class="mb-2 text-[10px] font-semibold uppercase tracking-[.16em] text-blue-400">
+              Your team’s foundation
             </p>
+            <h1 class="m-0 text-2xl font-semibold tracking-[-.04em] text-zinc-100" id="first-system-title">
+              Create your first design system.
+            </h1>
+            <p class="mt-3 max-w-[390px] text-sm leading-6 text-zinc-400">
+              Give your team one shared place for design tokens, styles, and components.
+            </p>
+            <form class="mt-7 flex w-full max-w-[420px] gap-2" id="first-system-form">
+              <label class="sr-only" for="first-system-name">Design system name</label>
+              <input
+                class="h-11 min-w-0 flex-1 rounded border border-zinc-700 bg-zinc-900 px-3 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-blue-400"
+                id="first-system-name"
+                name="name"
+                placeholder="Name"
+                maxlength="100"
+                autocomplete="off"
+                required
+              />
+              <button
+                class="h-11 shrink-0 rounded border border-blue-400 bg-blue-500 px-5 text-sm font-medium text-white transition-colors hover:bg-blue-400 disabled:cursor-wait disabled:opacity-60"
+                type="submit"
+              >
+                Create
+              </button>
+            </form>
+            <p class="mt-3 min-h-5 text-xs text-red-300" id="first-system-status" role="status" aria-live="polite"></p>
           </section>
         </main>
       </wds-dashboard-layout>
-      <section
-        class="mx-auto grid min-h-dvh w-[min(560px,calc(100%-36px))] content-center justify-items-center py-12 text-center"
-        id="first-system-empty"
-        aria-labelledby="first-system-title"
-        hidden
-      >
-        <svg class="mb-8 h-40 w-48" viewBox="0 0 192 160" fill="none" aria-hidden="true">
-          <circle cx="96" cy="82" r="70" fill="#2563EB" fill-opacity=".08" />
-          <path d="M48 52.5 96 34l48 18.5v56L96 127l-48-18.5v-56Z" fill="#18181B" stroke="#3F3F46" />
-          <path d="m49 53 47 18 47-18M96 72v54" stroke="#52525B" stroke-linejoin="round" />
-          <rect x="63" y="54" width="66" height="39" rx="5" fill="#27272A" stroke="#52525B" />
-          <rect x="72" y="64" width="28" height="5" rx="2.5" fill="#60A5FA" />
-          <rect x="72" y="75" width="46" height="4" rx="2" fill="#71717A" />
-          <rect x="72" y="84" width="34" height="4" rx="2" fill="#52525B" />
-          <circle cx="132" cy="41" r="10" fill="#2563EB" fill-opacity=".2" />
-          <path d="M132 36v10m-5-5h10" stroke="#93C5FD" stroke-linecap="round" stroke-width="1.5" />
-        </svg>
-        <p class="mb-2 text-[10px] font-semibold uppercase tracking-[.16em] text-blue-400">Your team’s foundation</p>
-        <h1 class="m-0 text-2xl font-semibold tracking-[-.04em] text-zinc-100" id="first-system-title">
-          Create your first design system.
-        </h1>
-        <p class="mt-3 max-w-[390px] text-sm leading-6 text-zinc-400">
-          Give your team one shared place for design tokens, styles, and components.
-        </p>
-        <form class="mt-7 flex w-full max-w-[420px] gap-2" id="first-system-form">
-          <label class="sr-only" for="first-system-name">Design system name</label>
-          <input
-            class="h-11 min-w-0 flex-1 rounded border border-zinc-700 bg-zinc-900 px-3 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-blue-400"
-            id="first-system-name"
-            name="name"
-            placeholder="Name"
-            maxlength="100"
-            autocomplete="off"
-            required
-          />
-          <button
-            class="h-11 shrink-0 rounded border border-blue-400 bg-blue-500 px-5 text-sm font-medium text-white transition-colors hover:bg-blue-400 disabled:cursor-wait disabled:opacity-60"
-            type="submit"
-          >
-            Create
-          </button>
-        </form>
-        <p class="mt-3 min-h-5 text-xs text-red-300" id="first-system-status" role="status" aria-live="polite"></p>
-      </section>
       <dialog
         class="mx-auto my-auto w-[min(480px,calc(100%-32px))] max-h-[calc(100dvh-48px)] overflow-auto rounded-lg border border-zinc-700 bg-zinc-900 p-7 text-zinc-300 shadow-[0_24px_80px_#0008] backdrop:bg-[#09090bcc] backdrop:backdrop-blur"
         id="creation-dialog"

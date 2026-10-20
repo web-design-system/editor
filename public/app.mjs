@@ -97,6 +97,8 @@ function showGuestWelcome(message, footnote) {
   landing.hidden = false;
   workspace.classList.add("hidden");
   const dashboardLayout = document.querySelector("#dashboard-layout");
+  document.querySelector("#dashboard-content").hidden = false;
+  document.querySelector("#first-system-empty").hidden = true;
   dashboardLayout.hidden = true;
   dashboardLayout.setAttribute("aria-busy", "false");
   document.querySelector("#guest-welcome").hidden = false;
@@ -169,8 +171,10 @@ function renderSystems() {
   document.querySelector("#system-filter").value = "";
   document.querySelector("#filter-empty").hidden = true;
   const emptyState = document.querySelector("#first-system-empty");
+  const dashboardContent = document.querySelector("#dashboard-content");
   const dashboardLayout = document.querySelector("#dashboard-layout");
   emptyState.hidden = true;
+  dashboardContent.hidden = false;
   dashboardLayout.hidden = false;
   const org = new URLSearchParams(location.search).get("system");
   if (org) {
@@ -189,7 +193,7 @@ function renderSystems() {
   if (!visible.length) {
     const availableTeams = teams.map((team) => (typeof team === "string" ? team : team.slug));
     if (systemsLoaded && availableTeams.length > 0) {
-      dashboardLayout.hidden = true;
+      dashboardContent.hidden = true;
       emptyState.hidden = false;
       return;
     }

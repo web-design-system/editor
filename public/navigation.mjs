@@ -67,8 +67,7 @@ export async function renderSystemOverview(system, grid) {
   document.querySelector("#dashboard-title").textContent = system.name;
   document.querySelector("#dashboard-title").hidden = false;
   document.querySelector("#dashboard-breadcrumbs").hidden = false;
-  document.querySelector("#dashboard-breadcrumbs").innerHTML =
-    `<a href="/?teamSlug=${encodeURIComponent(system.team)}">← ${escape(system.team)}</a>`;
+  document.querySelector("#dashboard-breadcrumbs").innerHTML = '<a href="/">← All design systems</a>';
   document.querySelector('.dashboard-heading [data-create="system"]').hidden = true;
   document.querySelector("#systems-title").textContent = "Repositories";
   document.querySelector("#system-summary").textContent = "";
@@ -94,6 +93,8 @@ export async function renderSystemOverview(system, grid) {
       }),
     );
   }
+  const foundationCard = grid.querySelector(".foundation-card");
+  foundationCard.hidden = true;
   const dialog = grid.querySelector("dialog");
   const createComponentButton = grid.querySelector("#new-component");
   createComponentButton.classList.add(
@@ -166,6 +167,13 @@ export async function renderSystemOverview(system, grid) {
   });
   const componentArea = grid.querySelector("#component-area");
   const setup = grid.querySelector("#foundation-setup");
+  setup.querySelector(".setup-action").href = projectUrl(org, system.repo);
+  setup.querySelector(".setup-footnote")?.remove();
+  const setupStatus = document.createElement("p");
+  setupStatus.className = "mt-3 text-xs text-red-300";
+  setupStatus.setAttribute("role", "status");
+  setupStatus.hidden = true;
+  setup.append(setupStatus);
   const publication = grid.querySelector("#system-publication");
   try {
     const published = await fetch(
@@ -176,6 +184,7 @@ export async function renderSystemOverview(system, grid) {
       return;
     }
     publication.innerHTML = published.ok ? '<span class="status-dot"></span> Published' : "Not published";
+    foundationCard.hidden = !published.ok;
     componentArea.hidden = !published.ok;
     setup.hidden = published.ok;
     if (!published.ok) {
@@ -229,8 +238,9 @@ export async function renderSystemOverview(system, grid) {
     publication.textContent = "Could not check";
     componentArea.hidden = true;
     setup.hidden = false;
-    setup.querySelector(".setup-footnote").textContent =
-      "We couldn't check whether Foundation is published. Open Foundation to review its tokens, or try reloading.";
+    foundationCard.hidden = true;
+    setupStatus.textContent = "Couldn’t check whether Foundation is published. Try reloading.";
+    setupStatus.hidden = false;
   }
 }
 

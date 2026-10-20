@@ -8,7 +8,16 @@ for (const width of [390, 1440]) {
     await page.route("https://cdn.li3.dev/**", (route) =>
       route.fulfill({
         contentType: "text/javascript",
-        body: "export async function load() {}",
+        body: `export async function load(url) {
+          if (url !== '/components/ui.html' || customElements.get('wds-dashboard-layout')) return;
+          customElements.define('wds-dashboard-layout', class extends HTMLElement {
+            connectedCallback() {
+              if (this.shadowRoot) return;
+              const root = this.attachShadow({ mode: 'open' });
+              root.innerHTML = '<link rel="stylesheet" href="/css/tailwind.css"><div class="grid min-h-dvh grid-cols-[220px_minmax(0,1fr)] max-[760px]:block"><slot name="sidebar" class="contents"></slot><slot name="main" class="contents"></slot></div>';
+            }
+          });
+        }`,
       }),
     );
     await page.route("**/static/**", (route) => route.fulfill({ status: 404 }));
@@ -46,10 +55,16 @@ for (const width of [390, 1440]) {
     await expect(page.locator("#system-grid .loading")).toBeVisible();
     await expect(page.locator("#first-system-empty")).toBeHidden();
     await expect(page.locator("#first-system-empty")).toBeVisible();
-    await expect(page.locator("#dashboard-layout")).toBeHidden();
+    await expect(page.locator("#dashboard-layout")).toBeVisible();
+    await expect(page.locator("#dashboard-content")).toBeHidden();
+    await expect(page.locator(width > 760 ? "#team-list" : "#team-navigation-label")).toBeVisible();
+    if (width > 760) {
+      const sidebar = await page.locator(".workspace-sidebar").boundingBox();
+      expect(sidebar.x).toBe(0);
+      expect(sidebar.width).toBe(220);
+    }
     await expect(page.getByRole("heading", { name: "Create your first design system." })).toBeVisible();
     await expect(page.getByPlaceholder("Name")).toBeVisible();
-    await page.screenshot({ path: test.info().outputPath(`first-system-empty-${width}.png`), fullPage: true });
     await page.getByPlaceholder("Name").fill("WDS Components");
     await page.getByRole("button", { name: "Create", exact: true }).click();
     await expect(page).toHaveURL(/\?system=wds-components-wds$/);

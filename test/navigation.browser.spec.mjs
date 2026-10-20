@@ -175,7 +175,10 @@ for (const width of [1440, 900, 390, 360]) {
     await expect(page.locator("#dashboard-title")).toHaveText("Acme UI");
     await expect(page.getByRole("link", { name: "All design systems" })).toHaveAttribute("href", "/");
     await expect(page.locator("#foundation-setup")).toBeVisible();
-    await expect(page.locator("#foundation-setup")).toContainText("CSS variables for color, spacing, and type");
+    await expect(page.locator("#foundation-setup")).toContainText("Define your design tokens");
+    await expect(page.locator("#foundation-setup")).toContainText(
+      "Give your design system the foundation it needs: the colors, spacing, or any tokens used by all components.",
+    );
     await expect(page.locator("#foundation-setup")).not.toContainText("Add your values to tokens.css");
     await expect(page.locator("#component-area")).toBeHidden();
     await expect(page.locator("#component-count")).toBeHidden();
@@ -183,6 +186,7 @@ for (const width of [1440, 900, 390, 360]) {
     await expect(page.getByRole("button", { name: "New component" })).toHaveCount(0);
     await expect(page.locator(".foundation-card")).toBeHidden();
     await page.screenshot({ path: test.info().outputPath(`system-foundation-setup-${width}.png`), fullPage: true });
+    await expect(page.locator(".setup-action")).toHaveText("Create Design Foundation →");
     await page.locator(".setup-action").click();
     await expect(page).toHaveURL(/team=acme-ui&repo=foundation/);
     await expect(page.getByRole("button", { name: "Save Foundation" })).toBeVisible();

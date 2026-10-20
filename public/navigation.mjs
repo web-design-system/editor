@@ -167,7 +167,27 @@ export async function renderSystemOverview(system, grid) {
   });
   const componentArea = grid.querySelector("#component-area");
   const setup = grid.querySelector("#foundation-setup");
-  setup.querySelector(".setup-action").href = projectUrl(org, system.repo);
+  setup.className =
+    "foundation-setup mx-auto grid min-h-[calc(100dvh-80px)] w-[min(560px,calc(100%-36px))] content-center justify-items-center py-12 text-center";
+  setup.insertAdjacentHTML(
+    "afterbegin",
+    '<svg class="mb-8 h-40 w-48" viewBox="0 0 192 160" fill="none" aria-hidden="true"><circle cx="96" cy="82" r="70" fill="#2563EB" fill-opacity=".08"/><path d="M48 52.5 96 34l48 18.5v56L96 127l-48-18.5v-56Z" fill="#18181B" stroke="#3F3F46"/><path d="m49 53 47 18 47-18M96 72v54" stroke="#52525B" stroke-linejoin="round"/><rect x="63" y="54" width="66" height="39" rx="5" fill="#27272A" stroke="#52525B"/><rect x="72" y="64" width="28" height="5" rx="2.5" fill="#60A5FA"/><rect x="72" y="75" width="46" height="4" rx="2" fill="#71717A"/><rect x="72" y="84" width="34" height="4" rx="2" fill="#52525B"/><circle cx="132" cy="41" r="10" fill="#2563EB" fill-opacity=".2"/><path d="M132 36v10m-5-5h10" stroke="#93C5FD" stroke-linecap="round" stroke-width="1.5"/></svg>',
+  );
+  const setupEyebrow = setup.querySelector(".eyebrow");
+  setupEyebrow.className = "mb-2 text-[10px] font-semibold uppercase tracking-[.16em] text-blue-400";
+  setupEyebrow.textContent = "YOUR DESIGN SYSTEM FOUNDATION";
+  const setupTitle = setup.querySelector("h2");
+  setupTitle.className = "m-0 text-2xl font-semibold tracking-[-.04em] text-zinc-100";
+  setupTitle.textContent = "Define your design tokens";
+  const setupDescription = setup.querySelector("p");
+  setupDescription.className = "mt-3 max-w-[390px] text-sm leading-6 text-zinc-400";
+  setupDescription.textContent =
+    "Give your design system the foundation it needs: the colors, spacing, or any tokens used by all components.";
+  const setupAction = setup.querySelector(".setup-action");
+  setupAction.href = projectUrl(org, system.repo);
+  setupAction.className =
+    "setup-action mt-7 inline-flex h-11 items-center gap-2 rounded border border-blue-400 bg-blue-500 px-5 text-sm font-medium text-white transition-colors hover:bg-blue-400";
+  setupAction.innerHTML = 'Create Design Foundation <span aria-hidden="true">→</span>';
   setup.querySelector(".setup-footnote")?.remove();
   const setupStatus = document.createElement("p");
   setupStatus.className = "mt-3 text-xs text-red-300";

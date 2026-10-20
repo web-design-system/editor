@@ -266,9 +266,14 @@ for (const width of [1440, 900, 390, 360]) {
     await expect(page.locator("#dashboard-title")).toHaveText("Web System");
     expect(createdSystem.team).toBe("new-team");
     expect(createdSystem.gitOrg).toBe("web-system-new-team");
-    await page.getByRole("button", { name: "New component" }).click();
-    await page.getByLabel("Component name", { exact: true }).fill("New Card");
-    await page.getByRole("button", { name: "Create component", exact: true }).click();
+    await expect(page.getByText("FIRST COMPONENT", { exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Create your first component" })).toBeVisible();
+    await expect(page.getByText("Give your design system its first reusable building block.")).toBeVisible();
+    await expect(page.getByRole("searchbox", { name: "Find a component" })).toBeHidden();
+    await expect(page.getByRole("button", { name: "New component" })).toBeHidden();
+    await page.screenshot({ path: test.info().outputPath(`first-component-${width}.png`), fullPage: true });
+    await page.getByRole("textbox", { name: "Component name" }).fill("New Card");
+    await page.getByRole("button", { name: "Create", exact: true }).click();
     await expect(page.locator("#layer-list button")).toHaveCount(1);
     expect(createdComponent.team).toBe("web-system-new-team");
     expect(createdComponent.designSystem).toEqual({

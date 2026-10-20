@@ -118,13 +118,12 @@ export async function renderSystemOverview(system, grid) {
   grid.querySelector(".component-search").append(filter.parentElement);
   grid.querySelector("#new-component").addEventListener("click", () => dialog.showModal());
   dialog.querySelector(".dialog-close").addEventListener("click", () => dialog.close());
-  grid.querySelector("form").addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const button = event.currentTarget.querySelector('[type="submit"]');
-    const status = grid.querySelector("#component-create-status");
+  const createComponent = async (name, status, button) => {
+    const buttonLabel = button.textContent;
     button.disabled = true;
+    button.textContent = "Creating…";
+    status.textContent = "";
     try {
-      const name = new FormData(event.currentTarget).get("name").trim();
       const repo = name
         .toLowerCase()
         .replace(/[^a-z0-9._-]+/g, "-")
@@ -150,7 +149,15 @@ export async function renderSystemOverview(system, grid) {
       status.textContent = error.message;
     } finally {
       button.disabled = false;
+      button.textContent = buttonLabel;
     }
+  };
+  grid.querySelector("form").addEventListener("submit", (event) => {
+    event.preventDefault();
+    const button = event.currentTarget.querySelector('[type="submit"]');
+    const status = grid.querySelector("#component-create-status");
+    const name = new FormData(event.currentTarget).get("name").trim();
+    createComponent(name, status, button);
   });
   const components = grid.querySelector("#overview-components");
   components.classList.add(
@@ -219,36 +226,38 @@ export async function renderSystemOverview(system, grid) {
       return;
     }
     grid.querySelector("#component-count").textContent = projects.length;
-    if (customElements.get("wds-repository-card")) {
+    if (!projects.length) {
+      componentArea.querySelector(".components-heading").hidden = true;
+      componentArea.querySelector(".component-toolbar").hidden = true;
+      components.className = "component-empty-container";
+      components.innerHTML = `<section class="mx-auto grid min-h-[calc(100dvh-320px)] w-[min(560px,100%)] content-center justify-items-center py-12 text-center" aria-labelledby="first-component-title"><svg class="mb-8 h-40 w-48" viewBox="0 0 192 160" fill="none" aria-hidden="true"><circle cx="96" cy="82" r="70" fill="#2563EB" fill-opacity=".08"/><path d="M48 52.5 96 34l48 18.5v56L96 127l-48-18.5v-56Z" fill="#18181B" stroke="#3F3F46"/><path d="m49 53 47 18 47-18M96 72v54" stroke="#52525B" stroke-linejoin="round"/><rect x="63" y="54" width="66" height="39" rx="5" fill="#27272A" stroke="#52525B"/><rect x="72" y="64" width="28" height="5" rx="2.5" fill="#60A5FA"/><rect x="72" y="75" width="46" height="4" rx="2" fill="#71717A"/><rect x="72" y="84" width="34" height="4" rx="2" fill="#52525B"/><circle cx="132" cy="41" r="10" fill="#2563EB" fill-opacity=".2"/><path d="M132 36v10m-5-5h10" stroke="#93C5FD" stroke-linecap="round" stroke-width="1.5"/></svg><p class="mb-2 text-[10px] font-semibold uppercase tracking-[.16em] text-blue-400">FIRST COMPONENT</p><h2 class="m-0 text-2xl font-semibold tracking-[-.04em] text-zinc-100" id="first-component-title">Create your first component</h2><p class="mt-3 max-w-[390px] text-sm leading-6 text-zinc-400">Give your design system its first reusable building block. Start with a name and make it yours.</p><form class="mt-7 flex w-full max-w-[420px] gap-2" id="first-component-form"><label class="sr-only" for="first-component-name">Component name</label><input class="h-11 min-w-0 flex-1 rounded border border-zinc-700 bg-zinc-900 px-3 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-blue-400" id="first-component-name" name="name" placeholder="Component name" maxlength="100" autocomplete="off" required><button class="h-11 shrink-0 rounded border border-blue-400 bg-blue-500 px-5 text-sm font-medium text-white transition-colors hover:bg-blue-400 disabled:cursor-wait disabled:opacity-60" type="submit">Create</button></form><p class="mt-3 min-h-5 text-xs text-red-300" id="first-component-status" role="status" aria-live="polite"></p></section>`;
+      components.querySelector("#first-component-form").addEventListener("submit", (event) => {
+        event.preventDefault();
+        const button = event.currentTarget.querySelector('[type="submit"]');
+        const status = components.querySelector("#first-component-status");
+        const name = new FormData(event.currentTarget).get("name").trim();
+        createComponent(name, status, button);
+      });
+    } else if (customElements.get("wds-repository-card")) {
       components.replaceChildren(
-        ...(projects.length
-          ? projects.map((item) =>
-              createRepositoryCard({
-                href: projectUrl(org, item.repo),
-                name: item.name || item.repo,
-                description: item.description,
-                icon: "▱",
-                accessibleName: `Open ${item.name || item.repo}`,
-                className: "system-card",
-              }),
-            )
-          : [
-              Object.assign(document.createElement("div"), {
-                className:
-                  "empty rounded border border-dashed border-zinc-700 bg-zinc-900/50 p-5 text-left text-xs text-zinc-400",
-                textContent: "No components yet.",
-              }),
-            ]),
+        ...projects.map((item) =>
+          createRepositoryCard({
+            href: projectUrl(org, item.repo),
+            name: item.name || item.repo,
+            description: item.description,
+            icon: "▱",
+            accessibleName: `Open ${item.name || item.repo}`,
+            className: "system-card",
+          }),
+        ),
       );
     } else {
-      components.innerHTML =
-        projects
-          .map(
-            (item) =>
-              `<a class="system-card repository-row flex min-h-[60px] flex-nowrap items-center gap-3 border border-zinc-800 bg-zinc-900 p-3 transition-colors hover:bg-[#202024]" href="${projectUrl(org, item.repo)}"><span class="system-icon grid h-[30px] w-[30px] shrink-0 place-items-center rounded-[5px] border border-zinc-700 bg-zinc-800 text-zinc-400">▱</span><div class="repository-copy min-w-0 flex-1"><h3 class="m-0 text-[13px] font-medium leading-[1.4] [overflow-wrap:anywhere] text-zinc-100">${escape(item.name || item.repo)}</h3>${item.description ? `<span class="repository-description mt-0.5 block overflow-hidden text-ellipsis whitespace-nowrap text-[11px] text-zinc-400">${escape(item.description)}</span>` : ""}</div><span class="row-arrow shrink-0 text-base text-zinc-500" aria-hidden="true">→</span></a>`,
-          )
-          .join("") ||
-        '<div class="empty rounded border border-dashed border-zinc-700 bg-zinc-900/50 p-5 text-left text-xs text-zinc-400">No components yet.</div>';
+      components.innerHTML = projects
+        .map(
+          (item) =>
+            `<a class="system-card repository-row flex min-h-[60px] flex-nowrap items-center gap-3 border border-zinc-800 bg-zinc-900 p-3 transition-colors hover:bg-[#202024]" href="${projectUrl(org, item.repo)}"><span class="system-icon grid h-[30px] w-[30px] shrink-0 place-items-center rounded-[5px] border border-zinc-700 bg-zinc-800 text-zinc-400">▱</span><div class="repository-copy min-w-0 flex-1"><h3 class="m-0 text-[13px] font-medium leading-[1.4] [overflow-wrap:anywhere] text-zinc-100">${escape(item.name || item.repo)}</h3>${item.description ? `<span class="repository-description mt-0.5 block overflow-hidden text-ellipsis whitespace-nowrap text-[11px] text-zinc-400">${escape(item.description)}</span>` : ""}</div><span class="row-arrow shrink-0 text-base text-zinc-500" aria-hidden="true">→</span></a>`,
+        )
+        .join("");
     }
     filterRepositories();
   } catch {

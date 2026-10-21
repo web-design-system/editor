@@ -72,7 +72,7 @@ for (const width of [1440, 900, 390, 360]) {
     let createdSystem;
     let createdComponent;
     let foundationPublished = false;
-    await page.route("https://cdn.li3.dev/**", (route) =>
+    await page.route("https://at-li3.static.apphor.de/**", (route) =>
       width === 900
         ? route.abort("failed")
         : route.fulfill({

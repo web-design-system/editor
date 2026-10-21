@@ -51,6 +51,8 @@ export function createStudio(area, files, onEdit) {
   document.querySelector("#work-status").classList.add("hidden");
   area.classList.add("flex", "h-full", "min-h-0", "flex-col", "max-[760px]:h-auto");
   const shell = area.querySelector(".studio-shell");
+  shell.classList.remove("mx-auto", "max-w-screen-2xl", "min-h-[650px]", "rounded-xl");
+  shell.classList.add("h-full", "min-h-0", "w-full", "rounded-none");
   const nav = area.querySelector(".studio-nav");
   const inspector = area.querySelector(".studio-inspector");
   const canvas = area.querySelector(".design-surface");
@@ -119,6 +121,9 @@ export function createStudio(area, files, onEdit) {
   area.querySelector(".studio-heading > div:first-child").classList.add("min-[1101px]:hidden");
   area.querySelector(".studio-heading h1").classList.add("text-sm", "font-medium", "text-zinc-50", "tracking-normal");
   area.querySelectorAll(".studio-heading p").forEach((paragraph) => paragraph.classList.add("hidden"));
+  area.querySelector(".studio-actions").prepend(tabs);
+  code.querySelector("code-editor").classList.add("h-full", "min-h-0");
+  code.querySelector("code-editor").style.height = "100%";
   area.querySelector(".studio-actions").classList.add("gap-2", "max-[760px]:justify-start", "max-[760px]:flex-wrap");
   nav.classList.add("min-h-0", "overflow-auto", "bg-zinc-900", "p-0", "gap-0", "max-[760px]:max-h-[220px]");
   inspector.classList.add(
@@ -140,21 +145,21 @@ export function createStudio(area, files, onEdit) {
   drawer.querySelector("summary").classList.add("text-zinc-400", "font-medium");
   area.querySelector(".inspector-drawer > summary").classList.add("px-4", "py-3", "text-zinc-400", "font-medium");
   tabs.classList.add("flex", "shrink-0", "border-b", "border-zinc-800");
-  tabs
-    .querySelectorAll("button")
-    .forEach((button) =>
-      button.classList.add(
-        "flex-1",
-        "rounded-none",
-        "px-3",
-        "py-3",
-        "border-b-2",
-        "border-transparent",
-        "text-zinc-400",
-        "aria-selected:text-zinc-50",
-        "aria-selected:border-blue-500",
-      ),
+  tabs.querySelectorAll("button").forEach((button) => {
+    button.classList.add(
+      "flex-1",
+      "rounded-none",
+      "px-3",
+      "py-3",
+      "border-b-2",
+      "border-transparent",
+      "text-zinc-400",
+      "aria-selected:text-zinc-50",
+      "aria-selected:border-blue-500",
     );
+    button.classList.remove("aria-selected:bg-indigo-50", "aria-selected:text-indigo-800");
+    button.classList.add("aria-selected:bg-zinc-800");
+  });
   area
     .querySelector(".studio-actions")
     .querySelectorAll("button")
@@ -176,6 +181,7 @@ export function createStudio(area, files, onEdit) {
   area
     .querySelector(".mode-bar")
     .classList.add("order-2", "px-4", "py-2", "border-t", "border-zinc-800", "bg-zinc-900", "min-h-[37px]");
+  area.querySelector(".mode-bar").remove();
   canvas.classList.add(
     "relative",
     "flex-1",
@@ -206,23 +212,26 @@ export function createStudio(area, files, onEdit) {
     "afterbegin",
     '<div class="panel-title flex items-center justify-between border-b border-zinc-800 px-3 py-3.5 text-xs font-semibold uppercase tracking-[0.08em] text-zinc-100">Layers <span title="Select a layer to edit">◇</span></div><div id="layer-list" aria-label="Component layers" class="min-h-[120px] flex-1 overflow-auto p-2"></div>',
   );
-  inspector.prepend(tabs);
-  inspector.append(code);
   area.querySelector(".inspector-drawer > summary").textContent = "Selected element";
   area.querySelector(".inspector-drawer").open = true;
   fields.classList.add("p-0", "gap-0");
   fields.innerHTML = `<p id="selected-element" class="px-4 pb-3 text-blue-400 font-mono"></p><section class="property-section border-t border-zinc-800 p-4"><h2 class="mb-3.5 text-[11px] tracking-[0.08em] text-zinc-100">Layout</h2>${select("display", "Display", ["", "block", "flex", "inline-flex", "grid", "inline-block", "none"])}${select("flex-direction", "Direction", ["", "row", "column", "row-reverse", "column-reverse"])}${select("align-items", "Align", ["", "flex-start", "center", "flex-end", "stretch"])}${select("justify-content", "Justify", ["", "flex-start", "center", "flex-end", "space-between"])}</section><section class="property-section border-t border-zinc-800 p-4"><h2 class="mb-3.5 text-[11px] tracking-[0.08em] text-zinc-100">Spacing</h2><div class="spacing-fields grid grid-cols-2 gap-4 text-[10px] text-zinc-400"><div><span>Padding</span><div class="padding-grid mt-1.5 grid grid-cols-3 gap-1">${["top", "left", "right", "bottom"].map((side) => `<input aria-label="Padding ${side}" data-style="padding-${side}" placeholder="auto" title="CSS length, e.g. 12px" class="px-0 py-1 text-center text-[10px]">`).join("")}<span class="col-start-2 row-start-2 place-self-center text-lg">□</span></div></div><label>Gap<input data-style="gap" placeholder="normal"></label></div>${input("margin", "Margin")}</section><section class="property-section border-t border-zinc-800 p-4"><h2 class="mb-3.5 text-[11px] tracking-[0.08em] text-zinc-100">Colors</h2>${input("background-color", "Background")}${input("color", "Text")}</section><section class="property-section border-t border-zinc-800 p-4"><h2 class="mb-3.5 text-[11px] tracking-[0.08em] text-zinc-100">Effects</h2>${input("border-radius", "Radius")}${select("box-shadow", "Shadow", ["", "none", "0 1px 2px #0003", "0 4px 6px #0003", "0 10px 15px #0003"])}<label class="property-row mt-2 grid grid-cols-[76px_minmax(0,1fr)] items-center gap-2 text-xs text-zinc-400">Opacity<input aria-label="Opacity" data-style="opacity" type="range" min="0" max="1" step="0.05" value="1" class="accent-blue-500"></label></section><section class="property-section border-t border-zinc-800 p-4"><h2 class="mb-3.5 text-[11px] tracking-[0.08em] text-zinc-100">Element</h2><label>Classes<input id="element-classes" placeholder="Add CSS classes"></label><p id="style-status" role="status"></p></section>`;
+  fields.querySelectorAll(":scope > section.property-section").forEach((section) => {
+    const details = document.createElement("details");
+    const summary = document.createElement("summary");
+    summary.className = "cursor-pointer py-2 text-sm font-medium text-zinc-200";
+    summary.textContent = section.querySelector("h2")?.textContent || "Properties";
+    details.className = "property-section border-t border-zinc-800 px-4 py-3";
+    details.open = true;
+    section.querySelector("h2")?.remove();
+    details.append(summary, ...section.childNodes);
+    section.replaceWith(details);
+  });
   canvas.querySelector(".surface-heading").remove();
   canvas.insertAdjacentHTML(
     "afterbegin",
     '<div class="canvas-tools absolute right-4 top-4 z-10 flex items-center rounded border border-zinc-800 bg-zinc-900 p-1 shadow-lg"><button type="button" id="zoom-out" aria-label="Zoom out">−</button><button type="button" id="zoom-reset" aria-label="Reset zoom">100%</button><button type="button" id="zoom-in" aria-label="Zoom in">+</button></div><span class="canvas-caption absolute bottom-4 left-4 text-[10px] tracking-[0.12em] text-zinc-500">COMPONENT CANVAS</span>',
   );
-  area
-    .querySelector(".studio-actions")
-    .insertAdjacentHTML(
-      "afterbegin",
-      '<button type="button" id="preview-toggle" aria-pressed="false">Preview</button>',
-    );
   area.querySelector("#save-source").textContent = "Save Component";
   code.querySelector(".surface-heading").innerHTML =
     '<span id="active-file-label">component.html</span><button type="button" id="copy-source">Copy</button>';
@@ -368,20 +377,6 @@ export function createStudio(area, files, onEdit) {
   area.querySelector("#zoom-in").addEventListener("click", () => setZoom(zoom + 0.25));
   area.querySelector("#zoom-out").addEventListener("click", () => setZoom(zoom - 0.25));
   area.querySelector("#zoom-reset").addEventListener("click", () => setZoom(1));
-  area.querySelector("#preview-toggle").addEventListener("click", (event) => {
-    preview = !preview;
-    event.currentTarget.setAttribute("aria-pressed", String(preview));
-    shell.classList.toggle("preview-mode", preview);
-    shell.classList.toggle("grid-cols-[0_minmax(0,1fr)_0]", preview);
-    shell.classList.toggle("max-[1100px]:grid-cols-[0_minmax(0,1fr)_0]", preview);
-    nav.classList.toggle("invisible", preview);
-    inspector.classList.toggle("invisible", preview);
-    nav.classList.toggle("max-[760px]:hidden", preview);
-    inspector.classList.toggle("max-[760px]:hidden", preview);
-    event.currentTarget.classList.toggle("bg-blue-500/10", preview);
-    event.currentTarget.classList.toggle("text-blue-400", preview);
-    selectLayer(selected);
-  });
   area.querySelector("#copy-source").addEventListener("click", async (event) => {
     try {
       await navigator.clipboard.writeText(area.querySelector("#source-editor").value);

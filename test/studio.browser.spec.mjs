@@ -5,7 +5,7 @@ for (const width of [1440, 900, 390]) {
     await page.setViewportSize({ width, height: 900 });
     const errors = [];
     page.on("pageerror", (error) => errors.push(error.message));
-    await page.route("https://cdn.li3.dev/**", (route) =>
+    await page.route("https://at-li3.static.apphor.de/**", (route) =>
       route.fulfill({
         contentType: "text/javascript",
         body: `export async function load() { customElements.define('code-editor', class extends HTMLElement { value = ''; }); }`,
@@ -44,6 +44,8 @@ for (const width of [1440, 900, 390]) {
       await route.fulfill({ json: body });
     });
     await page.goto("http://127.0.0.1:4175/?team=demo&repo=button");
+    await expect(page.locator("#publish-source")).toBeDisabled();
+    await expect(page.locator("#publish-source .publish-indicator")).toHaveClass(/bg-transparent/);
     await expect(page.locator("#layer-list button")).toHaveCount(2);
     const preview = page.frameLocator("#draft-preview");
     await expect(preview.locator("button")).toBeVisible();
@@ -59,16 +61,13 @@ for (const width of [1440, 900, 390]) {
     expect(saved.files["stories.html"]).toBe("<demo-button></demo-button>");
     await page.getByRole("tab", { name: "Code", exact: true }).click();
     await expect(page.locator(".code-surface")).toBeVisible();
-    await expect(page.locator(".design-surface")).toBeVisible();
+    await expect(page.locator(".design-surface")).toBeHidden();
+    await expect(page.locator(".studio-nav")).toBeHidden();
+    await expect(page.locator(".studio-inspector")).toBeHidden();
     await page.getByRole("tab", { name: "Design", exact: true }).click();
+    await expect(page.locator(".design-surface")).toBeVisible();
     await page.getByRole("button", { name: "Zoom in", exact: true }).click();
     await expect(page.locator("#zoom-reset")).toHaveText("125%");
-    await page.getByRole("button", { name: "Preview", exact: true }).click();
-    await expect(page.locator(".studio-nav")).toHaveCSS("visibility", "hidden");
-    await expect(page.locator(".studio-inspector")).toHaveCSS("visibility", "hidden");
-    await expect(preview.locator("[data-studio-selected]")).toHaveCount(0);
-    await page.getByRole("button", { name: "Preview", exact: true }).click();
-    await expect(page.locator(".studio-nav")).toHaveCSS("visibility", "visible");
     await page.getByRole("button", { name: "Publish", exact: true }).click();
     await expect(page.locator("#draft-state")).toContainText("Published");
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);

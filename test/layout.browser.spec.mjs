@@ -3,7 +3,7 @@ import { test, expect } from "@playwright/test";
 for (const width of [390, 1440]) {
   test(`dashboard layout fills the viewport at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
-    await page.route("https://cdn.li3.dev/**", (route) =>
+    await page.route("https://at-li3.static.apphor.de/**", (route) =>
       route.fulfill({
         contentType: "text/javascript",
         body: `export async function load(url) {

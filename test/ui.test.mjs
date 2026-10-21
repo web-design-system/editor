@@ -76,7 +76,7 @@ test("workbench exposes project source and authoring workflows", async () => {
   assert.doesNotMatch(app, /name="description"|Repository slug<input name="repo"/);
   assert.match(app, /import\("@li3\/web"\)/);
   assert.match(app, /load\("https:\/\/sodium\.static\.apphor\.de\/code-editor\.html"\)/);
-  assert.match(html, /"@li3\/"\s*:\s*"https:\/\/cdn\.li3\.dev\/@li3\/"/);
+  assert.match(html, /"@li3\/"\s*:\s*"https:\/\/at-li3\.static\.apphor\.de\/"/);
   assert.match(app, /customElements\.whenDefined\("code-editor"\)/);
   assert.match(app, /tokensEditor\.language = "css"/);
   assert.match(app, /editor\.addEventListener\("change"/);

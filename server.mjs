@@ -1021,7 +1021,7 @@ function blankProjectFiles(repo, name, description, designSystem) {
   return {
     "component.html": `<template component="${tag}" shadow-dom="open">\n  <link rel="stylesheet" href="./styles.css" />\n  <div data-wds-editable class="p-4 bg-indigo-600 text-white"><slot></slot></div>\n</template>\n`,
     "styles.css": `@import url("/static/${designSystem.team}/${designSystem.repo}/${designSystem.revision}/tokens.css");\n@import "tailwindcss";\n`,
-    "stories.html": `<!doctype html>\n<html lang="en">\n  <head>\n    <meta charset="utf-8" />\n    <script type="importmap">{ "imports": { "@li3/": "https://cdn.li3.dev/@li3/" } }</script>\n    <script type="module">import '@li3/web';</script>\n    <link rel="component" href="./component.html" />\n  </head>\n  <body>\n    <template app>\n      <main><h1>${name}</h1><${tag}></${tag}></main>\n    </template>\n  </body>\n</html>\n`,
+    "stories.html": `<!doctype html>\n<html lang="en">\n  <head>\n    <meta charset="utf-8" />\n    <script type="importmap">{ "imports": { "@li3/": "https://at-li3.static.apphor.de/" } }</script>\n    <script type="module">import '@li3/web';</script>\n    <link rel="component" href="./component.html" />\n  </head>\n  <body>\n    <template app>\n      <main><h1>${name}</h1><${tag}></${tag}></main>\n    </template>\n  </body>\n</html>\n`,
     "component.json": `${JSON.stringify({ name, description, designSystem }, null, 2)}\n`,
     "spec.mjs":
       "import test from 'node:test';\nimport assert from 'node:assert/strict';\n\ntest('component source is ready for specifications', () => {\n  assert.ok(true);\n});\n",
@@ -1635,7 +1635,7 @@ async function componentPreview(team, repo, revision) {
     return null;
   }
   const base = `/static/${team}/${repo}/${revision}`;
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><script type="importmap">{"imports":{"@li3/":"https://cdn.li3.dev/@li3/"}}</script><script type="module">import '@li3/web';</script><link rel="component" href="${base}/component.html"></head><body><template app><${name}></${name}></template></body></html>`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><script type="importmap">{"imports":{"@li3/":"https://at-li3.static.apphor.de/"}}</script><script type="module">import '@li3/web';</script><link rel="component" href="${base}/component.html"></head><body><template app><${name}></${name}></template></body></html>`;
 }
 async function serveStatic(request, response, pathname) {
   const local = normalize(pathname.replace(/^\//, ""));

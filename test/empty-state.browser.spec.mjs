@@ -5,7 +5,7 @@ for (const width of [390, 1440]) {
     await page.setViewportSize({ width, height: 900 });
     const designSystems = [{ team_id: 1, git_org: "nanico-system", foundation_repo: "foundation", name: "Nanico" }];
     let created;
-    await page.route("https://cdn.li3.dev/**", (route) =>
+    await page.route("https://at-li3.static.apphor.de/**", (route) =>
       route.fulfill({
         contentType: "text/javascript",
         body: `export async function load(url) {

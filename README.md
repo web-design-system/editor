@@ -83,6 +83,12 @@ spec.mjs
 
 The component studio follows the dark zinc/blue design concept: a layer tree, dotted canvas with zoom and adjustable width, and a Design/Code inspector. Select elements in the tree or canvas to edit layout, spacing, colors, effects, and classes. Property controls write inline CSS to the canonical HTML draft; class editing and the source editor share that same draft. Save Component commits source; Publish remains a separate action. Preview hides editing panels and selection outlines; it does not execute component scripts. The draft includes local styles.css and a limited utility preview, not the full published Tailwind build.
 
+## Navigation and Account
+
+The workspace is organized as **Team → Design System → Component**. Selecting a team shows its design systems in the sidebar; selecting a design system shows its components and a link back to the team's systems. Selecting a component opens the editor, where the sidebar keeps sibling components available and links back to the system. The editor topbar shows the WDS mark and the current `design-system / component` path. On small screens, the editor sidebar opens from a menu button and closes from its overlay, Escape, or a navigation link; it stays visible from the `sm` breakpoint upward. When an account has no teams, WDS shows a first-team landing state without the sidebar; creating a team reveals the regular navigation.
+
+The account card uses the OIDC profile name, email, and photo. Agent profiles show an `Ag` avatar and the Agent name without an email address.
+
 The draft preview does not run component scripts. Published components are intended for browser consumption, but broader untrusted author access still requires a separate-origin full-runtime preview and restrictive deployment policy.
 
 ## Revisions And Releases

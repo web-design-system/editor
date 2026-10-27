@@ -34,6 +34,8 @@ The Foundation studio edits all returned source files, including tokens, shared 
 
 Open a component project and edit its discovered source files in Code mode, or use the Design mode for a bounded preview and a small set of utility-class adjustments. The current preview removes scripts, stylesheet links, and inline event attributes; it is not a full Li3 runtime or story runner. Commit saves the current source revision. Publish builds the committed revision and updates `latest` separately.
 
+The navigation follows **Team → Design System → Component**: choosing a team lists its systems in the sidebar; choosing a system lists its components; choosing a component opens the editor while keeping sibling components available. The editor topbar shows the WDS mark and `design-system / component`. Its sidebar remains visible at the `sm` breakpoint and above; on smaller screens it opens as an overlay drawer. An account with no teams sees a first-team landing state without the sidebar. The OIDC account card shows profile name, email, and photo; Agent profiles use an `Ag` avatar and omit email.
+
 The Code editor component is loaded from `sodium.static.apphor.de`; its runtime and assets use public CDNs. This keeps the editor dependency external to the app bundle, but makes authoring dependent on those hosts and on their code remaining trustworthy.
 
 ### Public consumption and releases
@@ -84,6 +86,7 @@ The Code editor component is loaded from `sodium.static.apphor.de`; its runtime 
 - Dynamic supported-source discovery and repository-boundary validation for relative imports/assets.
 - Foundation token editing, commit/publish controls, and a published-token gate for component creation.
 - Component Code/Design modes, discovered-file selection, history, commit/publish controls, width-adjustable draft preview, and limited utility editing.
+- Hierarchical Team → Design System → Component navigation, responsive editor sidebar, first-team empty state, and OIDC/Agent account-card variants.
 - Component CSS compilation at publish time; design-system files publish unchanged.
 - Mutable `latest`, immutable versioned artifacts, release tagging, and public static routes.
 - Integration coverage for authentication, metadata/repository workflows, compare-and-swap conflicts, publication, releases, artifact handling, and REST-only behavior.
@@ -101,7 +104,7 @@ These describe current product limitations, not promises or committed delivery d
 
 - The Design surface is intentionally basic: one editable template target and a fixed set of utility controls, rather than arbitrary visual layout editing.
 - The draft preview does not execute setup modules, event handlers, or stories. It does not reproduce the full published Li3 runtime.
-- There is no breakpoint-marker workflow, full story gallery, component dependency browser/graph, or integrated visual regression suite.
+- There is no breakpoint-marker workflow, full story gallery, component dependency browser/graph, or integrated visual regression workflow.
 - Foundation file creation, renaming, and deletion are not exposed in the studio; existing source files are editable.
 - Some supported repository files can be selected in Code mode, but the UI does not provide a full file creation/rename/delete manager.
 - Versioned release creation is available in the backend but missing from the author-facing studio controls.
@@ -110,7 +113,7 @@ These describe current product limitations, not promises or committed delivery d
 ### Testing and isolation
 
 - There is no in-workbench spec runner, sandboxed WebContainer runner, or browser test report UI. Optional server-side Node specs are unsandboxed and therefore opt-in for trusted code only.
-- The app has backend/integration and source-level UI tests; a maintained browser-level regression suite for the editor flows is still needed.
+- The app has backend/integration, source-level UI, and Playwright browser regression tests for navigation, responsive layout, and core editor flows. There is no integrated visual-regression workflow or browser test report UI.
 - A separate-origin preview with a restrictive deployment policy remains a production-hardening requirement before broader untrusted author access. The current local draft preview is restricted, but does not provide a separate-origin full-runtime preview.
 - Remote code-editor/runtime/CDN dependencies are not vendored or integrity-pinned by WDS.
 

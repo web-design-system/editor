@@ -72,6 +72,12 @@ for (const width of [1440, 900, 390, 360]) {
     let createdSystem;
     let createdComponent;
     let foundationPublished = false;
+    let documentNavigations = 0;
+    page.on("request", (request) => {
+      if (request.isNavigationRequest() && request.resourceType() === "document") {
+        documentNavigations += 1;
+      }
+    });
     await page.route("https://at-li3.static.apphor.de/**", (route) =>
       width === 900
         ? route.abort("failed")
@@ -146,21 +152,18 @@ for (const width of [1440, 900, 390, 360]) {
       await route.fulfill({ json: body });
     });
     await page.goto("http://127.0.0.1:4175/");
-    await expect(page.locator(".system-card")).toHaveCount(3);
-    await page.getByRole("searchbox", { name: "Find a system" }).fill("mobile");
-    await expect(page.locator(".system-card:visible")).toHaveCount(1);
-    await page.getByRole("searchbox", { name: "Find a system" }).fill("");
-    const searchBounds = await page.getByRole("searchbox", { name: "Find a system" }).boundingBox();
-    expect(searchBounds.width).toBeGreaterThan(120);
+    await expect(page.locator(".team-card")).toHaveCount(2);
+    await expect(page.locator(".team-card").first()).toContainText("Members not tracked");
     await page.screenshot({ path: test.info().outputPath(`landing-${width}.png`), fullPage: true });
     if (width <= 760) {
       await page.locator(".team-drawer > summary").click();
     }
-    await page.getByRole("button", { name: "acme 2", exact: true }).click();
+    await page.getByRole("link", { name: /acme/ }).first().click();
     await expect(page.locator(".system-card")).toHaveCount(2);
     await expect(page.locator("#teams-title")).toHaveText("Design systems");
     await expect(page.locator("#team-list")).toContainText("Acme UI");
     await expect(page).toHaveURL(/teamSlug=acme/);
+    expect(documentNavigations).toBe(1);
     await page.reload();
     await expect(page.locator(".system-card")).toHaveCount(2);
     await page.getByRole("button", { name: "New design system" }).click();
@@ -173,7 +176,12 @@ for (const width of [1440, 900, 390, 360]) {
         customElements.define("wds-repository-card", class extends HTMLElement {});
       }
     });
-    await page.getByRole("link", { name: "Open Acme UI", exact: true }).click();
+    await page.locator("#system-grid .system-card").filter({ hasText: "Acme UI" }).click();
+    await expect(page.locator("#dashboard-title")).toHaveText("Acme UI");
+    expect(documentNavigations).toBe(2);
+    await page.goBack();
+    await expect(page).toHaveURL(/teamSlug=acme$/);
+    await page.goForward();
     await expect(page.locator("#dashboard-title")).toHaveText("Acme UI");
     await expect(page.locator("#team-list")).toContainText("← Back to systems");
     await expect(page.locator("#team-list")).toContainText("Button");
@@ -237,7 +245,7 @@ for (const width of [1440, 900, 390, 360]) {
     if (width < 640) {
       await page.getByRole("button", { name: "Open project navigation" }).click();
     }
-    await page.getByRole("link", { name: "← Back to systems" }).click();
+    await page.locator("#project-content .studio-nav a").filter({ hasText: "Back to systems" }).click();
     await expect(page.locator("#dashboard-title")).toHaveText("Acme UI");
     await expect(page.locator(".foundation-card")).toBeVisible();
     await expect(page.locator("#foundation-setup")).toBeHidden();
@@ -266,7 +274,7 @@ for (const width of [1440, 900, 390, 360]) {
     await page.getByLabel("Team slug", { exact: true }).fill("new-team");
     await page.getByRole("button", { name: "Create team", exact: true }).click();
     await expect(page.getByRole("dialog")).not.toBeVisible();
-    await expect(page.locator("#dashboard-title")).toHaveText("new-team");
+    await expect(page.locator("#dashboard-title")).toHaveText("Design systems");
     await expect(page.locator("#first-system-empty")).toBeVisible();
     await page.getByPlaceholder("Name").fill("Web System");
     await page.getByRole("button", { name: "Create", exact: true }).click();

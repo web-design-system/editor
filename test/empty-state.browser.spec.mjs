@@ -67,7 +67,7 @@ for (const width of [390, 1440]) {
     await expect(page.getByPlaceholder("Name")).toBeVisible();
     await page.getByPlaceholder("Name").fill("WDS Components");
     await page.getByRole("button", { name: "Create", exact: true }).click();
-    await expect(page).toHaveURL(/\?system=wds-components-wds$/);
+    await expect(page).toHaveURL(/teamSlug=wds&system=wds-components-wds/);
     expect(created).toEqual({
       team: "wds",
       slug: "wds-components-wds",

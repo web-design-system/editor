@@ -40,12 +40,9 @@ export function createStudio(area, files, onEdit) {
     "max-[760px]:min-h-dvh",
     "max-[760px]:overflow-auto",
   );
-  workspace.querySelector(".header").classList.add("h-14", "gap-4", "bg-zinc-900", "px-4");
-  workspace.querySelector(".brand-mark").classList.add("size-8", "rounded");
-  workspace.querySelector(".brand-name").classList.add("hidden");
-  workspace.querySelector(".user-copy").classList.remove("hidden");
-  workspace.querySelector(".user-avatar").classList.remove("hidden");
-  workspace.querySelector(".workspace-name").classList.add("mr-auto", "text-zinc-200");
+  document.querySelector("#app-topbar")?.classList.add("h-14", "gap-4", "bg-zinc-900", "px-4");
+  document.querySelector(".brand-mark")?.classList.add("size-8", "rounded");
+  document.querySelector(".workspace-name")?.classList.add("mr-auto", "text-zinc-200");
   workArea.classList.remove("p-6", "min-h-[calc(100dvh-56px)]");
   workArea.classList.add("h-[calc(100dvh-56px)]", "min-h-0", "bg-zinc-950", "p-0", "max-[760px]:h-auto");
   document.querySelector("#work-status").classList.add("hidden");

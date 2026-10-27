@@ -89,7 +89,7 @@ export async function renderSystemOverview(system, grid) {
   document.querySelector("#system-summary").textContent = "";
   grid.classList.add("system-overview");
   grid.classList.add("flex", "flex-col", "gap-0");
-  grid.innerHTML = `<a class="foundation-card repository-row flex min-h-[60px] flex-nowrap items-center gap-3 border border-zinc-800 bg-zinc-900 p-3 hover:bg-[#202024] rounded-[5px]" aria-label="Open Foundation" href="${projectUrl(org, system.repo)}"><span class="system-icon flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[5px] border border-blue-500/25 bg-blue-500/10 text-xl text-blue-400">◇</span><div class="repository-copy min-w-0 flex-1"><h2 class="m-0 text-[13px] font-medium leading-[1.4] [overflow-wrap:anywhere]">Foundation</h2><span class="repository-description mt-0.5 block overflow-hidden text-ellipsis whitespace-nowrap text-[11px] text-zinc-400">Shared design tokens & styles</span></div><span id="system-publication" class="publication-note m-0 whitespace-nowrap text-[10px] text-zinc-400" role="status">Checking…</span><span class="row-arrow shrink-0 text-base text-zinc-500" aria-hidden="true">→</span></a><section id="foundation-setup" class="foundation-setup mt-[18px] max-w-[760px] rounded-[5px] border border-zinc-700 bg-gradient-to-br from-zinc-900 to-[#141417] p-5 sm:px-[22px]" hidden><span class="eyebrow mb-[9px] block text-[10px] font-semibold tracking-[.12em] text-blue-400">FIRST, SET UP FOUNDATION</span><h2 class="m-0 text-base font-medium tracking-[-.02em] text-zinc-100">Give every component the same design language.</h2><p class="max-w-[620px] text-xs leading-[1.7] text-zinc-400">Foundation holds the shared design tokens—CSS variables for color, spacing, and type. Components use these variables to stay consistent and update together.</p><a class="setup-action mt-1 inline-flex items-center gap-2.5 rounded border border-blue-500 bg-blue-500/10 px-[11px] py-2 text-xs font-medium text-blue-200 hover:bg-blue-500/20">Open Foundation <span aria-hidden="true">→</span></a><p class="setup-footnote mb-0 mt-3 text-[11px] text-zinc-400">Add your values to <code class="font-mono text-[11px] text-zinc-300">tokens.css</code>, save, then publish. You can create components once the published tokens are ready.</p></section><section id="component-area" class="component-area" hidden><div class="section-heading components-heading my-5 flex items-center justify-between gap-3"><h2 class="text-sm font-medium text-zinc-100">Components <span id="component-count" class="ml-1.5 text-zinc-500"></span></h2></div><div class="component-toolbar mb-2.5 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2.5 sm:gap-2"><div class="component-search"></div><button class="primary-button min-h-9 rounded border border-zinc-100 bg-zinc-100 px-3 py-2 text-xs font-medium text-zinc-900 hover:bg-white" id="new-component" type="button">＋ New component</button></div><div id="overview-components" class="system-grid flex flex-col gap-0"></div><p id="filter-empty" class="empty m-0 rounded border border-dashed border-zinc-700 bg-zinc-900/50 p-5 text-left text-xs text-zinc-400" hidden>No matches.</p></section><dialog id="component-dialog" class="fixed inset-0 m-auto max-h-[calc(100dvh-48px)] w-[min(480px,calc(100%-32px))] overflow-auto rounded-lg border border-zinc-700 bg-zinc-900 p-7 text-zinc-300 shadow-[0_24px_80px_#0008] backdrop:bg-[#09090bcc] backdrop:backdrop-blur" aria-labelledby="component-dialog-title"><button class="dialog-close absolute right-3 top-2.5 h-7 w-7 border-0 bg-transparent text-[22px] text-zinc-400" type="button" aria-label="Close dialog">×</button><form id="overview-component-form" class="creation-form grid gap-2.5 border-0 bg-transparent p-0"><h2 class="m-0 text-xl font-medium tracking-[-.03em] text-zinc-100" id="component-dialog-title">Create a component</h2><p class="form-description mb-3 mt-0 text-xs leading-[1.7] text-zinc-400">A new repository in ${escape(org)}, connected to this system’s published Foundation.</p><label class="text-xs text-zinc-400" for="overview-component-name">Component name</label><input class="rounded border border-zinc-700 bg-zinc-950 px-2.5 py-[9px] text-[13px] text-zinc-200" id="overview-component-name" name="name" required maxlength="100" autocomplete="off"><button class="mt-2 justify-self-stretch rounded border border-zinc-100 bg-zinc-100 px-3 py-2 text-xs font-medium text-zinc-900 hover:bg-white" type="submit">Create component</button><p role="status" class="text-xs leading-[1.6] text-zinc-400" id="component-create-status"></p></form></dialog>`;
+  grid.innerHTML = `<a class="foundation-card repository-row flex min-h-[60px] flex-nowrap items-center gap-3 border border-zinc-800 bg-zinc-900 p-3 hover:bg-[#202024] rounded-[5px]" aria-label="Open Foundation" href="${projectUrl(org, system.repo)}"><span class="system-icon flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[5px] border border-blue-500/25 bg-blue-500/10 text-xl text-blue-400">◇</span><div class="repository-copy min-w-0 flex-1"><h2 class="m-0 text-[13px] font-medium leading-[1.4] [overflow-wrap:anywhere]">Foundation</h2><span class="repository-description mt-0.5 block overflow-hidden text-ellipsis whitespace-nowrap text-[11px] text-zinc-400">Shared design tokens & styles</span></div><span id="system-publication" class="publication-note m-0 whitespace-nowrap text-[10px] text-zinc-400" role="status">Checking…</span><span class="row-arrow shrink-0 text-base text-zinc-500" aria-hidden="true">→</span></a><section id="foundation-setup" class="foundation-setup mt-[18px] max-w-[760px] rounded-[5px] border border-zinc-700 bg-gradient-to-br from-zinc-900 to-[#141417] p-5 sm:px-[22px]" hidden><span class="eyebrow mb-[9px] block text-[10px] font-semibold tracking-[.12em] text-blue-400">FIRST, SET UP FOUNDATION</span><h2 class="m-0 text-base font-medium tracking-[-.02em] text-zinc-100">Give every component the same design language.</h2><p class="max-w-[620px] text-xs leading-[1.7] text-zinc-400">Foundation holds the shared design tokens—CSS variables for color, spacing, and type. Components use these variables to stay consistent and update together.</p><a class="setup-action mt-1 inline-flex items-center gap-2.5 rounded border border-blue-500 bg-blue-500/10 px-[11px] py-2 text-xs font-medium text-blue-200 hover:bg-blue-500/20">Open Foundation <span aria-hidden="true">→</span></a><p class="setup-footnote mb-0 mt-3 text-[11px] text-zinc-400">Add your values to <code class="font-mono text-[11px] text-zinc-300">tokens.css</code>, save, then publish. You can create components once the published tokens are ready.</p></section><section id="component-area" class="component-area" hidden><div class="section-heading components-heading my-5 flex items-center justify-between gap-3"><h2 class="text-sm font-medium text-zinc-100">Components <span id="component-count" class="ml-1.5 text-zinc-500"></span></h2></div><div class="component-toolbar mb-2.5 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2.5 sm:gap-2"><div class="component-search"></div><button class="primary-button min-h-9 rounded border border-zinc-100 bg-zinc-100 px-3 py-2 text-xs font-medium text-zinc-900 hover:bg-white" id="new-component" type="button">＋ New component</button></div><wds-data-list id="overview-components" class="system-grid grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3" aria-label="Components"></wds-data-list><p id="filter-empty" class="empty m-0 rounded border border-dashed border-zinc-700 bg-zinc-900/50 p-5 text-left text-xs text-zinc-400" hidden>No matches.</p></section><dialog id="component-dialog" class="fixed inset-0 m-auto max-h-[calc(100dvh-48px)] w-[min(480px,calc(100%-32px))] overflow-auto rounded-lg border border-zinc-700 bg-zinc-900 p-7 text-zinc-300 shadow-[0_24px_80px_#0008] backdrop:bg-[#09090bcc] backdrop:backdrop-blur" aria-labelledby="component-dialog-title"><button class="dialog-close absolute right-3 top-2.5 h-7 w-7 border-0 bg-transparent text-[22px] text-zinc-400" type="button" aria-label="Close dialog">×</button><form id="overview-component-form" class="creation-form grid gap-2.5 border-0 bg-transparent p-0"><h2 class="m-0 text-xl font-medium tracking-[-.03em] text-zinc-100" id="component-dialog-title">Create a component</h2><p class="form-description mb-3 mt-0 text-xs leading-[1.7] text-zinc-400">A new repository in ${escape(org)}, connected to this system’s published Foundation.</p><label class="text-xs text-zinc-400" for="overview-component-name">Component name</label><input class="rounded border border-zinc-700 bg-zinc-950 px-2.5 py-[9px] text-[13px] text-zinc-200" id="overview-component-name" name="name" required maxlength="100" autocomplete="off"><button class="mt-2 justify-self-stretch rounded border border-zinc-100 bg-zinc-100 px-3 py-2 text-xs font-medium text-zinc-900 hover:bg-white" type="submit">Create component</button><p role="status" class="text-xs leading-[1.6] text-zinc-400" id="component-create-status"></p></form></dialog>`;
   if (customElements.get("wds-repository-card")) {
     const publicationStatus = document.createElement("span");
     publicationStatus.id = "system-publication";
@@ -160,7 +160,7 @@ export async function renderSystemOverview(system, grid) {
       if (!response.ok) {
         throw new Error(data.error || "Could not create component.");
       }
-      location.href = projectUrl(org, data.repo || repo);
+      window.dispatchEvent(new CustomEvent("wds:navigate", { detail: projectUrl(org, data.repo || repo) }));
     } catch (error) {
       status.textContent = error.message;
     } finally {
@@ -176,18 +176,7 @@ export async function renderSystemOverview(system, grid) {
     createComponent(name, status, button);
   });
   const components = grid.querySelector("#overview-components");
-  components.classList.add(
-    "flex",
-    "flex-col",
-    "gap-0",
-    "overflow-hidden",
-    "rounded-[5px]",
-    "border",
-    "border-zinc-800",
-  );
-  components.querySelectorAll(".repository-row").forEach((row) => {
-    row.classList.add("rounded-none", "border-0", "border-b", "border-zinc-800", "last:border-b-0");
-  });
+  components.className = "system-grid grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3";
   const componentArea = grid.querySelector("#component-area");
   const setup = grid.querySelector("#foundation-setup");
   setup.className =
@@ -260,18 +249,33 @@ export async function renderSystemOverview(system, grid) {
         const name = new FormData(event.currentTarget).get("name").trim();
         createComponent(name, status, button);
       });
-    } else if (customElements.get("wds-repository-card")) {
-      components.replaceChildren(
-        ...projects.map((item) =>
-          createRepositoryCard({
-            href: projectUrl(org, item.repo),
-            name: item.name || item.repo,
-            description: item.description,
-            icon: "▱",
-            accessibleName: `Open ${item.name || item.repo}`,
-            className: "system-card",
-          }),
-        ),
+    } else if (typeof components.render === "function") {
+      components.render(
+        projects,
+        (project) => {
+          const name = project.name || project.repo;
+          const card = document.createElement("a");
+          card.href = projectUrl(org, project.repo);
+          card.className =
+            "system-card flex min-h-40 flex-col rounded-2xl border border-zinc-800 bg-zinc-900 p-5 hover:border-blue-400 hover:bg-zinc-800";
+          card.dataset.search = `${name} ${project.description || ""}`.toLowerCase();
+          const icon = document.createElement("span");
+          icon.className =
+            "mb-5 grid size-10 place-items-center rounded-xl border border-blue-500/20 bg-blue-500/10 text-xl text-blue-300";
+          icon.textContent = "▱";
+          const title = document.createElement("h3");
+          title.className = "m-0 text-base font-semibold text-zinc-100";
+          title.textContent = name;
+          const description = document.createElement("p");
+          description.className = "mt-1 text-xs text-zinc-400";
+          description.textContent = project.description || "Component";
+          const version = document.createElement("span");
+          version.className = "mt-auto pt-5 text-xs text-zinc-400";
+          version.textContent = `Latest version: ${project.version || project.latestVersion || "—"}`;
+          card.append(icon, title, description, version);
+          return card;
+        },
+        "No components yet.",
       );
     } else {
       components.innerHTML = projects

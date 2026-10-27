@@ -65,3 +65,44 @@ export function createRepositoryCard({
   }
   return element;
 }
+
+export class WdsDataList extends HTMLElement {
+  connectedCallback() {
+    this.setAttribute("role", this.getAttribute("role") || "list");
+    this.classList.add("flex", "flex-col", "gap-3");
+  }
+
+  set loading(value) {
+    this.toggleAttribute("aria-busy", Boolean(value));
+    if (value) {
+      this.replaceChildren(document.createTextNode("Loading…"));
+    }
+  }
+
+  render(items, renderItem, emptyMessage = "No items.") {
+    this.removeAttribute("aria-busy");
+    this.replaceChildren();
+    if (!items.length) {
+      const empty = document.createElement("p");
+      empty.textContent = emptyMessage;
+      empty.setAttribute("role", "status");
+      this.append(empty);
+      return;
+    }
+    for (const item of items) {
+      const node = renderItem(item);
+      if (!(node instanceof Node)) {
+        throw new TypeError("wds-data-list renderItem must return a DOM Node");
+      }
+      const listItem = document.createElement("div");
+      listItem.setAttribute("role", "listitem");
+      listItem.className = "contents";
+      listItem.append(node);
+      this.append(listItem);
+    }
+  }
+}
+
+if (!customElements.get("wds-data-list")) {
+  customElements.define("wds-data-list", WdsDataList);
+}

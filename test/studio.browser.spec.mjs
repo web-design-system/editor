@@ -1,10 +1,11 @@
 import { test, expect } from "@playwright/test";
 
-for (const width of [1440, 900, 390]) {
+for (const width of [1440, 900, 612, 390]) {
   test(`studio edits selected layers and saves canonical source at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
     const errors = [];
     page.on("pageerror", (error) => errors.push(error.message));
+    page.on("console", (message) => message.text().includes("studio layer parse") && console.log(message.text()));
     await page.route("https://at-li3.static.apphor.de/**", (route) =>
       route.fulfill({
         contentType: "text/javascript",
@@ -81,8 +82,10 @@ for (const width of [1440, 900, 390]) {
     await page.getByLabel("Text", { exact: true }).fill("#ff0000");
     await page.getByLabel("Text", { exact: true }).press("Tab");
     await expect(preview.locator("span[data-studio-node]")).toHaveCSS("color", "rgb(255, 0, 0)");
+    await expect(page.locator("#publish-source")).toBeDisabled();
     await page.getByRole("button", { name: "Save Component", exact: true }).click();
     await expect(page.locator("#save-status")).toContainText("Committed");
+    await expect(page.locator("#publish-source")).toBeEnabled();
     expect(saved.baseRef).toBe("original");
     expect(saved.files["component.html"]).toContain("color: rgb(255, 0, 0)");
     expect(saved.files["component.html"]).toContain("const x = 1;");

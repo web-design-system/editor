@@ -6,6 +6,50 @@
   display: none;
 }
 
+.sidebar-user-card {
+  position: relative;
+  z-index: 1;
+  box-sizing: border-box;
+  flex: none;
+  min-width: 0;
+  max-width: 100%;
+  isolation: isolate;
+}
+
+.sidebar-user-card .user-copy {
+  flex: 1 1 0%;
+  min-width: 0;
+  overflow: hidden;
+}
+
+html[data-theme="light"] body,
+html[data-theme="light"] #app-root {
+  background: #f8fafc;
+  color: #1f2937;
+}
+
+html[data-theme="light"] #app-root [class*="bg-zinc-950"],
+html[data-theme="light"] #app-root [class*="bg-zinc-900"],
+html[data-theme="light"] #app-root [class*="bg-zinc-800"] {
+  background-color: #fff !important;
+}
+
+html[data-theme="light"] #app-root [class*="text-zinc-100"],
+html[data-theme="light"] #app-root [class*="text-zinc-200"],
+html[data-theme="light"] #app-root [class*="text-zinc-300"] {
+  color: #1f2937 !important;
+}
+
+html[data-theme="light"] #app-root [class*="text-zinc-400"],
+html[data-theme="light"] #app-root [class*="text-zinc-500"] {
+  color: #64748b !important;
+}
+
+html[data-theme="light"] #app-root [class*="border-zinc-800"],
+html[data-theme="light"] #app-root [class*="border-zinc-700"] {
+  border-color: #e2e8f0 !important;
+}
+
 @media (max-width: 639px) {
   .editor-nav-toggle:not(.hidden) {
     display: inline-flex;
@@ -45,6 +89,20 @@
 
   #project-content.mobile-nav-open .mobile-nav-overlay {
     display: block;
+  }
+}
+
+@media (max-width: 760px) {
+  .workspace-sidebar {
+    position: relative;
+    z-index: 2;
+    width: 100%;
+  }
+
+  .dashboard-main {
+    position: relative;
+    z-index: 1;
+    min-width: 0;
   }
 }
 

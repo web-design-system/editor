@@ -14,7 +14,8 @@ test("landing page lists teams and design systems without depending on component
   assert.match(html, /Git organization slug/);
   assert.match(app, /fetch\("\/api\/teams"/);
   assert.match(app, /fetch\("\/api\/design-systems"/);
-  assert.match(app, /systemUrl\(system\.org \|\| system\.team\)/);
+  assert.match(app, /teamSlug=.*system=/);
+  assert.match(app, /function navigateTo\(/);
   assert.match(app, /\/api\/oidc\/me/);
   assert.match(app, /\/api\/oidc\/login/);
   assert.match(app, /fetch\("\/api\/teams", \{/);
@@ -32,7 +33,8 @@ test("workbench exposes project source and authoring workflows", async () => {
   assert.match(app, /const team = params\.get\("team"\)/);
   assert.match(app, /const repo = params\.get\("repo"\)/);
   assert.match(app, /workspace\.classList\.remove\("hidden"\)/);
-  assert.match(html, /id="workspace-user-card"/);
+  assert.match(html, /id="sidebar-user-card"/);
+  assert.match(html, /<template app>/);
   assert.doesNotMatch(html, /class="back-link/);
   assert.match(html, /editor-nav-toggle/);
   const navigationCss = await readFile(new URL("../public/css/editor-nav.css", import.meta.url), "utf8");

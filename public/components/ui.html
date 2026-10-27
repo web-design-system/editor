@@ -37,6 +37,15 @@
 
 <template component="wds-repository-card" shadow-dom="open">
   <link rel="stylesheet" href="/css/tailwind.css" />
+  <style>
+    :host-context(html[data-theme="light"]) a {
+      background: #fff;
+      border-color: #e2e8f0;
+    }
+    :host-context(html[data-theme="light"]) a:hover {
+      background: #f8fafc;
+    }
+  </style>
   <a
     class="repository-row flex min-h-[60px] items-center gap-3 rounded-[5px] border border-zinc-800 bg-zinc-900 p-3 text-left transition-colors hover:bg-[#202024]"
     bind-href="href"
@@ -80,6 +89,13 @@
 <!-- Organisms: larger semantic regions that compose molecules. -->
 <template component="wds-sidebar-panel" shadow-dom="open">
   <link rel="stylesheet" href="/css/tailwind.css" />
+  <style>
+    :host-context(html[data-theme="light"]) aside {
+      background: #fff;
+      border-color: #e2e8f0;
+      color: #1f2937;
+    }
+  </style>
   <aside
     class="flex h-full flex-col gap-4 border-r border-zinc-800 bg-zinc-900 px-3 py-5 max-[760px]:gap-0 max-[760px]:border-r-0 max-[760px]:border-b max-[760px]:px-3 max-[760px]:py-0"
     attr-aria-label="ariaLabel"

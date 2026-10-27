@@ -16,7 +16,17 @@ for (const width of [1440, 900, 390]) {
       const path = new URL(route.request().url()).pathname;
       let body = {};
       if (path === "/api/oidc/me") {
-        body = { authenticated: true, user: { name: "Studio tester" } };
+        body = {
+          authenticated: true,
+          user:
+            width === 900
+              ? { name: "Build Agent", role: "agent", email: "private@example.test" }
+              : {
+                  name: "Studio tester",
+                  email: "studio@example.test",
+                  photo: "data:image/gif;base64,R0lGODlhAQABAAAAACw=",
+                },
+        };
       } else if (path === "/api/projects") {
         body = [{ team: "demo", repo: "button", name: "Button", type: "component" }];
       } else if (path.startsWith("/api/source/")) {
@@ -44,22 +54,40 @@ for (const width of [1440, 900, 390]) {
       await route.fulfill({ json: body });
     });
     await page.goto("http://127.0.0.1:4175/?team=demo&repo=button");
+    await expect(page.locator(".back-link")).toHaveCount(0);
+    await expect(page.locator(".brand-mark")).toHaveText("W");
+    await expect(page.locator("#workspace-name")).toContainText(/demo\s*\/\s*Button/);
+    if (width === 900) {
+      await expect(page.locator(".user-avatar")).toHaveText("Ag");
+      await expect(page.locator(".user-copy")).not.toContainText("private@example.test");
+    } else {
+      await expect(page.locator(".user-avatar img")).toHaveAttribute("src", /^data:image/);
+      await expect(page.locator(".user-copy")).toContainText("studio@example.test");
+    }
+    if (width < 640) {
+      await page.getByRole("button", { name: "Open project navigation" }).click();
+      await expect(page.locator("#project-content")).toHaveClass(/mobile-nav-open/);
+    }
     await expect(page.locator("#publish-source")).toBeDisabled();
     await expect(page.locator("#publish-source .publish-indicator")).toHaveClass(/bg-transparent/);
     await expect(page.locator("#layer-list button")).toHaveCount(2);
     const preview = page.frameLocator("#draft-preview");
     await expect(preview.locator("button")).toBeVisible();
     await page.locator("#layer-list button").nth(1).click();
+    if (width < 640) {
+      await page.keyboard.press("Escape");
+      await expect(page.locator("#project-content")).not.toHaveClass(/mobile-nav-open/);
+    }
     await page.getByLabel("Text", { exact: true }).fill("#ff0000");
     await page.getByLabel("Text", { exact: true }).press("Tab");
     await expect(preview.locator("span[data-studio-node]")).toHaveCSS("color", "rgb(255, 0, 0)");
     await page.getByRole("button", { name: "Save Component", exact: true }).click();
-    await expect(page.locator("#draft-state")).toContainText("Committed");
+    await expect(page.locator("#save-status")).toContainText("Committed");
     expect(saved.baseRef).toBe("original");
     expect(saved.files["component.html"]).toContain("color: rgb(255, 0, 0)");
     expect(saved.files["component.html"]).toContain("const x = 1;");
     expect(saved.files["stories.html"]).toBe("<demo-button></demo-button>");
-    await page.getByRole("tab", { name: "Code", exact: true }).click();
+    await page.getByRole("tab", { name: /^Code/ }).click();
     await expect(page.locator(".code-surface")).toBeVisible();
     await expect(page.locator(".design-surface")).toBeHidden();
     await expect(page.locator(".studio-nav")).toBeHidden();
@@ -68,8 +96,10 @@ for (const width of [1440, 900, 390]) {
     await expect(page.locator(".design-surface")).toBeVisible();
     await page.getByRole("button", { name: "Zoom in", exact: true }).click();
     await expect(page.locator("#zoom-reset")).toHaveText("125%");
+    await page.getByRole("button", { name: "Reset zoom" }).click();
+    await expect(page.locator("#zoom-reset")).toHaveText("100%");
     await page.getByRole("button", { name: "Publish", exact: true }).click();
-    await expect(page.locator("#draft-state")).toContainText("Published");
+    await expect(page.locator("#publish-result")).toContainText("Published");
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     expect(errors).toEqual([]);
     await page.screenshot({ path: test.info().outputPath(`studio-${width}.png`), fullPage: true });

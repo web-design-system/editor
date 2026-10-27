@@ -43,8 +43,8 @@ export function createStudio(area, files, onEdit) {
   workspace.querySelector(".header").classList.add("h-14", "gap-4", "bg-zinc-900", "px-4");
   workspace.querySelector(".brand-mark").classList.add("size-8", "rounded");
   workspace.querySelector(".brand-name").classList.add("hidden");
-  workspace.querySelector(".user-copy").classList.add("hidden");
-  workspace.querySelector(".user-avatar").classList.add("hidden");
+  workspace.querySelector(".user-copy").classList.remove("hidden");
+  workspace.querySelector(".user-avatar").classList.remove("hidden");
   workspace.querySelector(".workspace-name").classList.add("mr-auto", "text-zinc-200");
   workArea.classList.remove("p-6", "min-h-[calc(100dvh-56px)]");
   workArea.classList.add("h-[calc(100dvh-56px)]", "min-h-0", "bg-zinc-950", "p-0", "max-[760px]:h-auto");
@@ -61,6 +61,14 @@ export function createStudio(area, files, onEdit) {
   const tabs = area.querySelector('[role="tablist"]');
   const fields = area.querySelector(".inspector-fields");
   const drawer = area.querySelector(".project-drawer");
+  const navToggle = document.querySelector(".editor-nav-toggle");
+  navToggle?.classList.remove("hidden");
+  const overlay = document.createElement("button");
+  overlay.type = "button";
+  overlay.className = "mobile-nav-overlay";
+  overlay.setAttribute("aria-label", "Close project navigation");
+  shell.prepend(overlay);
+  nav.classList.add("editor-sidebar");
   area.querySelectorAll("button, input, select, summary").forEach((control) => {
     control.classList.add(
       "focus-visible:outline-2",
@@ -230,7 +238,7 @@ export function createStudio(area, files, onEdit) {
   canvas.querySelector(".surface-heading").remove();
   canvas.insertAdjacentHTML(
     "afterbegin",
-    '<div class="canvas-tools absolute right-4 top-4 z-10 flex items-center rounded border border-zinc-800 bg-zinc-900 p-1 shadow-lg"><button type="button" id="zoom-out" aria-label="Zoom out">−</button><button type="button" id="zoom-reset" aria-label="Reset zoom">100%</button><button type="button" id="zoom-in" aria-label="Zoom in">+</button></div><span class="canvas-caption absolute bottom-4 left-4 text-[10px] tracking-[0.12em] text-zinc-500">COMPONENT CANVAS</span>',
+    '<div class="canvas-tools absolute right-4 top-4 z-10 flex items-center gap-2 rounded border border-zinc-800 bg-zinc-900 p-1 shadow-lg"><button type="button" id="zoom-out" aria-label="Zoom out">−</button><button type="button" id="zoom-reset" aria-label="Reset zoom">100%</button><button type="button" id="zoom-in" aria-label="Zoom in">+</button></div><span class="canvas-caption absolute bottom-4 left-4 text-[10px] tracking-[0.12em] text-zinc-500">COMPONENT CANVAS</span>',
   );
   area.querySelector("#save-source").textContent = "Save Component";
   code.querySelector(".surface-heading").innerHTML =
@@ -387,7 +395,10 @@ export function createStudio(area, files, onEdit) {
   });
   area.querySelector("#source-file").addEventListener("change", () => tabs.querySelector('[data-mode="code"]').click());
   area.querySelector("#source-editor").addEventListener("change", () => {
-    area.querySelector("#draft-state").textContent = "Unsaved changes";
+    const codeTab = tabs.querySelector('[data-mode="code"]');
+    if (!codeTab.textContent.endsWith(" *")) {
+      codeTab.textContent = `${codeTab.textContent} *`;
+    }
   });
   return { refresh };
 }

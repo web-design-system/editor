@@ -58,6 +58,12 @@ function setUserCard(target, user, authenticated) {
     return;
   }
   target.hidden = false;
+  const isAgent =
+    user.role === "agent" ||
+    user.type === "agent" ||
+    user.principal_type === "agent" ||
+    user.kind === "agent" ||
+    user.agent === true;
   const label = user.name || user.preferred_username || user.email || "Signed in";
   const initials =
     label
@@ -67,13 +73,16 @@ function setUserCard(target, user, authenticated) {
       .map((part) => part[0])
       .join("")
       .toUpperCase() || "W";
+  const avatar = isAgent ? "Ag" : initials;
   const studio = target.closest("#workspace")?.classList.contains("design-studio");
-  target.innerHTML = `<span class="user-avatar ${studio ? "hidden" : "inline-flex size-9 max-[560px]:size-7"} shrink-0 items-center justify-center rounded-full bg-zinc-800 text-[11px] font-medium text-zinc-400">${escapeHtml(initials)}</span><span class="user-copy ${studio ? "hidden" : "flex"} min-w-0 flex-col"><span class="user-name truncate font-semibold">${escapeHtml(label)}</span><span class="user-label truncate text-xs text-zinc-500 max-[560px]:hidden">${escapeHtml(user.email || "WDS account")}</span></span><a class="user-action shrink-0 text-sm font-semibold text-blue-400 hover:underline max-[560px]:text-xs" href="/api/oidc/logout">Sign out</a>`;
+  target.innerHTML = `<span class="user-avatar ${studio ? "hidden" : "inline-flex size-9 max-[560px]:size-7"} shrink-0 items-center justify-center overflow-hidden rounded-full bg-zinc-800 text-[11px] font-medium text-zinc-400">${!isAgent && user.photo ? `<img class="h-full w-full object-cover" src="${escapeHtml(user.photo)}" alt="">` : escapeHtml(avatar)}</span><span class="user-copy ${studio ? "hidden" : "flex"} min-w-0 flex-col"><span class="user-name truncate font-semibold">${escapeHtml(label)}</span><span class="user-label truncate text-xs text-zinc-500 max-[560px]:hidden">${isAgent ? "Agent" : escapeHtml(user.email || "WDS account")}</span></span><a class="user-action shrink-0 text-sm font-semibold text-blue-400 hover:underline max-[560px]:text-xs" href="/api/oidc/logout">Sign out</a>`;
 }
 async function loadUser() {
   let data = {};
   try {
-    const response = await fetch("/api/oidc/me", { credentials: "same-origin" });
+    const response = await fetch("/api/oidc/me", {
+      credentials: "same-origin",
+    });
     if (response.ok) {
       data = await response.json();
     }
@@ -85,6 +94,32 @@ async function loadUser() {
   }
   return data.authenticated === true;
 }
+function initializeEditorNavigation() {
+  const toggle = document.querySelector(".editor-nav-toggle");
+  const area = document.querySelector("#project-content");
+  if (!toggle || !area) {
+    return;
+  }
+  const close = () => {
+    area.classList.remove("mobile-nav-open");
+    toggle.setAttribute("aria-expanded", "false");
+  };
+  toggle.addEventListener("click", () => {
+    const opened = area.classList.toggle("mobile-nav-open");
+    toggle.setAttribute("aria-expanded", String(opened));
+  });
+  area.addEventListener("click", (event) => {
+    if (event.target.closest(".mobile-nav-overlay") || event.target.closest(".studio-nav a")) {
+      close();
+    }
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      close();
+    }
+  });
+}
+initializeEditorNavigation();
 function setNotice(message, signIn = false) {
   document.querySelector("#creation-status").textContent = message || "";
   const notice = document.querySelector("#notice");
@@ -134,10 +169,31 @@ function renderTeams() {
       selector.value = selectedTeam;
     }
   }
+  const systemsHeading = document.querySelector("#teams-title");
+  if (selectedTeam !== "all" && !new URLSearchParams(location.search).has("system")) {
+    const selectedSystems = systems.filter((system) => system.team === selectedTeam);
+    systemsHeading.textContent = "Design systems";
+    document.querySelector("#team-summary").textContent = `${selectedSystems.length}`;
+    teamList.innerHTML = `<a class="mb-2 block rounded px-2 py-2 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-blue-400" href="/">← Back to teams</a><div class="mb-2 px-2 text-[10px] uppercase tracking-wide text-zinc-500">Design systems</div>${
+      selectedSystems
+        .map(
+          (system) =>
+            `<a class="block rounded px-2 py-2 text-xs text-zinc-300 hover:bg-zinc-800 hover:text-blue-400" href="/?system=${encodeURIComponent(system.org || system.team)}">${escapeHtml(system.name || system.repo)}</a>`,
+        )
+        .join("") || '<span class="px-2 text-xs text-zinc-500">No design systems yet.</span>'
+    }`;
+    return;
+  }
+  systemsHeading.textContent = "Teams";
   if (buttons.length && uiComponentsReady) {
     teamList.replaceChildren(
       ...buttons.map((team) =>
-        createTeamItem({ id: team.id, label: team.label, count: team.count, selected: selectedTeam === team.id }),
+        createTeamItem({
+          id: team.id,
+          label: team.label,
+          count: team.count,
+          selected: selectedTeam === team.id,
+        }),
       ),
     );
   } else {
@@ -176,6 +232,13 @@ function renderSystems() {
   emptyState.hidden = true;
   dashboardContent.hidden = false;
   dashboardLayout.hidden = false;
+  if (systemsLoaded && teams.length === 0 && systems.length === 0) {
+    dashboardLayout.setAttribute("data-empty", "");
+    dashboardContent.hidden = true;
+    document.querySelector("#first-team-empty").hidden = false;
+    return;
+  }
+  document.querySelector("#first-team-empty").hidden = true;
   const org = new URLSearchParams(location.search).get("system");
   if (org) {
     const system = systems.find((item) => (item.org || item.team) === org);
@@ -224,6 +287,13 @@ function renderSystems() {
       .join("");
   }
   filterRepositories();
+}
+function updateFirstTeamState() {
+  const noTeams = teams.length === 0 && systems.length === 0;
+  const layout = document.querySelector("#dashboard-layout");
+  layout.toggleAttribute("data-empty", noTeams);
+  document.querySelector("#dashboard-content").hidden = noTeams;
+  document.querySelector("#first-team-empty").hidden = !noTeams;
 }
 async function loadWorkspace() {
   const authenticated = await loadUser();
@@ -280,6 +350,7 @@ async function loadWorkspace() {
       type: "design-system",
     }));
     systemsLoaded = true;
+    updateFirstTeamState();
     const currentSystem = systems.find((item) => item.org === new URLSearchParams(location.search).get("system"));
     if (currentSystem) {
       selectedTeam = currentSystem.team;
@@ -315,6 +386,7 @@ async function refreshWorkspace() {
     type: "design-system",
   }));
   systemsLoaded = true;
+  updateFirstTeamState();
   renderTeams();
   renderSystems();
 }
@@ -340,6 +412,7 @@ teamForm.addEventListener("submit", async (event) => {
     }
     await refreshWorkspace();
     selectedTeam = data.team.slug;
+    updateFirstTeamState();
     history.replaceState(null, "", `/?teamSlug=${encodeURIComponent(selectedTeam)}`);
     systemGrid.classList.remove("system-overview");
     document.querySelector('.dashboard-heading [data-create="system"]').hidden = false;
@@ -431,7 +504,13 @@ firstSystemForm.addEventListener("submit", async (event) => {
       method: "POST",
       credentials: "same-origin",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ team: teamSlug, slug, gitOrg: slug, name, type: "design-system" }),
+      body: JSON.stringify({
+        team: teamSlug,
+        slug,
+        gitOrg: slug,
+        name,
+        type: "design-system",
+      }),
     });
     const data = await responseData(response);
     if (!response.ok) {
@@ -451,7 +530,8 @@ const repo = params.get("repo");
 if (team && repo) {
   landing.hidden = true;
   workspace.classList.remove("hidden");
-  document.querySelector("#workspace-name").textContent = `${team} / ${repo}`;
+  document.querySelector("#workspace-name").innerHTML =
+    `<span class="grid size-6 shrink-0 place-items-center rounded bg-blue-500 text-xs text-white" aria-hidden="true">W</span><span class="truncate">${escapeHtml(team)}</span><span class="text-zinc-600" aria-hidden="true">/</span><span class="truncate">${escapeHtml(repo)}</span>`;
   document.title = `${repo} · Workbench`;
   loadWorkbench(team, repo);
 } else {
@@ -469,7 +549,9 @@ async function loadWorkbench(team, repo) {
     );
     return;
   }
-  const projectResponse = await fetch("/api/projects", { credentials: "same-origin" });
+  const projectResponse = await fetch("/api/projects", {
+    credentials: "same-origin",
+  });
   if (!projectResponse.ok) {
     status.textContent =
       projectResponse.status === 401 ? "Your session expired. Sign in again." : "Projects unavailable.";
@@ -569,7 +651,10 @@ async function loadWorkbench(team, repo) {
       area.querySelector("#foundation-new-component").disabled = true;
       const publicationState = area.querySelector("#token-publication-state");
       try {
-        const response = await fetch(artifactUrl, { method: "HEAD", cache: "no-store" });
+        const response = await fetch(artifactUrl, {
+          method: "HEAD",
+          cache: "no-store",
+        });
         componentForm.hidden = !response.ok;
         area.querySelector("#foundation-new-component").disabled = !response.ok;
         publicationState.textContent = response.ok
@@ -695,7 +780,7 @@ async function loadWorkbench(team, repo) {
       files[activeFile] = editor.value;
     }
     activeFile = fileSelect.value;
-    editor.value = files[fileSelect.value];
+    editor.value = files[fileSelect.value] ?? "";
     editor.language = languageForFile(activeFile);
     editor.status = activeFile;
     area.querySelector("#active-file-label").textContent = fileSelect.value;
@@ -713,6 +798,15 @@ async function loadWorkbench(team, repo) {
     );
   });
   const publishButton = area.querySelector("#publish-source");
+  const saveButton = area.querySelector("#save-source");
+  area.querySelector("#draft-state").remove();
+  const codeTab = area.querySelector('[data-mode="code"]');
+  const markCodeDirty = () => {
+    if (!codeTab.textContent.endsWith(" *")) {
+      codeTab.textContent = `${codeTab.textContent} *`;
+    }
+  };
+  area.querySelector(".inspector-drawer").prepend(saveButton, publishButton);
   publishButton.innerHTML =
     '<span class="publish-indicator inline-block size-2 rounded-full bg-transparent ring-1 ring-zinc-500" aria-hidden="true"></span> Publish';
   publishButton.disabled = true;
@@ -774,7 +868,8 @@ async function loadWorkbench(team, repo) {
     updatePublishState(true);
   });
   editor.addEventListener("change", (event) => {
-    files[activeFile] = typeof event.detail === "string" ? event.detail : editor.value;
+    files[activeFile] = typeof event.detail === "string" ? event.detail : (editor.value ?? "");
+    markCodeDirty();
     refreshPreview();
     updatePublishState(true);
   });
@@ -794,9 +889,6 @@ async function loadWorkbench(team, repo) {
     area.querySelector("#save-status").textContent = response.ok
       ? `Committed ${data.revision} (${data.sourceMode}).`
       : data.error || `Save failed (${response.status}).`;
-    if (response.ok) {
-      area.querySelector("#draft-state").textContent = `Committed · ${data.revision}`;
-    }
     if (response.ok) {
       baseRef = data.baseRef || baseRef;
       loadHistory();
@@ -836,7 +928,6 @@ async function loadWorkbench(team, repo) {
       : data.error || `Publish failed (${response.status}).`;
     if (response.ok) {
       updatePublishState(false);
-      area.querySelector("#draft-state").textContent = `Published · ${data.revision}`;
       const preview = document.createElement("a");
       preview.href = `/static/${encodeURIComponent(team)}/${encodeURIComponent(repo)}/latest/component.html?view=component`;
       preview.target = "_blank";
@@ -851,7 +942,7 @@ async function loadWorkbench(team, repo) {
     if (activeFile === "component.html") {
       editor.value = files[activeFile];
     }
-    area.querySelector("#draft-state").textContent = "Unsaved changes";
+    markCodeDirty();
     updatePublishState(true);
   });
   await loadCodeEditor();

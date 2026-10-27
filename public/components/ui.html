@@ -98,6 +98,32 @@
 <!-- Layouts: named structural regions; host supplies page-level grid utilities. -->
 <template component="wds-dashboard-layout" shadow-dom="open">
   <link rel="stylesheet" href="/css/tailwind.css" />
+  <style>
+    :host([data-empty]) > div {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    :host([data-empty]) slot[name="sidebar"] {
+      display: none;
+    }
+    :host(:not([data-empty])) slot[name="sidebar"] {
+      animation: sidebar-enter 220ms ease-out;
+    }
+    @keyframes sidebar-enter {
+      from {
+        opacity: 0;
+        transform: translateX(-12px);
+      }
+      to {
+        opacity: 1;
+        transform: translateX(0);
+      }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      :host(:not([data-empty])) slot[name="sidebar"] {
+        animation: none;
+      }
+    }
+  </style>
   <div
     class="grid min-h-dvh grid-cols-[220px_minmax(0,1fr)] max-[1000px]:grid-cols-[210px_minmax(0,1fr)] max-[760px]:block"
   >

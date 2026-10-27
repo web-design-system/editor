@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="/css/reset.css" />
     <link rel="stylesheet" href="/css/tokens.css" />
     <link rel="stylesheet" href="/css/tailwind.css" />
+    <link rel="stylesheet" href="/css/editor-nav.css" />
     <script type="importmap">
       { "imports": { "@li3/": "https://at-li3.static.apphor.de/" } }
     </script>
@@ -133,6 +134,27 @@
           slot="main"
           aria-label="Workspace"
         >
+          <section
+            class="mx-auto grid min-h-[calc(100dvh-56px)] w-[min(560px,calc(100%-36px))] content-center justify-items-center py-12 text-center"
+            id="first-team-empty"
+            aria-labelledby="first-team-title"
+            hidden
+          >
+            <p class="mb-2 text-[10px] font-semibold uppercase tracking-[.16em] text-blue-400">GET STARTED</p>
+            <h1 class="m-0 text-2xl font-semibold tracking-[-.04em] text-zinc-100" id="first-team-title">
+              Create your first team
+            </h1>
+            <p class="mt-3 max-w-[390px] text-sm leading-6 text-zinc-400">
+              A team is the home for your design systems and components.
+            </p>
+            <button
+              class="mt-7 h-11 rounded border border-blue-400 bg-blue-500 px-5 text-sm font-medium text-white transition-colors hover:bg-blue-400"
+              type="button"
+              data-create="team"
+            >
+              Create team
+            </button>
+          </section>
           <div id="dashboard-content">
             <nav
               class="breadcrumbs mb-4 flex flex-wrap items-center gap-2.5 text-xs text-zinc-500"
@@ -340,14 +362,17 @@
           ><span class="brand-mark grid h-8 w-8 place-items-center rounded bg-blue-500 text-white">W</span
           ><span class="brand-name text-sm font-semibold max-[560px]:hidden">Workbench</span></a
         >
-        <a
-          class="back-link inline-flex shrink-0 items-center gap-2 text-xs text-zinc-400 hover:text-blue-400 max-[560px]:gap-1 max-[560px]:text-[11px] max-[560px]:whitespace-nowrap"
-          href="/"
-          aria-label="Back to design systems"
-          >← <span>All design systems</span></a
+        <button
+          type="button"
+          class="editor-nav-toggle hidden shrink-0 rounded border border-zinc-700 px-2 py-1 text-xs"
+          aria-label="Open project navigation"
+          aria-expanded="false"
+          aria-controls="project-content"
         >
+          ☰
+        </button>
         <span
-          class="workspace-name mr-auto min-w-0 truncate text-zinc-300 max-[560px]:hidden"
+          class="workspace-name mr-auto flex min-w-0 items-center gap-2 truncate text-zinc-300"
           id="workspace-name"
         ></span>
         <div

@@ -33,6 +33,14 @@ test("workbench exposes project source and authoring workflows", async () => {
   assert.match(app, /const repo = params\.get\("repo"\)/);
   assert.match(app, /workspace\.classList\.remove\("hidden"\)/);
   assert.match(html, /id="workspace-user-card"/);
+  assert.doesNotMatch(html, /class="back-link/);
+  assert.match(html, /editor-nav-toggle/);
+  const navigationCss = await readFile(new URL("../public/css/editor-nav.css", import.meta.url), "utf8");
+  assert.match(navigationCss, /max-width: 639px/);
+  assert.match(navigationCss, /mobile-nav-open/);
+  assert.match(app, /user\.role === "agent"/);
+  assert.match(app, /user\.photo/);
+  assert.match(app, /isAgent \? "Ag"/);
   assert.match(html, /id="project-content"/);
   assert.match(app, /api\/source/);
   assert.match(app, /api\/history/);
@@ -61,7 +69,7 @@ test("workbench exposes project source and authoring workflows", async () => {
   assert.match(app, /tokens-editor/);
   assert.match(app, /save-tokens/);
   assert.match(app, /publish-tokens/);
-  assert.match(app, /method: "HEAD", cache: "no-store"/);
+  assert.match(app, /method: "HEAD",\s*cache: "no-store"/);
   assert.match(app, /componentForm\.hidden = !response\.ok/);
   assert.match(app, /area\.querySelector\("#foundation-state"\).*?Published.*?await probePublishedTokens\(\)/s);
   assert.match(app, /Foundation files/);

@@ -60,6 +60,22 @@ export function dashboardHeading(team) {
   document.querySelector("#systems-title").textContent = selected ? "Design systems" : "All design systems";
 }
 
+function renderSystemSidebar(system, org, projects) {
+  const sidebar = document.querySelector("#team-list");
+  const teamSlug = system.team || org;
+  document.querySelector("#team-navigation-label").textContent = system.name;
+  document.querySelector("#teams-title").textContent = "Components";
+  document.querySelector("#team-summary").textContent = `${projects.length}`;
+  sidebar.innerHTML = `<a class="mb-2 block rounded px-2 py-2 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-blue-400" href="/?teamSlug=${encodeURIComponent(teamSlug)}">← Back to systems</a><div class="mb-2 px-2 text-xs font-semibold text-zinc-100">${escape(system.name)}</div>${
+    projects
+      .map(
+        (item) =>
+          `<a class="block rounded px-2 py-2 text-xs text-zinc-300 hover:bg-zinc-800 hover:text-blue-400" href="${projectUrl(org, item.repo)}">${escape(item.name || item.repo)}</a>`,
+      )
+      .join("") || '<span class="px-2 text-xs text-zinc-500">No components yet.</span>'
+  }`;
+}
+
 export async function renderSystemOverview(system, grid) {
   grid.before(document.querySelector(".list-toolbar"));
   const org = system.org || system.team;
@@ -215,6 +231,11 @@ export async function renderSystemOverview(system, grid) {
     componentArea.hidden = !published.ok;
     setup.hidden = published.ok;
     if (!published.ok) {
+      const response = await fetch("/api/projects");
+      if (response.ok) {
+        const projects = (await response.json()).filter((item) => item.team === org && item.type === "component");
+        renderSystemSidebar(system, org, projects);
+      }
       return;
     }
     const response = await fetch("/api/projects");
@@ -225,6 +246,7 @@ export async function renderSystemOverview(system, grid) {
     if (!components.isConnected) {
       return;
     }
+    renderSystemSidebar(system, org, projects);
     grid.querySelector("#component-count").textContent = projects.length;
     if (!projects.length) {
       componentArea.querySelector(".components-heading").hidden = true;
@@ -275,12 +297,9 @@ export async function renderSystemOverview(system, grid) {
 
 export function workbenchNavigation(area, project, projects, org, repo) {
   const foundation = project.designSystem?.repo || (project.type === "design-system" ? repo : "foundation");
-  const back = document.querySelector(".back-link");
-  back.href = systemUrl(org);
-  back.innerHTML = "← <span>Design system</span>";
-  back.setAttribute("aria-label", "Back to design system");
   const name = document.querySelector("#workspace-name");
-  name.innerHTML = `<a href="${systemUrl(org)}">${escape(org)}</a><span> / </span><span>${escape(project.type === "design-system" ? "Foundation" : project.name || repo)}</span>`;
+  const crumb = `<span class="truncate">${escape(project.designSystem?.name || org)}</span><span aria-hidden="true">/</span><span class="truncate">${escape(project.type === "design-system" ? "Foundation" : project.name || repo)}</span>`;
+  name.innerHTML = crumb;
   Promise.all([fetch("/api/teams"), fetch("/api/design-systems")])
     .then(async ([teamResponse, systemResponse]) => {
       if (!teamResponse.ok || !systemResponse.ok) {
@@ -291,7 +310,8 @@ export function workbenchNavigation(area, project, projects, org, repo) {
       const system = designSystems.find((item) => item.git_org === org);
       const owner = teams.find((item) => item.id === system?.team_id);
       if (system && owner) {
-        name.innerHTML = `<a href="/?teamSlug=${encodeURIComponent(owner.slug)}">${escape(owner.slug)}</a><span> / </span><a href="${systemUrl(org)}">${escape(system.name)}</a><span> / </span><span>${escape(project.type === "design-system" ? "Foundation" : project.name || repo)}</span>`;
+        name.innerHTML = `<span class="truncate">${escape(system.name)}</span><span aria-hidden="true">/</span><span class="truncate">${escape(project.type === "design-system" ? "Foundation" : project.name || repo)}</span>`;
+        area.querySelector(".component-hierarchy h2")?.replaceChildren(system.name);
       }
     })
     .catch(() => {
@@ -304,16 +324,22 @@ export function workbenchNavigation(area, project, projects, org, repo) {
     context.textContent = org;
   }
   if (project.type === "component" && navigation) {
-    const links = document.createElement("div");
-    links.className = "repository-nav flex flex-col gap-1.5 border-t border-zinc-800 pt-4";
-    links.innerHTML = `<strong class="mb-1 text-xs font-medium text-zinc-400">Design system repositories</strong><a class="block rounded px-2 py-1.5 text-xs text-zinc-400 hover:bg-blue-500/10 hover:text-blue-400 aria-[current=page]:bg-blue-500/10 aria-[current=page]:text-blue-400" href="${projectUrl(org, foundation)}">◇ Foundation</a>${projects
+    const hierarchy = document.createElement("section");
+    hierarchy.className = "component-hierarchy mb-3 flex flex-col gap-2 border-b border-zinc-800 px-3 pb-3";
+    hierarchy.innerHTML = `<a class="text-xs text-zinc-400 hover:text-blue-400" href="${systemUrl(org)}">← Back to systems</a><h2 class="mt-1 truncate text-xs font-semibold text-zinc-100">${escape(project.designSystem?.name || org)}</h2><strong class="text-[10px] font-medium uppercase tracking-wide text-zinc-500">Components</strong><div class="hierarchy-components flex flex-col gap-1">${projects
       .filter((item) => item.team === org && item.type === "component")
       .map(
         (item) =>
-          `<a class="block rounded px-2 py-1.5 text-xs text-zinc-400 hover:bg-blue-500/10 hover:text-blue-400 aria-[current=page]:bg-blue-500/10 aria-[current=page]:text-blue-400" href="${projectUrl(org, item.repo)}" ${item.repo === repo ? 'aria-current="page"' : ""}>▱ ${escape(item.name || item.repo)}</a>`,
+          `<a class="block rounded px-2 py-1.5 text-xs text-zinc-400 hover:bg-blue-500/10 hover:text-blue-400 aria-[current=page]:bg-blue-500/10 aria-[current=page]:text-blue-400" href="${projectUrl(org, item.repo)}" ${item.repo === repo ? 'aria-current="page"' : ""}>${escape(item.name || item.repo)}</a>`,
       )
-      .join("")}`;
-    navigation.append(links);
+      .join("")}</div>`;
+    area.querySelector(".project-drawer").before(hierarchy);
+    const links = document.createElement("div");
+    links.className = "repository-nav border-t border-zinc-800 pt-3";
+    links.innerHTML = `<a class="block rounded px-2 py-1.5 text-xs text-zinc-400 hover:bg-zinc-800" href="${projectUrl(org, foundation)}">◇ Foundation</a>`;
+    navigation.prepend(links);
+    navigation.querySelector(".nav-context")?.remove();
+    area.querySelector(".project-drawer > summary").textContent = "Project files";
   }
 }
 

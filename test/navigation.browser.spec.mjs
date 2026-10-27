@@ -158,6 +158,8 @@ for (const width of [1440, 900, 390, 360]) {
     }
     await page.getByRole("button", { name: "acme 2", exact: true }).click();
     await expect(page.locator(".system-card")).toHaveCount(2);
+    await expect(page.locator("#teams-title")).toHaveText("Design systems");
+    await expect(page.locator("#team-list")).toContainText("Acme UI");
     await expect(page).toHaveURL(/teamSlug=acme/);
     await page.reload();
     await expect(page.locator(".system-card")).toHaveCount(2);
@@ -173,6 +175,8 @@ for (const width of [1440, 900, 390, 360]) {
     });
     await page.getByRole("link", { name: "Open Acme UI", exact: true }).click();
     await expect(page.locator("#dashboard-title")).toHaveText("Acme UI");
+    await expect(page.locator("#team-list")).toContainText("← Back to systems");
+    await expect(page.locator("#team-list")).toContainText("Button");
     await expect(page.getByRole("link", { name: "All design systems" })).toHaveAttribute("href", "/");
     await expect(page.locator("#foundation-setup")).toBeVisible();
     await expect(page.locator("#foundation-setup")).toContainText("Define your design tokens");
@@ -230,7 +234,10 @@ for (const width of [1440, 900, 390, 360]) {
     await page.screenshot({ path: test.info().outputPath(`foundation-${width}.png`), fullPage: true });
     await page.locator(".component-list a").first().click();
     await expect(page.locator("#layer-list button")).toHaveCount(1);
-    await page.getByRole("link", { name: "Back to design system" }).click();
+    if (width < 640) {
+      await page.getByRole("button", { name: "Open project navigation" }).click();
+    }
+    await page.getByRole("link", { name: "← Back to systems" }).click();
     await expect(page.locator("#dashboard-title")).toHaveText("Acme UI");
     await expect(page.locator(".foundation-card")).toBeVisible();
     await expect(page.locator("#foundation-setup")).toBeHidden();

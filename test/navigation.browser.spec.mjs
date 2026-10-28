@@ -174,6 +174,8 @@ for (const width of [1440, 900, 390, 360]) {
     expect(documentNavigations).toBe(1);
     await page.reload();
     await expect(page.locator(".system-card")).toHaveCount(2);
+    await expect(page.locator("#layer-stack a")).toHaveCount(2);
+    await expect(page.locator('#layer-stack a[href="/?teamSlug=acme"]')).toBeVisible();
     await page.getByRole("button", { name: "New design system" }).click();
     await expect(page.getByRole("dialog")).toBeVisible();
     await expect(page.locator("#system-team")).toHaveValue("acme");
@@ -184,6 +186,16 @@ for (const width of [1440, 900, 390, 360]) {
         customElements.define("wds-repository-card", class extends HTMLElement {});
       }
     });
+    await page.locator("#system-grid .system-card").filter({ hasText: "Acme UI" }).click();
+    await expect(page.locator("#dashboard-title")).toHaveText("Acme UI");
+    await expect(page.locator("#layer-stack a")).toHaveCount(3);
+    await expect(page.locator('#layer-stack a[href="/?system=acme-ui"]')).toBeVisible();
+    const backToTeam = page.getByRole("link", { name: "Go back to acme" });
+    await backToTeam.focus();
+    await expect(backToTeam).toBeFocused();
+    await backToTeam.press("Enter");
+    await expect(page).toHaveURL(/teamSlug=acme$/);
+    await expect(page.getByRole("link", { name: "Current layer: acme" })).toBeFocused();
     await page.locator("#system-grid .system-card").filter({ hasText: "Acme UI" }).click();
     await expect(page.locator("#dashboard-title")).toHaveText("Acme UI");
     expect(documentNavigations).toBe(2);
@@ -209,6 +221,7 @@ for (const width of [1440, 900, 390, 360]) {
     await expect(page.locator(".setup-action")).toHaveText("Create Design Foundation →");
     await page.locator(".setup-action").click();
     await expect(page).toHaveURL(/team=acme-ui&repo=foundation/);
+    await expect(page.locator("#layer-stack a").last()).toHaveAttribute("aria-current", "page");
     await expect(page.getByRole("button", { name: "Save Foundation" })).toBeVisible();
     if (width <= 760) {
       await page.locator(".project-drawer > summary").click();

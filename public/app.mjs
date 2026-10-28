@@ -58,6 +58,7 @@ function initializeApp() {
   let routeRenderSequence = 0;
   let editorDirty = false;
   let foundationDirty = false;
+  let restoreLayerFocus = false;
   let themeChoice = "system";
   function escapeHtml(value) {
     return String(value ?? "").replace(
@@ -226,6 +227,74 @@ function initializeApp() {
       ? `${escapeHtml(message)}${signIn ? ' <a class="font-semibold text-blue-400 hover:underline" href="/api/oidc/login">Sign in</a> to continue.' : ""}`
       : "";
   }
+  function updateLayerStack(params) {
+    const stack = document.querySelector("#layer-stack");
+    const systemOrg = params.get("system") || params.get("team");
+    const repo = params.get("repo");
+    const teamSlug = params.get("teamSlug") || systems.find((item) => item.org === systemOrg)?.team || "all";
+    const system = systems.find((item) => item.org === systemOrg);
+    const project = repo ? projects.find((item) => item.team === systemOrg && item.repo === repo) : null;
+    const entries = [];
+    const add = (label, href, icon, current = false) => entries.push({ label, href, icon, current });
+    add("Teams", "/", "W", !systemOrg && teamSlug === "all");
+    if (teamSlug !== "all") {
+      add(teamSlug, `/?teamSlug=${encodeURIComponent(teamSlug)}`, "T", !systemOrg);
+    }
+    if (system) {
+      add(system.name, `/?system=${encodeURIComponent(system.org)}`, "◇", Boolean(systemOrg) && !repo);
+      if (repo && project?.type === "component") {
+        add("Components", `/?system=${encodeURIComponent(system.org)}`, "▱");
+      }
+    }
+    if (repo) {
+      add(project?.name || repo, `/?team=${encodeURIComponent(systemOrg)}&repo=${encodeURIComponent(repo)}`, "✎", true);
+    }
+    const visible = params.get("view") !== "preferences" && authenticatedUser;
+    stack.hidden = !visible || entries.length < 2;
+    if (stack.hidden) {
+      stack.replaceChildren();
+      return;
+    }
+    const exit = stack.childElementCount ? stack.cloneNode(true) : null;
+    if (exit) {
+      exit.removeAttribute("id");
+      exit.className = "layer-stack-exit";
+      exit.setAttribute("aria-hidden", "true");
+      exit.inert = true;
+    }
+    const fragment = document.createDocumentFragment();
+    entries.forEach((entry, index) => {
+      const link = document.createElement("a");
+      link.href = entry.href;
+      link.style.setProperty("--layer-step", `${index * 8}px`);
+      link.className = entry.current ? "layer-current" : "";
+      if (entry.current) {
+        link.setAttribute("aria-current", "page");
+      }
+      link.setAttribute("aria-label", `${entry.current ? "Current layer: " : "Go back to "}${entry.label}`);
+      const icon = document.createElement("span");
+      icon.className = "layer-icon";
+      icon.setAttribute("aria-hidden", "true");
+      icon.textContent = entry.icon;
+      const label = document.createElement("span");
+      label.className = "layer-label";
+      label.textContent = entry.label;
+      link.append(icon, label);
+      fragment.append(link);
+    });
+    stack.replaceChildren(fragment);
+    stack.classList.remove("layer-stack-enter");
+    void stack.offsetWidth;
+    stack.classList.add("layer-stack-enter");
+    if (restoreLayerFocus) {
+      stack.querySelector('a[aria-current="page"]')?.focus({ preventScroll: true });
+      restoreLayerFocus = false;
+    }
+    if (exit) {
+      stack.append(exit);
+      window.setTimeout(() => exit.remove(), 180);
+    }
+  }
   function showGuestWelcome(message, footnote) {
     landing.hidden = false;
     workspace.classList.add("hidden");
@@ -241,6 +310,7 @@ function initializeApp() {
     document.querySelector("#welcome-footnote").textContent = footnote;
     document.querySelector("#welcome-footnote").hidden = !footnote;
     document.querySelector("#app-topbar").hidden = true;
+    document.querySelector("#layer-stack").hidden = true;
   }
   function createDataCard({ href, title, subtitle, count, meta, iconText = "▱", kind = "system" }) {
     const card = document.createElement("a");
@@ -700,6 +770,7 @@ function initializeApp() {
       return;
     }
     const params = new URLSearchParams(location.search);
+    updateLayerStack(params);
     const preferences = params.get("view") === "preferences";
     const team = params.get("team");
     const repo = params.get("repo");
@@ -709,7 +780,20 @@ function initializeApp() {
     const firstSystem = document.querySelector("#first-system-empty");
     const preferencesView = document.querySelector("#preferences-view");
     const topbarName = document.querySelector("#workspace-name");
-    workspace.classList.add("hidden");
+    if (team && repo) {
+      workspace.classList.remove("hidden", "workspace-exit");
+      workspace.classList.add("workspace-enter");
+      window.setTimeout(() => workspace.classList.remove("workspace-enter"), 240);
+    } else if (!workspace.classList.contains("hidden")) {
+      workspace.classList.remove("workspace-enter");
+      workspace.classList.add("workspace-exit");
+      window.setTimeout(() => {
+        if (workspace.classList.contains("workspace-exit")) {
+          workspace.classList.add("hidden");
+          workspace.classList.remove("workspace-exit");
+        }
+      }, 160);
+    }
     preferencesView.classList.add("hidden");
     dashboardContent.hidden = false;
     firstTeam.hidden = true;
@@ -793,6 +877,9 @@ function initializeApp() {
     }
     if (target.search === location.search && target.hash) {
       return;
+    }
+    if (anchor.closest("#layer-stack") && event.detail === 0) {
+      restoreLayerFocus = true;
     }
     event.preventDefault();
     navigateTo(target);

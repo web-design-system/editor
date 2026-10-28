@@ -944,8 +944,41 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
     const afterMismatchedTokens = await (await fetch(sourceUrl, { headers })).json();
     const mismatchedPublish = await fetch(`${base}/api/publish/test-team/sample-project`, { method: "POST", headers });
     assert.equal(mismatchedPublish.status, 400);
+    const bindingMarkup = `<template component="empty-state">
+  <section class="mx-auto grid">
+    <img bind-src="image || ''" />
+    <span bind-innertext="eyebrow"></span>
+    <h1 bind-innertext="heading"></h1>
+    <p bind-innertext="brief"></p>
+    <slot></slot>
+  </section>
+</template>`;
+    const bindingMarkupUpdate = await fetch(sourceUrl, {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({
+        files: { ...afterMismatchedTokens.files, "component.html": bindingMarkup },
+        baseRef: afterMismatchedTokens.baseRef,
+        message: "Accept declarative src binding",
+      }),
+    });
+    assert.equal(bindingMarkupUpdate.status, 200, JSON.stringify(await bindingMarkupUpdate.json()));
+    const afterBindingMarkup = await (await fetch(sourceUrl, { headers })).json();
+    const actualExternalAsset = await fetch(sourceUrl, {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({
+        files: { ...afterBindingMarkup.files, "component.html": '<img src="../outside.png" />' },
+        baseRef: afterBindingMarkup.baseRef,
+        message: "Still reject escaping img src",
+      }),
+    });
+    assert.equal(actualExternalAsset.status, 400);
+    const actualExternalAssetData = await actualExternalAsset.json();
+    assert.equal(actualExternalAssetData.file, "component.html");
+    assert.match(actualExternalAssetData.error, /Relative imports and assets/);
     const nestedFiles = {
-      ...afterMismatchedTokens.files,
+      ...afterBindingMarkup.files,
       "styles.css":
         '@import url("/static/test-team/foundation/latest/tokens.css");\n@import "tailwindcss";\n.dynamic { color: teal; }\n',
       "themes/nested.css": ".dynamic { color: teal; }\n",
@@ -957,7 +990,7 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
       headers,
       body: JSON.stringify({
         files: nestedFiles,
-        baseRef: afterMismatchedTokens.baseRef,
+        baseRef: afterBindingMarkup.baseRef,
         message: "Integration source update",
       }),
     });
@@ -1020,7 +1053,7 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
     assert.equal(addObsoleteArtifact.status, 201, await addObsoleteArtifact.text());
     assert.equal(
       await (await fetch(`${base}/static/test-team/sample-project/latest/component.html`)).text(),
-      changed["component.html"],
+      nestedFiles["component.html"],
     );
     const republish = await fetch(`${base}/api/publish/test-team/sample-project`, {
       method: "POST",

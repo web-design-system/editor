@@ -1262,7 +1262,7 @@ async function validateRelativeReferences(path, files) {
     const extension = extname(file).toLowerCase();
     const content = Buffer.isBuffer(value) ? value.toString("utf8") : value;
     if (extension === ".html") {
-      for (const [, specifier] of content.matchAll(/\b(?:href|src)\s*=\s*["']([^"']+)["']/gi)) {
+      for (const [, specifier] of content.matchAll(/(?:^|[\s<])(?:href|src)\s*=\s*["']([^"']+)["']/gi)) {
         references.push([file, specifier]);
       }
     } else if (extension === ".css") {

@@ -253,7 +253,8 @@ for (const width of [1440, 900, 390, 360]) {
     await page.goBack();
     await page.goBack();
     await expect(page.locator("#dashboard-title")).toHaveText("Acme UI");
-    await expect(page.locator(".foundation-card")).toBeVisible();
+    await expect(page.locator(".foundation-card")).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "Open design system settings" })).toBeVisible();
     await expect(page.locator("#foundation-setup")).toBeHidden();
     await expect(page.locator("#component-area")).toBeVisible();
     await expect(page.getByRole("button", { name: "New component" })).toBeEnabled();

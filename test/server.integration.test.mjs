@@ -913,6 +913,9 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
       }),
     });
     assert.equal(blockedGitImport.status, 400);
+    const blockedGitImportData = await blockedGitImport.json();
+    assert.match(blockedGitImportData.error, /supported stylesheets within the current project repository/);
+    assert.equal(blockedGitImportData.file, "styles.css");
     const afterBlockedGitImport = await (await fetch(sourceUrl, { headers })).json();
     assert.equal(afterBlockedGitImport.files["styles.css"], sourceAfter.files["styles.css"]);
     const blockedExternalImport = await fetch(sourceUrl, {
@@ -1241,6 +1244,9 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
       }),
     });
     assert.equal(blockedModuleEscape.status, 400);
+    const blockedModuleBody = await blockedModuleEscape.json();
+    assert.match(blockedModuleBody.error, /remain inside/i);
+    assert.equal(blockedModuleBody.file, "scripts/behavior.mjs");
     const blockedDynamicImport = await fetch(mountedUrl, {
       method: "PUT",
       headers,

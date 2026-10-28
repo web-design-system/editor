@@ -51,19 +51,19 @@ export function createStudio(area, files, onEdit) {
   shell.classList.remove("mx-auto", "max-w-screen-2xl", "min-h-[650px]", "rounded-xl");
   shell.classList.add("h-full", "min-h-0", "w-full", "rounded-none");
   const nav = area.querySelector(".studio-nav");
+  nav.setAttribute("aria-label", "Layers");
   const inspector = area.querySelector(".studio-inspector");
   const canvas = area.querySelector(".design-surface");
   const frame = area.querySelector("#draft-preview");
   const code = area.querySelector(".code-surface");
   const tabs = area.querySelector('[role="tablist"]');
   const fields = area.querySelector(".inspector-fields");
-  const drawer = area.querySelector(".project-drawer");
   const navToggle = document.querySelector(".editor-nav-toggle");
   navToggle?.classList.remove("hidden");
   const overlay = document.createElement("button");
   overlay.type = "button";
   overlay.className = "mobile-nav-overlay";
-  overlay.setAttribute("aria-label", "Close project navigation");
+  overlay.setAttribute("aria-label", "Close layers");
   shell.prepend(overlay);
   nav.classList.add("editor-sidebar");
   area.querySelectorAll("button, input, select, summary").forEach((control) => {
@@ -146,8 +146,7 @@ export function createStudio(area, files, onEdit) {
   area
     .querySelector(".authoring-main")
     .classList.add("min-h-0", "p-0", "border-0", "flex", "flex-col", "overflow-hidden", "max-[760px]:min-h-[400px]");
-  drawer.classList.add("m-0", "p-3");
-  drawer.querySelector("summary").classList.add("text-zinc-400", "font-medium");
+  nav.setAttribute("aria-label", "Layers");
   area.querySelector(".inspector-drawer > summary").classList.add("px-4", "py-3", "text-zinc-400", "font-medium");
   tabs.classList.add("flex", "shrink-0", "border-b", "border-zinc-800");
   tabs.querySelectorAll("button").forEach((button) => {
@@ -211,8 +210,6 @@ export function createStudio(area, files, onEdit) {
     "max-[760px]:h-[350px]",
   );
   code.classList.add("flex-1", "min-h-0", "bg-[#1e1e1e]");
-  drawer.querySelector("summary").textContent = "Project & files";
-  drawer.open = false;
   nav.insertAdjacentHTML(
     "afterbegin",
     '<div class="panel-title flex items-center justify-between border-b border-zinc-800 px-3 py-3.5 text-xs font-semibold uppercase tracking-[0.08em] text-zinc-100">Layers <span title="Select a layer to edit">◇</span></div><div id="layer-list" aria-label="Component layers" class="min-h-[120px] flex-1 overflow-auto p-2"></div>',
@@ -221,6 +218,26 @@ export function createStudio(area, files, onEdit) {
   area.querySelector(".inspector-drawer").open = true;
   fields.classList.add("p-0", "gap-0");
   fields.innerHTML = `<p id="selected-element" class="px-4 pb-3 text-blue-400 font-mono"></p><section class="property-section border-t border-zinc-800 p-4"><h2 class="mb-3.5 text-[11px] tracking-[0.08em] text-zinc-100">Layout</h2>${select("display", "Display", ["", "block", "flex", "inline-flex", "grid", "inline-block", "none"])}${select("flex-direction", "Direction", ["", "row", "column", "row-reverse", "column-reverse"])}${select("align-items", "Align", ["", "flex-start", "center", "flex-end", "stretch"])}${select("justify-content", "Justify", ["", "flex-start", "center", "flex-end", "space-between"])}</section><section class="property-section border-t border-zinc-800 p-4"><h2 class="mb-3.5 text-[11px] tracking-[0.08em] text-zinc-100">Spacing</h2><div class="spacing-fields grid grid-cols-2 gap-4 text-[10px] text-zinc-400"><div><span>Padding</span><div class="padding-grid mt-1.5 grid grid-cols-3 gap-1">${["top", "left", "right", "bottom"].map((side) => `<input aria-label="Padding ${side}" data-style="padding-${side}" placeholder="auto" title="CSS length, e.g. 12px" class="px-0 py-1 text-center text-[10px]">`).join("")}<span class="col-start-2 row-start-2 place-self-center text-lg">□</span></div></div><label>Gap<input data-style="gap" placeholder="normal"></label></div>${input("margin", "Margin")}</section><section class="property-section border-t border-zinc-800 p-4"><h2 class="mb-3.5 text-[11px] tracking-[0.08em] text-zinc-100">Colors</h2>${input("background-color", "Background")}${input("color", "Text")}</section><section class="property-section border-t border-zinc-800 p-4"><h2 class="mb-3.5 text-[11px] tracking-[0.08em] text-zinc-100">Effects</h2>${input("border-radius", "Radius")}${select("box-shadow", "Shadow", ["", "none", "0 1px 2px #0003", "0 4px 6px #0003", "0 10px 15px #0003"])}<label class="property-row mt-2 grid grid-cols-[76px_minmax(0,1fr)] items-center gap-2 text-xs text-zinc-400">Opacity<input aria-label="Opacity" data-style="opacity" type="range" min="0" max="1" step="0.05" value="1" class="accent-blue-500"></label></section><section class="property-section border-t border-zinc-800 p-4"><h2 class="mb-3.5 text-[11px] tracking-[0.08em] text-zinc-100">Element</h2><label>Classes<input id="element-classes" placeholder="Add CSS classes"></label><p id="style-status" role="status"></p></section>`;
+  fields.querySelectorAll(":scope > section:first-of-type select[data-style]").forEach((select) => {
+    const options = [...select.options].map((option) => option.value).filter(Boolean);
+    const values = select.dataset.style === "display" ? ["flex", "inline", "block", "grid"] : options;
+    const group = document.createElement("div");
+    group.className = "property-toggle flex flex-wrap gap-1";
+    group.setAttribute("role", "group");
+    group.setAttribute("aria-label", select.getAttribute("aria-label"));
+    for (const value of values) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.dataset.style = select.dataset.style;
+      button.dataset.value = value;
+      button.setAttribute("aria-pressed", "false");
+      button.className =
+        "rounded border border-zinc-700 px-2 py-1 text-[11px] text-zinc-400 hover:border-blue-400 aria-pressed:border-blue-500 aria-pressed:bg-blue-500/15 aria-pressed:text-blue-300 disabled:opacity-40";
+      button.textContent = value;
+      group.append(button);
+    }
+    select.replaceWith(group);
+  });
   fields.querySelectorAll(":scope > section.property-section").forEach((section) => {
     const details = document.createElement("details");
     const summary = document.createElement("summary");
@@ -280,7 +297,9 @@ export function createStudio(area, files, onEdit) {
         element?.style.getPropertyValue(control.dataset.style) ||
         computed?.getPropertyValue(control.dataset.style) ||
         "";
-      if (control.tagName === "SELECT") {
+      if (control.tagName === "BUTTON") {
+        control.setAttribute("aria-pressed", String(control.dataset.value === value));
+      } else if (control.tagName === "SELECT") {
         control.value = [...control.options].some((option) => option.value === value) ? value : "";
       } else {
         control.value = value;
@@ -343,7 +362,7 @@ export function createStudio(area, files, onEdit) {
     onEdit();
     refresh();
   };
-  fields.querySelectorAll("[data-style]").forEach((control) =>
+  fields.querySelectorAll("[data-style]:not(button)").forEach((control) =>
     control.addEventListener("change", () => {
       const node = nodes[selected];
       if (!node) {
@@ -360,20 +379,22 @@ export function createStudio(area, files, onEdit) {
       write();
     }),
   );
+  fields.addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-style][data-value]");
+    const node = nodes[selected];
+    if (!button || !node) {
+      return;
+    }
+    node.style.setProperty(button.dataset.style, button.dataset.value);
+    area.querySelector("#style-status").textContent = "";
+    write();
+  });
   area.querySelector("#element-classes").addEventListener("change", (event) => {
     if (nodes[selected]) {
       nodes[selected].setAttribute("class", event.target.value);
       write();
     }
   });
-  tabs.querySelectorAll("button").forEach((button) =>
-    button.addEventListener("click", () => {
-      canvas.hidden = false;
-      area.querySelector(".inspector-drawer").hidden = button.dataset.mode === "code";
-      code.hidden = button.dataset.mode !== "code";
-      canvas.hidden = false;
-    }),
-  );
   function setZoom(value) {
     zoom = Math.max(0.25, Math.min(2, value));
     frame.style.transform = `scale(${zoom})`;
@@ -388,13 +409,6 @@ export function createStudio(area, files, onEdit) {
       event.target.textContent = "Copied";
     } catch {
       event.target.textContent = "Copy unavailable";
-    }
-  });
-  area.querySelector("#source-file").addEventListener("change", () => tabs.querySelector('[data-mode="code"]').click());
-  area.querySelector("#source-editor").addEventListener("change", () => {
-    const codeTab = tabs.querySelector('[data-mode="code"]');
-    if (!codeTab.textContent.endsWith(" *")) {
-      codeTab.textContent = `${codeTab.textContent} *`;
     }
   });
   return { refresh };

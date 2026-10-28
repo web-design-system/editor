@@ -285,6 +285,11 @@ function initializeApp() {
     );
   }
   function renderTeams() {
+    const createButton = document.querySelector(".sidebar-create");
+    const systemRoute = new URLSearchParams(location.search).has("system");
+    createButton.dataset.create = selectedTeam === "all" ? "team" : "system";
+    createButton.textContent = selectedTeam === "all" ? "＋ New team" : "＋ New system";
+    createButton.hidden = systemRoute;
     document.querySelector("#team-navigation-label").textContent = selectedTeam === "all" ? "All teams" : selectedTeam;
     const availableTeams = [
       ...new Set([
@@ -303,7 +308,7 @@ function initializeApp() {
       }
     }
     const systemsHeading = document.querySelector("#teams-title");
-    if (selectedTeam !== "all" && !new URLSearchParams(location.search).has("system")) {
+    if (selectedTeam !== "all") {
       const selectedSystems = systems.filter((system) => system.team === selectedTeam);
       systemsHeading.textContent = "Design systems";
       document.querySelector("#team-summary").textContent = `${selectedSystems.length}`;
@@ -335,10 +340,17 @@ function initializeApp() {
     );
   }
   function renderSystems() {
-    document.querySelector("#system-filter").value = "";
+    const dashboardContent = document.querySelector("#dashboard-content");
+    const toolbar = document.querySelector(".list-toolbar");
+    if (toolbar && toolbar.parentElement !== systemGrid.parentElement) {
+      systemGrid.parentElement.insertBefore(toolbar, systemGrid);
+    }
+    const systemFilter = document.querySelector("#system-filter");
+    if (systemFilter) {
+      systemFilter.value = "";
+    }
     document.querySelector("#filter-empty").hidden = true;
     const emptyState = document.querySelector("#first-system-empty");
-    const dashboardContent = document.querySelector("#dashboard-content");
     const dashboardLayout = document.querySelector("#dashboard-layout");
     emptyState.hidden = true;
     dashboardContent.hidden = false;
@@ -459,7 +471,7 @@ function initializeApp() {
       projects = Array.isArray(projectData) ? projectData : [];
       teams = Array.isArray(teamData.teams) ? teamData.teams : [];
       systems = (registered.designSystems || []).map((system) => ({
-        team: teams.find((item) => item.id === system.team_id)?.slug || system.git_org,
+        team: teams.find((item) => String(item.id) === String(system.team_id))?.slug || system.team || system.git_org,
         org: system.git_org,
         repo: system.foundation_repo,
         name: system.name,
@@ -499,7 +511,7 @@ function initializeApp() {
     }
     teams = Array.isArray(teamData.teams) ? teamData.teams : [];
     systems = (registered.designSystems || []).map((system) => ({
-      team: teams.find((item) => item.id === system.team_id)?.slug || system.git_org,
+      team: teams.find((item) => String(item.id) === String(system.team_id))?.slug || system.team || system.git_org,
       org: system.git_org,
       repo: system.foundation_repo,
       name: system.name,
@@ -533,6 +545,7 @@ function initializeApp() {
       selectedTeam = data.team.slug;
       updateFirstTeamState();
       navigateTo(`/?teamSlug=${encodeURIComponent(selectedTeam)}`);
+      await renderCurrentRoute();
       systemGrid.classList.remove("system-overview");
       document.querySelector('.dashboard-heading [data-create="system"]').hidden = false;
       teamForm.reset();
@@ -905,7 +918,10 @@ function initializeApp() {
         area.querySelector("#foundation-state").textContent = "Unsaved changes";
       });
       workbenchNavigation(area, project, projects, team, repo);
-      area.querySelector(".project-drawer").open = !window.matchMedia("(max-width: 760px)").matches;
+      const foundationDrawer = area.querySelector(".project-drawer");
+      if (foundationDrawer) {
+        foundationDrawer.open = !window.matchMedia("(max-width: 760px)").matches;
+      }
       const componentForm = area.querySelector("#component-create");
       const artifactUrl = `/static/${encodeURIComponent(team)}/${encodeURIComponent(repo)}/latest/tokens.css`;
       const resetUrl = `/static/${encodeURIComponent(team)}/${encodeURIComponent(repo)}/latest/reset.css`;
@@ -1041,15 +1057,33 @@ function initializeApp() {
     area.querySelector("#preview-toggle")?.remove();
     const setResponsiveDrawers = () => {
       const mobile = window.matchMedia("(max-width: 760px)").matches;
-      area.querySelector(".project-drawer").open = !mobile;
-      area.querySelector(".inspector-drawer").open = !mobile;
+      const inspectorDrawer = area.querySelector(".inspector-drawer");
+      if (inspectorDrawer) {
+        inspectorDrawer.open = !mobile;
+      }
     };
     setResponsiveDrawers();
     window.matchMedia("(max-width: 760px)").addEventListener("change", setResponsiveDrawers);
     const editor = area.querySelector("#source-editor");
-    const fileSelect = area.querySelector("#source-file");
-    fileSelect.value = Object.hasOwn(files, "component.html") ? "component.html" : Object.keys(files)[0] || "";
-    let activeFile = fileSelect.value;
+    const editorNav = area.querySelector(".studio-nav");
+    const moduleToggle = editorNav.querySelector("#enable-module")?.closest("label");
+    const historyDrawer = editorNav.querySelector(".history-drawer");
+    editorNav.replaceChildren();
+    const codeSurface = area.querySelector(".code-surface");
+    const fileTabs = document.createElement("div");
+    fileTabs.id = "source-tabs";
+    fileTabs.className = "source-tabs flex min-w-0 gap-1 overflow-x-auto border-b border-zinc-800";
+    fileTabs.setAttribute("role", "tablist");
+    fileTabs.setAttribute("aria-label", "Component files");
+    codeSurface.querySelector(".surface-heading").after(fileTabs);
+    if (moduleToggle) {
+      moduleToggle.className = "module-toggle my-2 flex items-center gap-2 text-xs text-zinc-400";
+      codeSurface.prepend(moduleToggle);
+    }
+    if (historyDrawer) {
+      codeSurface.append(historyDrawer);
+    }
+    let activeFile = Object.hasOwn(files, "component.html") ? "component.html" : Object.keys(files)[0] || "";
     const languageForFile = (file) =>
       ({
         ".css": "css",
@@ -1059,15 +1093,39 @@ function initializeApp() {
         ".mjs": "javascript",
         ".svg": "xml",
       })[file.slice(file.lastIndexOf(".")).toLowerCase()] || "";
+    const renderFileTabs = () => {
+      fileTabs.replaceChildren();
+      for (const file of Object.keys(files)) {
+        const tab = document.createElement("button");
+        tab.type = "button";
+        tab.role = "tab";
+        tab.id = `source-tab-${file.replace(/[^a-z0-9_-]/gi, "-")}`;
+        tab.dataset.file = file;
+        tab.setAttribute("aria-selected", String(file === activeFile));
+        tab.className =
+          "source-file-tab rounded-t-md border-b-2 border-transparent px-3 py-2 text-xs text-zinc-400 hover:text-zinc-100 aria-selected:border-blue-400 aria-selected:text-zinc-100";
+        tab.textContent = file;
+        tab.addEventListener("click", () => selectFile(file));
+        fileTabs.append(tab);
+      }
+    };
     const updateEditor = ({ saveCurrent = false } = {}) => {
       if (saveCurrent) {
         files[activeFile] = editor.value;
       }
-      activeFile = fileSelect.value;
-      editor.value = files[fileSelect.value] ?? "";
+      editor.value = files[activeFile] ?? "";
       editor.language = languageForFile(activeFile);
       editor.status = activeFile;
-      area.querySelector("#active-file-label").textContent = fileSelect.value;
+      area.querySelector("#active-file-label").textContent = activeFile;
+      renderFileTabs();
+    };
+    const selectFile = (file) => {
+      if (!Object.hasOwn(files, file)) {
+        return;
+      }
+      updateEditor({ saveCurrent: true });
+      activeFile = file;
+      updateEditor();
     };
     const modeButtons = [...area.querySelectorAll("[data-mode]")];
     modeButtons.forEach((button) => {
@@ -1091,7 +1149,14 @@ function initializeApp() {
         codeTab.textContent = `${codeTab.textContent} *`;
       }
     };
-    area.querySelector(".inspector-drawer").prepend(saveButton, publishButton);
+    area.querySelector(".studio-actions").prepend(saveButton, publishButton);
+    const saveFeedback = document.createElement("p");
+    saveFeedback.id = "save-feedback";
+    saveFeedback.className = "save-feedback max-w-64 text-xs text-zinc-400";
+    saveFeedback.setAttribute("role", "status");
+    saveFeedback.setAttribute("aria-live", "polite");
+    saveFeedback.style.display = "none";
+    area.querySelector(".studio-actions").append(saveFeedback);
     publishButton.innerHTML =
       '<span class="publish-indicator inline-block size-2 rounded-full bg-transparent ring-1 ring-zinc-500" aria-hidden="true"></span> Publish';
     publishButton.disabled = true;
@@ -1119,12 +1184,14 @@ function initializeApp() {
           item.setAttribute("aria-selected", String(item === button));
         });
         area.querySelectorAll("[data-surface]").forEach((surface) => {
-          surface.style.display = surface.dataset.surface === button.dataset.mode ? "" : "none";
+          surface.hidden = surface.dataset.surface !== button.dataset.mode;
         });
         const codeMode = button.dataset.mode === "code";
-        area.querySelector(".studio-nav").classList.toggle("hidden", codeMode);
+        area.querySelector(".studio-nav").classList.remove("hidden");
         area.querySelector(".studio-inspector").classList.toggle("hidden", codeMode);
-        area.querySelector(".studio-shell").style.gridTemplateColumns = codeMode ? "minmax(0, 1fr)" : "";
+        area.querySelector(".studio-shell").style.gridTemplateColumns = codeMode
+          ? "minmax(190px, 230px) minmax(0, 1fr)"
+          : "minmax(190px, 230px) minmax(0, 1fr) minmax(280px, 320px)";
       }),
     );
     area.querySelector("#canvas-width").addEventListener("input", (event) => {
@@ -1133,19 +1200,16 @@ function initializeApp() {
       area.querySelector("#canvas-width-label").value = `${width} px`;
     });
     let refreshPreview;
-    fileSelect.addEventListener("change", () => updateEditor({ saveCurrent: true }));
     area.querySelector("#enable-module").addEventListener("change", (event) => {
       if (event.target.checked) {
         files["component.mjs"] = "export const componentName = 'component';\n";
-        fileSelect.querySelector('[value="component.mjs"]').disabled = false;
         if (!/component\.mjs/.test(files["component.html"])) {
           files["component.html"] += '\n<script type="module" src="./component.mjs"></script>\n';
         }
       } else {
         delete files["component.mjs"];
-        fileSelect.querySelector('[value="component.mjs"]').disabled = true;
-        if (fileSelect.value === "component.mjs") {
-          fileSelect.value = "component.html";
+        if (activeFile === "component.mjs") {
+          activeFile = "component.html";
         }
       }
       updateEditor();
@@ -1160,7 +1224,7 @@ function initializeApp() {
       updatePublishState(false);
     });
     area.querySelector("#save-source").addEventListener("click", async () => {
-      files[fileSelect.value] = editor.value;
+      files[activeFile] = editor.value;
       const response = await fetch(`/api/source/${encodeURIComponent(team)}/${encodeURIComponent(repo)}`, {
         method: "PUT",
         credentials: "same-origin",
@@ -1172,9 +1236,17 @@ function initializeApp() {
         }),
       });
       const data = await responseData(response);
-      area.querySelector("#save-status").textContent = response.ok
+      const saveStatus = area.querySelector("#save-status");
+      const message = response.ok
         ? `Committed ${data.revision} (${data.sourceMode}).`
-        : data.error || `Save failed (${response.status}).`;
+        : `${data.error || `Save failed (${response.status}).`}${data.file ? ` File: ${data.file}` : ""}`;
+      saveStatus.classList.toggle("text-rose-400", !response.ok);
+      saveStatus.classList.toggle("text-zinc-400", response.ok);
+      saveStatus.textContent = message;
+      saveFeedback.classList.toggle("text-rose-400", !response.ok);
+      saveFeedback.classList.toggle("text-zinc-400", response.ok);
+      saveFeedback.textContent = message;
+      saveFeedback.style.setProperty("display", "inline-block", "important");
       if (response.ok) {
         baseRef = data.baseRef || baseRef;
         editorDirty = false;
@@ -1238,7 +1310,6 @@ function initializeApp() {
     });
     await loadCodeEditor();
     refreshPreview = studio.refresh;
-    workbenchNavigation(area, project, projects, team, repo);
     updateEditor();
     refreshPreview();
     loadHistory();

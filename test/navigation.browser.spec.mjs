@@ -4,7 +4,7 @@ for (const width of [1440, 360]) {
   test(`guest welcome and sign-in error at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 740 });
     const errors = [];
-    page.on("pageerror", (error) => errors.push(error.message));
+    page.on("pageerror", (error) => errors.push(error.stack || error.message));
     await page.route("**/api/oidc/me", (route) => route.fulfill({ json: { authenticated: false } }));
     await page.goto("http://127.0.0.1:4175/");
     await expect(page.getByRole("heading", { name: "A home for your team’s UX" })).toBeVisible();
@@ -48,7 +48,7 @@ for (const width of [1440, 900, 390, 360]) {
   test(`team, system, Foundation and component navigation at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 740 });
     const errors = [];
-    page.on("pageerror", (error) => errors.push(error.message));
+    page.on("pageerror", (error) => errors.push(error.stack || error.message));
     const teams = [
       { id: 1, slug: "acme" },
       { id: 2, slug: "other-team" },
@@ -153,6 +153,7 @@ for (const width of [1440, 900, 390, 360]) {
     });
     await page.goto("http://127.0.0.1:4175/");
     await expect(page.locator(".team-card")).toHaveCount(2);
+    await expect(page.getByRole("link", { name: /Workspace overview/ })).toHaveCount(0);
     await expect(page.locator(".team-card").first()).toContainText("Members not tracked");
     await page.screenshot({ path: test.info().outputPath(`landing-${width}.png`), fullPage: true });
     if (width <= 760) {
@@ -161,6 +162,13 @@ for (const width of [1440, 900, 390, 360]) {
     await page.getByRole("link", { name: /acme/ }).first().click();
     await expect(page.locator(".system-card")).toHaveCount(2);
     await expect(page.locator("#teams-title")).toHaveText("Design systems");
+    await expect(page.locator(".sidebar-create")).toHaveText("＋ New system");
+    await expect(page.locator(".sidebar-create")).toHaveAttribute("data-create", "system");
+    await page.locator(".sidebar-create").click();
+    await expect(page.getByRole("dialog", { name: "Create a design system" })).toBeVisible();
+    await expect(page.locator("#system-form")).toBeVisible();
+    await expect(page.locator("#system-team")).toHaveValue("acme");
+    await page.getByRole("button", { name: "Close dialog" }).click();
     await expect(page.locator("#team-list")).toContainText("Acme UI");
     await expect(page).toHaveURL(/teamSlug=acme/);
     expect(documentNavigations).toBe(1);
@@ -242,10 +250,8 @@ for (const width of [1440, 900, 390, 360]) {
     await page.screenshot({ path: test.info().outputPath(`foundation-${width}.png`), fullPage: true });
     await page.locator(".component-list a").first().click();
     await expect(page.locator("#layer-list button")).toHaveCount(1);
-    if (width < 640) {
-      await page.getByRole("button", { name: "Open project navigation" }).click();
-    }
-    await page.locator("#project-content .studio-nav a").filter({ hasText: "Back to systems" }).click();
+    await page.goBack();
+    await page.goBack();
     await expect(page.locator("#dashboard-title")).toHaveText("Acme UI");
     await expect(page.locator(".foundation-card")).toBeVisible();
     await expect(page.locator("#foundation-setup")).toBeHidden();
@@ -267,6 +273,7 @@ for (const width of [1440, 900, 390, 360]) {
     await expect(page.getByRole("dialog", { name: "Create a component" })).toBeVisible();
     await page.getByRole("button", { name: "Close dialog" }).click();
     await page.screenshot({ path: test.info().outputPath(`system-${width}.png`), fullPage: true });
+    await page.getByRole("link", { name: "All design systems" }).click();
     if (width <= 760) {
       await page.locator(".team-drawer > summary").click();
     }

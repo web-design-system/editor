@@ -1190,6 +1190,7 @@ async function validateCssImports(path, files) {
     if (imports.length !== importTokens.length) {
       const error = new Error("CSS imports could not be safely parsed.");
       error.status = 400;
+      error.file = file;
       throw error;
     }
     for (const [, prelude] of imports) {
@@ -1197,6 +1198,7 @@ async function validateCssImports(path, files) {
       if (!parsed || /@import\b/i.test(prelude.slice(parsed[0].length))) {
         const error = new Error("CSS import could not be safely parsed.");
         error.status = 400;
+        error.file = file;
         throw error;
       }
       const specifier = parsed.slice(1).find((value) => value !== undefined);
@@ -1206,6 +1208,7 @@ async function validateCssImports(path, files) {
       if (/^(?:[a-z][a-z0-9+.-]*:|\/\/|#)/i.test(specifier)) {
         const error = new Error("External CSS imports are not allowed.");
         error.status = 400;
+        error.file = file;
         throw error;
       }
       if (specifier.startsWith("/")) {
@@ -1217,11 +1220,13 @@ async function validateCssImports(path, files) {
         }
         const error = new Error("Absolute CSS imports are only allowed for design-system tokens.css.");
         error.status = 400;
+        error.file = file;
         throw error;
       }
       if (!specifier.startsWith(".")) {
         const error = new Error("External CSS imports are not allowed.");
         error.status = 400;
+        error.file = file;
         throw error;
       }
       let localSpecifier;
@@ -1230,6 +1235,7 @@ async function validateCssImports(path, files) {
       } catch {
         const error = new Error("CSS import path is invalid.");
         error.status = 400;
+        error.file = file;
         throw error;
       }
       const target = resolve(path, file.includes("/") ? file.slice(0, file.lastIndexOf("/")) : ".", localSpecifier);
@@ -1242,6 +1248,7 @@ async function validateCssImports(path, files) {
       ) {
         const error = new Error("CSS imports must target supported stylesheets within the current project repository.");
         error.status = 400;
+        error.file = file;
         throw error;
       }
       await assertNoSymlinkPath(path, targetRelative.split(sep).join("/"));
@@ -1275,6 +1282,7 @@ async function validateRelativeReferences(path, files) {
       if (dynamicImports.some(([, expression]) => !literalImport.test(expression))) {
         const error = new Error("Dynamic imports must use literal paths so component boundaries can be validated.");
         error.status = 400;
+        error.file = file;
         throw error;
       }
       const imports =
@@ -1300,6 +1308,7 @@ async function validateRelativeReferences(path, files) {
     } catch {
       const error = new Error("Relative component reference is invalid.");
       error.status = 400;
+      error.file = importer;
       throw error;
     }
     const target = resolve(path, dirname(importer), decoded);
@@ -1313,6 +1322,7 @@ async function validateRelativeReferences(path, files) {
     ) {
       const error = new Error("Relative imports and assets must remain inside the current component repository.");
       error.status = 400;
+      error.file = importer;
       throw error;
     }
     await assertNoSymlinkPath(path, relativeFile);
@@ -1501,9 +1511,7 @@ async function publishSnapshot(path, team, repo, version = null, sourceRevisionO
           await rm(versionDirectory, { recursive: true, force: true });
         }
         if (movedPrevious) {
-          await (
-            await import("node:fs/promises")
-          )
+          await (await import("node:fs/promises"))
             .rename(previousLatest, join(destination, "latest"))
             .catch(() => undefined);
         }
@@ -2054,6 +2062,15 @@ createServer(async (request, response) => {
         message = "Update component source",
         baseRef: requestedBaseRef,
       } = await body(request);
+      const invalidDeleteFile = Array.isArray(deleteFiles)
+        ? deleteFiles.find((file) => !safeFile(file, sourceExtensions) || Object.hasOwn(files || {}, file))
+        : undefined;
+      const invalidSourceEntry =
+        files && typeof files === "object" && !Array.isArray(files)
+          ? Object.entries(files).find(
+              ([file, content]) => !safeFile(file, sourceExtensions) || typeof content !== "string",
+            )
+          : null;
       if (
         !valid(team, repo) ||
         !files ||
@@ -2065,7 +2082,11 @@ createServer(async (request, response) => {
           ([file, content]) => !safeFile(file, sourceExtensions) || typeof content !== "string",
         )
       ) {
-        return reply(response, 400, { error: "Invalid source" });
+        return reply(response, 400, {
+          error: "Invalid source",
+          ...(invalidDeleteFile !== undefined ? { file: invalidDeleteFile } : {}),
+          ...(invalidSourceEntry ? { file: invalidSourceEntry[0] } : {}),
+        });
       }
       if (isMountedSource(team, repo)) {
         const path = mountedPath(team, repo);
@@ -2305,6 +2326,9 @@ createServer(async (request, response) => {
     return serveStatic(request, response, url.pathname === "/" ? "/index.html" : url.pathname);
   } catch (error) {
     console.error(error);
-    reply(response, error.status || 500, { error: String(error.message || error) });
+    reply(response, error.status || 500, {
+      error: String(error.message || error),
+      ...(error.file ? { file: error.file } : {}),
+    });
   }
 }).listen(port, () => console.log(`WDS prototype listening on http://localhost:${port}`));

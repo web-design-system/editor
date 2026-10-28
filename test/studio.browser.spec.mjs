@@ -13,6 +13,7 @@ for (const width of [1440, 900, 612, 390]) {
       }),
     );
     let saved;
+    let rejectNextSave = false;
     await page.route("**/api/**", async (route) => {
       const path = new URL(route.request().url()).pathname;
       let body = {};
@@ -33,6 +34,14 @@ for (const width of [1440, 900, 612, 390]) {
       } else if (path.startsWith("/api/source/")) {
         if (route.request().method() === "PUT") {
           saved = route.request().postDataJSON();
+          if (rejectNextSave) {
+            rejectNextSave = false;
+            await route.fulfill({
+              status: 400,
+              json: { error: "Relative imports and assets must remain inside the repository.", file: "styles.css" },
+            });
+            return;
+          }
           body = { revision: "abc123", baseRef: "abc123", sourceMode: "git" };
         } else {
           body = {
@@ -66,12 +75,15 @@ for (const width of [1440, 900, 612, 390]) {
       await expect(page.locator(".user-copy")).toContainText("studio@example.test");
     }
     if (width < 640) {
-      await page.getByRole("button", { name: "Open project navigation" }).click();
+      await page.getByRole("button", { name: "Open layers" }).click();
       await expect(page.locator("#project-content")).toHaveClass(/mobile-nav-open/);
     }
     await expect(page.locator("#publish-source")).toBeDisabled();
     await expect(page.locator("#publish-source .publish-indicator")).toHaveClass(/bg-transparent/);
     await expect(page.locator("#layer-list button")).toHaveCount(2);
+    await expect(page.locator(".studio-nav")).toContainText("Layers");
+    await expect(page.locator(".studio-nav")).not.toContainText("Project files");
+    await expect(page.locator(".studio-nav")).not.toContainText("Current component");
     const preview = page.frameLocator("#draft-preview");
     await expect(preview.locator("button")).toBeVisible();
     await page.locator("#layer-list button").nth(1).click();
@@ -82,9 +94,28 @@ for (const width of [1440, 900, 612, 390]) {
     await page.getByLabel("Text", { exact: true }).fill("#ff0000");
     await page.getByLabel("Text", { exact: true }).press("Tab");
     await expect(preview.locator("span[data-studio-node]")).toHaveCSS("color", "rgb(255, 0, 0)");
+    if (width < 640) {
+      await page.getByRole("button", { name: "Open layers" }).click();
+    }
+    await page.locator("#layer-list button").first().click();
+    if (width < 640) {
+      await page.keyboard.press("Escape");
+    }
+    await expect(page.locator('.property-toggle[aria-label="Display"] [data-value="flex"]')).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
     await expect(page.locator("#publish-source")).toBeDisabled();
+    if (width === 1440) {
+      rejectNextSave = true;
+    }
     await page.getByRole("button", { name: "Save Component", exact: true }).click();
-    await expect(page.locator("#save-status")).toContainText("Committed");
+    if (width === 1440) {
+      await expect(page.locator("#save-feedback")).toBeVisible();
+      await expect(page.locator("#save-feedback")).toContainText("File: styles.css");
+      await page.getByRole("button", { name: "Save Component", exact: true }).click();
+    }
+    await expect(page.locator("#save-feedback")).toContainText("Committed");
     await expect(page.locator("#publish-source")).toBeEnabled();
     expect(saved.baseRef).toBe("original");
     expect(saved.files["component.html"]).toContain("color: rgb(255, 0, 0)");
@@ -93,8 +124,18 @@ for (const width of [1440, 900, 612, 390]) {
     await page.getByRole("tab", { name: /^Code/ }).click();
     await expect(page.locator(".code-surface")).toBeVisible();
     await expect(page.locator(".design-surface")).toBeHidden();
-    await expect(page.locator(".studio-nav")).toBeHidden();
+    await expect(page.locator(".studio-nav")).toBeVisible();
     await expect(page.locator(".studio-inspector")).toBeHidden();
+    await expect(page.getByRole("tab", { name: "component.html", exact: true })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await expect(page.getByRole("tab", { name: "styles.css", exact: true })).toBeVisible();
+    await expect(page.getByRole("tab", { name: "stories.html", exact: true })).toBeVisible();
+    await page.getByRole("tab", { name: "stories.html", exact: true }).click();
+    await expect(page.locator("#source-editor")).toHaveJSProperty("value", "<demo-button></demo-button>");
+    await page.getByRole("tab", { name: "styles.css", exact: true }).click();
+    await page.getByRole("tab", { name: "component.html", exact: true }).click();
     await page.getByRole("tab", { name: "Design", exact: true }).click();
     await expect(page.locator(".design-surface")).toBeVisible();
     await page.getByRole("button", { name: "Zoom in", exact: true }).click();

@@ -108,7 +108,7 @@
           >
             <wds-sidebar-panel class="workspace-sidebar block min-w-0" slot="sidebar" aria-label="Workspace navigation">
               <button
-                class="user-card sidebar-user-card mb-4 flex w-full items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-950 p-3 text-left hover:border-zinc-600"
+                class="user-card sidebar-user-card mb-4 flex w-full cursor-pointer items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-950 p-3 text-left hover:border-zinc-600"
                 id="sidebar-user-card"
                 type="button"
                 aria-label="Open preferences"
@@ -121,11 +121,6 @@
                 >
                   All teams
                 </summary>
-                <a
-                  class="workspace-home flex gap-2.5 p-2 text-[13px] text-zinc-300 hover:rounded hover:bg-zinc-800"
-                  href="/"
-                  >▦ <span>Workspace overview</span></a
-                >
                 <div class="section-heading mb-2.5 flex items-baseline justify-between gap-3 px-2">
                   <h2 class="text-[10px] uppercase tracking-[.1em] text-zinc-400" id="teams-title">Teams</h2>
                   <span class="section-note text-[11px] text-zinc-400" id="team-summary"></span>
@@ -160,7 +155,7 @@
                 <button
                   type="button"
                   class="editor-nav-toggle hidden rounded border border-zinc-700 px-2 py-1 text-xs"
-                  aria-label="Open project navigation"
+                  aria-label="Open layers"
                   aria-expanded="false"
                   aria-controls="project-content"
                 >

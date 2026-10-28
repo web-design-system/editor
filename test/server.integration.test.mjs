@@ -946,6 +946,7 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
     assert.equal(mismatchedPublish.status, 400);
     const bindingMarkup = `<template component="empty-state">
   <section class="mx-auto grid">
+    <img src="../outside.png" />
     <img bind-src="image || ''" />
     <span bind-innertext="eyebrow"></span>
     <h1 bind-innertext="heading"></h1>
@@ -964,21 +965,42 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
     });
     assert.equal(bindingMarkupUpdate.status, 200, JSON.stringify(await bindingMarkupUpdate.json()));
     const afterBindingMarkup = await (await fetch(sourceUrl, { headers })).json();
-    const actualExternalAsset = await fetch(sourceUrl, {
+    const setupMarkup = `<template component="empty-state">
+  <script setup src="./scripts/empty-state.mjs"></script>
+</template>`;
+    const setupMarkupUpdate = await fetch(sourceUrl, {
       method: "PUT",
       headers,
       body: JSON.stringify({
-        files: { ...afterBindingMarkup.files, "component.html": '<img src="../outside.png" />' },
+        files: {
+          ...afterBindingMarkup.files,
+          "component.html": setupMarkup,
+          "scripts/empty-state.mjs": "export const eyebrow = 'FIRST, SET UP';\n",
+        },
         baseRef: afterBindingMarkup.baseRef,
-        message: "Still reject escaping img src",
+        message: "Accept repository-local setup module",
       }),
     });
-    assert.equal(actualExternalAsset.status, 400);
-    const actualExternalAssetData = await actualExternalAsset.json();
-    assert.equal(actualExternalAssetData.file, "component.html");
-    assert.match(actualExternalAssetData.error, /Relative imports and assets/);
+    assert.equal(setupMarkupUpdate.status, 200, JSON.stringify(await setupMarkupUpdate.json()));
+    const afterSetupMarkup = await (await fetch(sourceUrl, { headers })).json();
+    const escapingSetupMarkup = await fetch(sourceUrl, {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({
+        files: {
+          ...afterSetupMarkup.files,
+          "component.html": '<template component="empty-state"><script setup src="../outside.mjs"></script></template>',
+        },
+        baseRef: afterSetupMarkup.baseRef,
+        message: "Reject setup module outside the component repository",
+      }),
+    });
+    assert.equal(escapingSetupMarkup.status, 400);
+    const escapingSetupData = await escapingSetupMarkup.json();
+    assert.equal(escapingSetupData.file, "component.html");
+    assert.match(escapingSetupData.error, /Relative imports and assets must remain inside/);
     const nestedFiles = {
-      ...afterBindingMarkup.files,
+      ...afterSetupMarkup.files,
       "styles.css":
         '@import url("/static/test-team/foundation/latest/tokens.css");\n@import "tailwindcss";\n.dynamic { color: teal; }\n',
       "themes/nested.css": ".dynamic { color: teal; }\n",
@@ -990,7 +1012,7 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
       headers,
       body: JSON.stringify({
         files: nestedFiles,
-        baseRef: afterBindingMarkup.baseRef,
+        baseRef: afterSetupMarkup.baseRef,
         message: "Integration source update",
       }),
     });
@@ -1258,14 +1280,20 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
     assert.equal(mountedUpdate.status, 200);
     const mountedAfterUpdate = await (await fetch(mountedUrl, { headers })).json();
     assert.equal(mountedAfterUpdate.files["themes/nested.css"], ".mounted-theme { color: teal; }\n");
-    const blockedHtmlEscape = await fetch(mountedUrl, {
+    const uncheckedHtmlAsset = await fetch(mountedUrl, {
       method: "PUT",
       headers,
       body: JSON.stringify({
         files: { ...mountedAfterUpdate.files, "component.html": '<img src="../outside.css" />' },
       }),
     });
-    assert.equal(blockedHtmlEscape.status, 400);
+    assert.equal(uncheckedHtmlAsset.status, 200);
+    const restoreHtmlSource = await fetch(mountedUrl, {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({ files: mountedAfterUpdate.files }),
+    });
+    assert.equal(restoreHtmlSource.status, 200);
     const blockedModuleEscape = await fetch(mountedUrl, {
       method: "PUT",
       headers,

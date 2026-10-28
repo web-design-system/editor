@@ -1258,12 +1258,42 @@ async function validateCssImports(path, files) {
 }
 async function validateRelativeReferences(path, files) {
   const references = [];
+  const collectModuleReferences = (file, content, requireRelative = false) => {
+    const dynamicImports = [...content.matchAll(/\bimport\s*\(([^)]*)\)/g)];
+    const literalImport = /^\s*(?:"[^"\\]*(?:\\.[^"\\]*)*"|'[^'\\]*(?:\\.[^'\\]*)*')\s*$/;
+    if (dynamicImports.some(([, expression]) => !literalImport.test(expression))) {
+      const error = new Error("Dynamic imports must use literal paths so component boundaries can be validated.");
+      error.status = 400;
+      error.file = file;
+      throw error;
+    }
+    const imports =
+      /\bimport\s*(?:\(\s*)?["']([^"']+)["']|\bfrom\s*["']([^"']+)["']|\brequire\(\s*["']([^"']+)["']\s*\)|\bnew\s+URL\(\s*["']([^"']+)["']\s*,\s*import\.meta\.url\s*\)/g;
+    for (const match of content.matchAll(imports)) {
+      references.push([file, match.slice(1).find(Boolean), requireRelative]);
+    }
+  };
   for (const [file, value] of Object.entries(files)) {
     const extension = extname(file).toLowerCase();
     const content = Buffer.isBuffer(value) ? value.toString("utf8") : value;
     if (extension === ".html") {
-      for (const [, specifier] of content.matchAll(/(?:^|[\s<])(?:href|src)\s*=\s*["']([^"']+)["']/gi)) {
-        references.push([file, specifier]);
+      if (file === "component.html") {
+        // Component bindings such as bind-src are data expressions, not asset imports.
+        for (const [, attributes, setupSource] of content.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi)) {
+          if (!/(?:^|\s)setup(?=\s|=|$)/i.test(attributes)) {
+            continue;
+          }
+          const sourceAttribute = attributes.match(/(?:^|\s)src\s*=\s*(?:"([^"]*)"|'([^']*)')/i);
+          const sourcePath = sourceAttribute?.slice(1).find((item) => item !== undefined);
+          if (sourcePath) {
+            references.push([file, sourcePath, true]);
+          }
+          collectModuleReferences(file, setupSource, true);
+        }
+      } else {
+        for (const [, specifier] of content.matchAll(/(?:^|[\s<])(?:href|src)\s*=\s*["']([^"']+)["']/gi)) {
+          references.push([file, specifier]);
+        }
       }
     } else if (extension === ".css") {
       const cssWithoutComments = content.replace(/\/\*[\s\S]*?\*\//g, "");
@@ -1277,22 +1307,16 @@ async function validateRelativeReferences(path, files) {
         ]);
       }
     } else if (extension === ".mjs" || extension === ".js") {
-      const dynamicImports = [...content.matchAll(/\bimport\s*\(([^)]*)\)/g)];
-      const literalImport = /^\s*(?:"[^"\\]*(?:\\.[^"\\]*)*"|'[^'\\]*(?:\\.[^'\\]*)*')\s*$/;
-      if (dynamicImports.some(([, expression]) => !literalImport.test(expression))) {
-        const error = new Error("Dynamic imports must use literal paths so component boundaries can be validated.");
-        error.status = 400;
-        error.file = file;
-        throw error;
-      }
-      const imports =
-        /\bimport\s*(?:\(\s*)?["']([^"']+)["']|\bfrom\s*["']([^"']+)["']|\brequire\(\s*["']([^"']+)["']\s*\)|\bnew\s+URL\(\s*["']([^"']+)["']\s*,\s*import\.meta\.url\s*\)/g;
-      for (const match of content.matchAll(imports)) {
-        references.push([file, match.slice(1).find(Boolean)]);
-      }
+      collectModuleReferences(file, content);
     }
   }
-  for (const [importer, specifier] of references) {
+  for (const [importer, specifier, requireRelative] of references) {
+    if (requireRelative && !specifier.startsWith(".")) {
+      const error = new Error("Setup module imports must use relative paths within the current component repository.");
+      error.status = 400;
+      error.file = importer;
+      throw error;
+    }
     if (/^(?:[a-z][a-z0-9+.-]*:|\/\/|#|\/|var\()/i.test(specifier)) {
       continue;
     }

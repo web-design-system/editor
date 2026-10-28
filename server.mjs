@@ -1361,7 +1361,7 @@ async function publishSnapshot(path, team, repo, version = null, sourceRevisionO
   const isDesignSystem = await isDesignSystemProject(path);
   const metadataFile = isDesignSystem ? "design-system.json" : "component.json";
   let metadata;
-  let tokenImportUrl = null;
+  let foundationTokens = null;
   try {
     metadata = JSON.parse(Buffer.isBuffer(files[metadataFile]) ? files[metadataFile].toString() : files[metadataFile]);
   } catch {
@@ -1392,8 +1392,13 @@ async function publishSnapshot(path, team, repo, version = null, sourceRevisionO
       error.status = 400;
       throw error;
     }
+    foundationTokens = await readRevision(dependency.team, dependency.repo, dependency.revision, "tokens.css");
+    if (foundationTokens === null) {
+      const error = new Error("The associated design system must have published tokens.css at the requested revision.");
+      error.status = 400;
+      throw error;
+    }
     const url = `/static/${dependency.team}/${dependency.repo}/${dependency.revision}/tokens.css`;
-    tokenImportUrl = url;
     const importedStylesheets = [];
     for (const [file, value] of Object.entries(files)) {
       if (extname(file).toLowerCase() !== ".css") {
@@ -1478,12 +1483,18 @@ async function publishSnapshot(path, team, repo, version = null, sourceRevisionO
       const dependenciesPath = join(artifactPath, "node_modules");
       await symlink(join(root, "node_modules"), dependenciesPath, "dir");
       try {
-        const sourceStyles = String(files["styles.css"]);
-        await writeFile(
-          join(artifactPath, "styles.css"),
-          sourceStyles.replace(/(@import\s*)(["'])tokens\.css\2/g, `$1"${tokenImportUrl}"`),
+        const sourceStyles = String(files["styles.css"]).replace(
+          /@import\s*(?:url\(\s*)?["']tokens\.css["']\s*\)?\s*;/gi,
+          String(foundationTokens),
         );
-        await exec(tailwind, ["-i", "styles.css", "-o", "editor.css", "--minify"], { cwd: artifactPath });
+        await writeFile(join(artifactPath, "styles.css"), sourceStyles);
+        try {
+          await exec(tailwind, ["-i", "styles.css", "-o", "editor.css", "--minify"], { cwd: artifactPath });
+        } catch {
+          const error = new Error("Component styles could not be built. Check styles.css imports and syntax.");
+          error.status = 400;
+          throw error;
+        }
       } finally {
         await rm(dependenciesPath, { force: true });
       }
@@ -2358,7 +2369,10 @@ createServer(async (request, response) => {
   } catch (error) {
     console.error(error);
     reply(response, error.status || 500, {
-      error: String(error.message || error),
+      error:
+        error.status === 503 || (error.status && error.status < 500)
+          ? String(error.message || error)
+          : "An internal server error occurred.",
       ...(error.file ? { file: error.file } : {}),
     });
   }

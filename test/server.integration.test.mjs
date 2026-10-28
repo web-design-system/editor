@@ -1012,8 +1012,7 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
     assert.match(escapingSetupData.error, /Relative imports and assets must remain inside/);
     const nestedFiles = {
       ...afterSetupMarkup.files,
-      "styles.css":
-        '@import url("/static/test-team/foundation/latest/tokens.css");\n@import "tailwindcss";\n.dynamic { color: teal; }\n',
+      "styles.css": '@import "tokens.css";\n@import "tailwindcss";\n.dynamic { color: teal; }\n',
       "themes/nested.css": ".dynamic { color: teal; }\n",
       "examples/demo.html": "<main>New nested page</main>\n",
       "images/new.svg": '<svg xmlns="http://www.w3.org/2000/svg"><title>Fresh</title></svg>',
@@ -1028,7 +1027,7 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
       }),
     });
     assert.equal(nestedUpdate.status, 200);
-    const nestedSource = await (await fetch(sourceUrl, { headers })).json();
+    let nestedSource = await (await fetch(sourceUrl, { headers })).json();
     assert.equal(nestedSource.files["themes/nested.css"], nestedFiles["themes/nested.css"]);
     assert.equal(nestedSource.files["examples/demo.html"], nestedFiles["examples/demo.html"]);
     assert.equal((await fetch(`${base}/static/test-team/sample-project/latest/component.html`)).status, 404);
@@ -1057,8 +1056,42 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
     assert.match(publishedPreview.headers.get("content-security-policy"), /connect-src 'none'/);
     const publishedStyles = await (await fetch(`${base}/static/test-team/sample-project/latest/styles.css`)).text();
     assert.notEqual(publishedStyles, nestedSource.files["styles.css"]);
-    assert.match(publishedStyles, /@import\s+["']\/static\/test-team\/foundation\/latest\/tokens\.css["']/);
-    assert.doesNotMatch(publishedStyles, /--ds-color-accent/);
+    assert.doesNotMatch(publishedStyles, /@import\s+["']tokens\.css["']/);
+    assert.match(publishedStyles, /\.dynamic/);
+    const invalidCssUpdate = await fetch(sourceUrl, {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({
+        files: {
+          ...nestedSource.files,
+          "styles.css": '@import "tokens.css";\n@import "tailwindcss";\n@import "./missing.css";\n',
+        },
+        baseRef: nestedSource.baseRef,
+        message: "Exercise safe build error",
+      }),
+    });
+    assert.equal(invalidCssUpdate.status, 200);
+    const invalidCssSource = await (await fetch(sourceUrl, { headers })).json();
+    const invalidCssPublish = await fetch(`${base}/api/publish/test-team/sample-project`, {
+      method: "POST",
+      headers,
+      body: "{}",
+    });
+    assert.equal(invalidCssPublish.status, 400);
+    const invalidCssError = (await invalidCssPublish.json()).error;
+    assert.match(invalidCssError, /styles could not be built/i);
+    assert.doesNotMatch(invalidCssError, /Command failed|\/home\/app|\/tmp\/wds-publish|tokens\.css/);
+    const restoreCss = await fetch(sourceUrl, {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({
+        files: nestedSource.files,
+        baseRef: invalidCssSource.baseRef,
+        message: "Restore working CSS",
+      }),
+    });
+    assert.equal(restoreCss.status, 200);
+    nestedSource = await (await fetch(sourceUrl, { headers })).json();
     const newerSource = {
       ...nestedSource.files,
       "component.html": "<main>Committed but not published yet</main>\n",

@@ -702,6 +702,11 @@ function initializeApp() {
     landing.hidden = false;
     document.querySelector("#dashboard-layout").hidden = false;
     if (preferences) {
+      selectedTeam = params.get("teamSlug") || "all";
+      if (system) {
+        selectedTeam = systems.find((item) => item.org === system)?.team || selectedTeam;
+      }
+      renderTeams();
       dashboardContent.hidden = true;
       firstTeam.hidden = true;
       firstSystem.hidden = true;

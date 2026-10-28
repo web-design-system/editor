@@ -55,6 +55,7 @@ for (const width of [390, 1440]) {
     expect(main.width).toBeGreaterThan(width === 390 ? 380 : 1100);
     await page.getByRole("button", { name: "Open preferences" }).click();
     await expect(page.locator("#preferences-view")).toBeVisible();
+    await expect(page.locator("#team-list a")).toHaveText("acme");
     await expect(page.locator("#theme-preference")).toHaveValue("light");
     await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
     expect(await page.locator("#app-root").evaluate((root) => getComputedStyle(root).backgroundColor)).toBe(

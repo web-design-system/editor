@@ -80,10 +80,17 @@ for (const width of [1440, 900, 612, 390]) {
     }
     await expect(page.locator("#publish-source")).toBeDisabled();
     await expect(page.locator("#publish-source .publish-indicator")).toHaveClass(/bg-transparent/);
+    await expect(page.locator(".studio-heading [role='tablist']")).toBeVisible();
+    await expect(page.locator(".mode-bar [role='tablist']")).toHaveCount(0);
+    await expect(page.locator("#source-editor")).toHaveJSProperty(
+      "value",
+      '<template component="demo-button"><button class="flex items-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-lg"><span>Get Started</span></button><script setup>const x = 1;</script></template>',
+    );
     await expect(page.locator("#layer-list button")).toHaveCount(2);
     await expect(page.locator(".studio-nav")).toContainText("Layers");
     await expect(page.locator(".studio-nav")).not.toContainText("Project files");
     await expect(page.locator(".studio-nav")).not.toContainText("Current component");
+    await expect(page.getByText("Include component.mjs")).toHaveCount(0);
     const preview = page.frameLocator("#draft-preview");
     await expect(preview.locator("button")).toBeVisible();
     await page.locator("#layer-list button").nth(1).click();
@@ -131,6 +138,10 @@ for (const width of [1440, 900, 612, 390]) {
       "true",
     );
     await expect(page.getByRole("tab", { name: "styles.css", exact: true })).toBeVisible();
+    await expect(page.locator("#source-editor")).toHaveJSProperty(
+      "value",
+      '<template component="demo-button"><button class="flex items-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-lg"><span style="color: rgb(255, 0, 0);">Get Started</span></button><script setup="">const x = 1;</script></template>',
+    );
     await expect(page.getByRole("tab", { name: "stories.html", exact: true })).toBeVisible();
     await page.getByRole("tab", { name: "stories.html", exact: true }).click();
     await expect(page.locator("#source-editor")).toHaveJSProperty("value", "<demo-button></demo-button>");

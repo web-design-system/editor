@@ -1065,9 +1065,16 @@ function initializeApp() {
     setResponsiveDrawers();
     window.matchMedia("(max-width: 760px)").addEventListener("change", setResponsiveDrawers);
     const editor = area.querySelector("#source-editor");
+    const editorHeading = area.querySelector(".studio-heading");
+    const modeTabs = area.querySelector('.mode-bar [role="tablist"]');
+    const editorActions = editorHeading?.querySelector(".studio-actions");
+    if (modeTabs && editorActions) {
+      modeTabs.classList.add("shrink-0");
+      editorActions.before(modeTabs);
+    }
     const editorNav = area.querySelector(".studio-nav");
-    const moduleToggle = editorNav.querySelector("#enable-module")?.closest("label");
     const historyDrawer = editorNav.querySelector(".history-drawer");
+    editorNav.querySelector(".module-toggle")?.remove();
     editorNav.replaceChildren();
     const codeSurface = area.querySelector(".code-surface");
     const fileTabs = document.createElement("div");
@@ -1076,10 +1083,6 @@ function initializeApp() {
     fileTabs.setAttribute("role", "tablist");
     fileTabs.setAttribute("aria-label", "Component files");
     codeSurface.querySelector(".surface-heading").after(fileTabs);
-    if (moduleToggle) {
-      moduleToggle.className = "module-toggle my-2 flex items-center gap-2 text-xs text-zinc-400";
-      codeSurface.prepend(moduleToggle);
-    }
     if (historyDrawer) {
       codeSurface.append(historyDrawer);
     }
@@ -1114,6 +1117,10 @@ function initializeApp() {
         files[activeFile] = editor.value;
       }
       editor.value = files[activeFile] ?? "";
+      const sourceInput = editor.shadowRoot?.querySelector("textarea");
+      if (sourceInput) {
+        sourceInput.value = editor.value;
+      }
       editor.language = languageForFile(activeFile);
       editor.status = activeFile;
       area.querySelector("#active-file-label").textContent = activeFile;
@@ -1200,23 +1207,6 @@ function initializeApp() {
       area.querySelector("#canvas-width-label").value = `${width} px`;
     });
     let refreshPreview;
-    area.querySelector("#enable-module").addEventListener("change", (event) => {
-      if (event.target.checked) {
-        files["component.mjs"] = "export const componentName = 'component';\n";
-        if (!/component\.mjs/.test(files["component.html"])) {
-          files["component.html"] += '\n<script type="module" src="./component.mjs"></script>\n';
-        }
-      } else {
-        delete files["component.mjs"];
-        if (activeFile === "component.mjs") {
-          activeFile = "component.html";
-        }
-      }
-      updateEditor();
-      refreshPreview();
-      markCodeDirty();
-      updatePublishState(false);
-    });
     editor.addEventListener("change", (event) => {
       files[activeFile] = typeof event.detail === "string" ? event.detail : (editor.value ?? "");
       markCodeDirty();
@@ -1310,6 +1300,8 @@ function initializeApp() {
     });
     await loadCodeEditor();
     refreshPreview = studio.refresh;
+    updateEditor();
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     updateEditor();
     refreshPreview();
     loadHistory();

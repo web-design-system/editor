@@ -258,6 +258,7 @@ export function createStudio(area, files, onEdit) {
   code.querySelector(".surface-heading").innerHTML =
     '<span id="active-file-label">component.html</span><button type="button" id="copy-source">Copy</button>';
   let selected = 0;
+  let foundationTokens = "";
   let zoom = 1;
   let preview = false;
   let holder;
@@ -340,8 +341,37 @@ export function createStudio(area, files, onEdit) {
     const container = document.createElement("div");
     container.append(clone);
     const css = (files["styles.css"] || "").replace(/@import[^;]+;/g, "").replace(/<\/style/gi, "<\\/style");
-    frame.srcdoc = `<!doctype html><html class="min-h-full bg-zinc-950"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self' 'unsafe-inline'; img-src data: https:; font-src data:; form-action 'none'"><link rel="stylesheet" href="/css/tailwind.css"><style>${css}</style></head><body class="m-0 flex min-h-dvh items-center justify-center bg-[radial-gradient(#27272a_1px,transparent_1px)] [background-size:16px_16px] p-10 text-sm text-[#d4d4d8]">${container.innerHTML}</body></html>`;
+    let tokenStylesheet = foundationTokens
+      ? `<style>${foundationTokens.replace(/<\/style/gi, "<\\/style")}</style>`
+      : "";
+    try {
+      const dependency = JSON.parse(files["component.json"] || "{}").designSystem;
+      if (!foundationTokens && dependency?.team && dependency?.repo) {
+        const revision = dependency.revision || "latest";
+        tokenStylesheet = `<link rel="stylesheet" href="/static/${encodeURIComponent(dependency.team)}/${encodeURIComponent(dependency.repo)}/${encodeURIComponent(revision)}/tokens.css">`;
+      }
+    } catch {
+      tokenStylesheet = "";
+    }
+    frame.srcdoc = `<!doctype html><html class="min-h-full bg-zinc-950"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self' 'unsafe-inline'; img-src data: https:; font-src data:; form-action 'none'">${tokenStylesheet}<link rel="stylesheet" href="/css/tailwind.css"><style>${css}</style></head><body class="m-0 flex min-h-dvh items-center justify-center bg-[radial-gradient(#27272a_1px,transparent_1px)] [background-size:16px_16px] p-10 text-sm text-[#d4d4d8]">${container.innerHTML}</body></html>`;
     selectLayer(selected);
+  }
+  try {
+    const dependency = JSON.parse(files["component.json"] || "{}").designSystem;
+    if (dependency?.team && dependency?.repo) {
+      const sourceURL = `/api/source/${encodeURIComponent(dependency.team)}/${encodeURIComponent(dependency.repo)}`;
+      fetch(sourceURL, { credentials: "same-origin" })
+        .then((response) => (response.ok ? response.json() : null))
+        .then((source) => {
+          if (typeof source?.files?.["tokens.css"] === "string") {
+            foundationTokens = source.files["tokens.css"];
+            refresh();
+          }
+        })
+        .catch(() => {});
+    }
+  } catch {
+    // Keep the published-token fallback for projects with incomplete metadata.
   }
   frame.addEventListener("load", () => {
     const doc = frame.contentDocument;

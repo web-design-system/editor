@@ -1202,7 +1202,7 @@ async function validateCssImports(path, files) {
         throw error;
       }
       const specifier = parsed.slice(1).find((value) => value !== undefined);
-      if (specifier === "tailwindcss") {
+      if (specifier === "tailwindcss" || specifier === "tokens.css") {
         continue;
       }
       if (/^(?:[a-z][a-z0-9+.-]*:|\/\/|#)/i.test(specifier)) {
@@ -1361,6 +1361,7 @@ async function publishSnapshot(path, team, repo, version = null, sourceRevisionO
   const isDesignSystem = await isDesignSystemProject(path);
   const metadataFile = isDesignSystem ? "design-system.json" : "component.json";
   let metadata;
+  let tokenImportUrl = null;
   try {
     metadata = JSON.parse(Buffer.isBuffer(files[metadataFile]) ? files[metadataFile].toString() : files[metadataFile]);
   } catch {
@@ -1392,6 +1393,7 @@ async function publishSnapshot(path, team, repo, version = null, sourceRevisionO
       throw error;
     }
     const url = `/static/${dependency.team}/${dependency.repo}/${dependency.revision}/tokens.css`;
+    tokenImportUrl = url;
     const importedStylesheets = [];
     for (const [file, value] of Object.entries(files)) {
       if (extname(file).toLowerCase() !== ".css") {
@@ -1407,7 +1409,7 @@ async function publishSnapshot(path, team, repo, version = null, sourceRevisionO
           throw error;
         }
         if (specifier !== "tailwindcss" && !specifier.startsWith(".")) {
-          importedStylesheets.push(specifier);
+          importedStylesheets.push(specifier === "tokens.css" ? url : specifier);
         }
       }
     }
@@ -1476,6 +1478,11 @@ async function publishSnapshot(path, team, repo, version = null, sourceRevisionO
       const dependenciesPath = join(artifactPath, "node_modules");
       await symlink(join(root, "node_modules"), dependenciesPath, "dir");
       try {
+        const sourceStyles = String(files["styles.css"]);
+        await writeFile(
+          join(artifactPath, "styles.css"),
+          sourceStyles.replace(/(@import\s*)(["'])tokens\.css\2/g, `$1"${tokenImportUrl}"`),
+        );
         await exec(tailwind, ["-i", "styles.css", "-o", "editor.css", "--minify"], { cwd: artifactPath });
       } finally {
         await rm(dependenciesPath, { force: true });

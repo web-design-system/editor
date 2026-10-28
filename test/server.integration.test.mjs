@@ -903,12 +903,23 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
     assert.equal(historyResponse.status, 200, JSON.stringify(historyData));
     assert.ok(historyData.history.some((entry) => entry.message === "Integration source update"));
     assert.match(historyData.history[0].revision, /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/);
+    const bareFoundationImport = await fetch(sourceUrl, {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({
+        files: { ...sourceAfter.files, "styles.css": '@import "tokens.css";\n@import "tailwindcss";\n' },
+        baseRef: sourceAfter.baseRef,
+        message: "Use Foundation CSS module import",
+      }),
+    });
+    assert.equal(bareFoundationImport.status, 200, JSON.stringify(await bareFoundationImport.json()));
+    const bareFoundationSource = await (await fetch(sourceUrl, { headers })).json();
     const blockedGitImport = await fetch(sourceUrl, {
       method: "PUT",
       headers,
       body: JSON.stringify({
-        files: { ...sourceAfter.files, "styles.css": '@import "../outside.css"' },
-        baseRef: sourceAfter.baseRef,
+        files: { ...bareFoundationSource.files, "styles.css": '@import "../outside.css"' },
+        baseRef: bareFoundationSource.baseRef,
         message: "Reject cross-repository stylesheet import",
       }),
     });
@@ -917,13 +928,13 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
     assert.match(blockedGitImportData.error, /supported stylesheets within the current project repository/);
     assert.equal(blockedGitImportData.file, "styles.css");
     const afterBlockedGitImport = await (await fetch(sourceUrl, { headers })).json();
-    assert.equal(afterBlockedGitImport.files["styles.css"], sourceAfter.files["styles.css"]);
+    assert.equal(afterBlockedGitImport.files["styles.css"], bareFoundationSource.files["styles.css"]);
     const blockedExternalImport = await fetch(sourceUrl, {
       method: "PUT",
       headers,
       body: JSON.stringify({
-        files: { ...sourceAfter.files, "styles.css": '@import url("https://example.test/tokens.css");' },
-        baseRef: sourceAfter.baseRef,
+        files: { ...bareFoundationSource.files, "styles.css": '@import url("https://example.test/tokens.css");' },
+        baseRef: bareFoundationSource.baseRef,
         message: "Reject remote stylesheet",
       }),
     });
@@ -933,10 +944,10 @@ test("OIDC-authenticated project flow persists changes to isolated Git API", asy
       headers,
       body: JSON.stringify({
         files: {
-          ...sourceAfter.files,
+          ...bareFoundationSource.files,
           "styles.css": '@import url("/static/test-team/other-system/latest/tokens.css");\n@import "tailwindcss";\n',
         },
-        baseRef: sourceAfter.baseRef,
+        baseRef: bareFoundationSource.baseRef,
         message: "Use mismatched tokens",
       }),
     });

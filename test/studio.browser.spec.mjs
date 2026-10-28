@@ -160,3 +160,45 @@ for (const width of [1440, 900, 612, 390]) {
     await page.screenshot({ path: test.info().outputPath(`studio-${width}.png`), fullPage: true });
   });
 }
+
+test("a late component load cannot replace the preferences view", async ({ page }) => {
+  await page.route("https://at-li3.static.apphor.de/**", (route) =>
+    route.fulfill({
+      contentType: "text/javascript",
+      body: `export async function load() { customElements.define('code-editor', class extends HTMLElement { value = ''; }); }`,
+    }),
+  );
+  let releaseSource;
+  const heldSource = new Promise((resolve) => {
+    releaseSource = resolve;
+  });
+  let sourceStarted;
+  const sourceStartedPromise = new Promise((resolve) => {
+    sourceStarted = resolve;
+  });
+  await page.route("**/api/**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    let body = {};
+    if (path === "/api/oidc/me") {
+      body = { authenticated: true, user: { name: "Studio tester" } };
+    } else if (path === "/api/projects") {
+      body = [{ team: "demo", repo: "button", name: "Button", type: "component" }];
+    } else if (path === "/api/teams") {
+      body = { teams: [{ id: 1, slug: "demo" }] };
+    } else if (path === "/api/design-systems") {
+      body = { designSystems: [] };
+    } else if (path === "/api/source/demo/button") {
+      sourceStarted();
+      await heldSource;
+      body = { baseRef: "source-ref", revision: "source-ref", files: { "component.html": "<h1>Late source</h1>" } };
+    }
+    await route.fulfill({ json: body });
+  });
+  await page.goto("http://127.0.0.1:4175/?team=demo&repo=button");
+  await sourceStartedPromise;
+  await page.locator("#sidebar-user-card").click();
+  await expect(page.locator("#preferences-view")).toBeVisible();
+  releaseSource();
+  await expect(page.locator("#preferences-view")).toBeVisible();
+  await expect(page.locator("#source-editor")).toHaveCount(0);
+});

@@ -42,6 +42,7 @@ function initializeApp() {
   let authenticatedUser = false;
   let currentUser = null;
   let activeWorkbench = "";
+  let routeRenderSequence = 0;
   let editorDirty = false;
   let foundationDirty = false;
   let themeChoice = "system";
@@ -681,6 +682,7 @@ function initializeApp() {
     return true;
   }
   async function renderCurrentRoute() {
+    const renderSequence = ++routeRenderSequence;
     if (!authenticatedUser) {
       return;
     }
@@ -728,7 +730,7 @@ function initializeApp() {
         foundationDirty = false;
         topbarName.textContent = `${team} / ${repo}`;
         document.title = `${repo} · Workbench`;
-        await loadWorkbench(team, repo);
+        await loadWorkbench(team, repo, renderSequence);
       }
       return;
     }
@@ -829,10 +831,20 @@ function initializeApp() {
   });
   loadWorkspace();
 
-  async function loadWorkbench(team, repo) {
+  async function loadWorkbench(team, repo, renderSequence) {
+    const isCurrentRoute = () => {
+      if (renderSequence === routeRenderSequence) {
+        return true;
+      }
+      const params = new URLSearchParams(location.search);
+      return params.get("view") !== "preferences" && params.get("team") === team && params.get("repo") === repo;
+    };
     const status = document.querySelector("#work-status");
     const area = document.querySelector("#project-content");
     const user = await loadUser();
+    if (!isCurrentRoute()) {
+      return;
+    }
     if (!user) {
       showGuestWelcome(
         "Sign in to open this project. After signing in, return to your project link.",
@@ -843,12 +855,18 @@ function initializeApp() {
     const projectResponse = await fetch("/api/projects", {
       credentials: "same-origin",
     });
+    if (!isCurrentRoute()) {
+      return;
+    }
     if (!projectResponse.ok) {
       status.textContent =
         projectResponse.status === 401 ? "Your session expired. Sign in again." : "Projects unavailable.";
       return;
     }
     const projects = await projectResponse.json();
+    if (!isCurrentRoute()) {
+      return;
+    }
     const project = projects.find((item) => item.team === team && item.repo === repo);
     if (!project) {
       status.textContent = "Project not found or unavailable.";
@@ -866,12 +884,18 @@ function initializeApp() {
     const sourceResponse = await fetch(`/api/source/${encodeURIComponent(team)}/${encodeURIComponent(repo)}`, {
       credentials: "same-origin",
     });
+    if (!isCurrentRoute()) {
+      return;
+    }
     if (!sourceResponse.ok) {
       status.textContent =
         sourceResponse.status === 401 ? "Your session expired. Sign in again." : "Could not load project source.";
       return;
     }
     const source = await sourceResponse.json();
+    if (!isCurrentRoute()) {
+      return;
+    }
     let baseRef = source.baseRef;
     status.textContent = `${project.type === "component" ? "Team component" : "Design system"} · ${source.revision} · ${source.sourceMode}`;
     if (project.type === "design-system") {
@@ -879,6 +903,9 @@ function initializeApp() {
       area.innerHTML = `<div class="studio-heading flex w-full max-w-none items-center justify-between gap-5 border-b border-zinc-800 bg-zinc-900 px-5 py-3 max-[600px]:items-start max-[600px]:flex-col"><div class="min-w-0"><p class="studio-kicker hidden">${escapeHtml(team)} / ${escapeHtml(repo)} · Foundation</p><h1 class="text-[15px] font-medium tracking-normal text-zinc-100">${escapeHtml(project.name || repo)}</h1><p class="hidden">Shared tokens and a CSS reset for every page that uses this styleguide.</p></div><div class="studio-actions flex-wrap"><span class="state-pill whitespace-nowrap px-2.5 py-1.5 text-xs text-zinc-400" id="foundation-state">Ready</span><button type="button" id="save-tokens" disabled>Save Foundation</button><button class="secondary-action" type="button" id="publish-tokens">Publish</button></div></div><div class="foundation-layout grid min-h-[calc(100dvh-110px)] w-full max-w-none grid-cols-[256px_minmax(0,1fr)] overflow-hidden bg-zinc-950 max-[760px]:grid-cols-1"><nav class="studio-nav flex min-w-0 flex-col gap-3 bg-zinc-900 px-3 py-4 max-[760px]:border-b max-[760px]:border-zinc-800" aria-label="Foundation navigation"><details class="project-drawer border-t border-slate-700 pt-3" open><summary class="cursor-pointer text-xs font-bold text-slate-300">Foundation navigation</summary><div class="project-nav-content flex flex-col gap-3 border-t border-slate-700 pt-3"><strong class="text-xs font-bold uppercase tracking-wide text-slate-400">System</strong><a class="nav-context rounded-md bg-indigo-950 p-2 text-indigo-200" href="/?team=${encodeURIComponent(team)}&amp;repo=${encodeURIComponent(repo)}">${escapeHtml(project.name || repo)}</a><strong class="text-xs font-bold uppercase tracking-wide text-slate-400">Foundation files</strong><a class="rounded-md px-2 py-1 text-sm text-slate-300 hover:bg-slate-800" href="#foundation-tokens">tokens.css</a><a class="rounded-md px-2 py-1 text-sm text-slate-300 hover:bg-slate-800" href="#foundation-reset">reset.css</a><strong class="text-xs font-bold uppercase tracking-wide text-slate-400">Components</strong><div class="component-list flex flex-col gap-2">${components.map((item) => `<a class="rounded-lg border border-slate-700 p-2 text-sm font-medium text-slate-200 hover:border-indigo-400 hover:bg-slate-800" href="/?team=${encodeURIComponent(team)}&amp;repo=${encodeURIComponent(item.repo)}">${escapeHtml(item.name || item.repo)}<small class="mt-1 block truncate text-xs text-slate-400">${escapeHtml(item.repo)}</small></a>`).join("") || '<p class="text-sm text-slate-400">No components yet.</p>'}</div></div></details></nav><section class="foundation-main mx-auto w-full max-w-[1400px] min-w-0 px-8 py-6 max-[760px]:px-4 max-[760px]:py-5"><div class="foundation-title mb-4"><div><p class="eyebrow text-[10px] font-semibold tracking-[.12em] text-zinc-500">FOUNDATION REPOSITORY</p><h2 class="font-mono text-base font-normal text-zinc-100" id="foundation-tokens">tokens.css</h2><p class="mt-1 text-xs text-zinc-400">Shared source for every component in this system.</p></div></div><div id="foundation-urls" class="foundation-urls my-4 grid min-w-0 grid-cols-1 items-end gap-2 sm:grid-cols-[minmax(0,1fr)_auto]" aria-label="Published Foundation stylesheet URLs"></div><code-editor class="my-4 block h-[430px] min-h-[430px] w-full overflow-hidden rounded border border-zinc-800" id="tokens-editor" role="group" aria-label="Foundation CSS"></code-editor><div class="action-row mt-3 flex items-end gap-2"><label class="grid max-w-xs gap-1 text-xs text-slate-300"><span class="visually-hidden">Describe your changes</span><input class="w-full rounded-md border border-slate-600 bg-slate-800 p-2 text-sm text-slate-100" aria-label="Describe your changes" id="tokens-message" placeholder="Describe your changes" maxlength="200"></label></div><p class="text-xs text-zinc-400" id="token-status" role="status" aria-live="polite"></p><section class="foundation-components mt-7 border-t border-slate-700 pt-5"><div><h2 class="text-sm font-medium text-zinc-100">Component projects</h2><p class="mt-1 text-xs text-zinc-400">New components use this system’s published tokens at latest.</p></div><p class="rounded border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs text-zinc-400" id="token-publication-state" role="status" aria-live="polite">Checking published tokens…</p><form class="mt-4 grid gap-3 rounded border border-zinc-800 bg-zinc-900 p-3" id="component-create" hidden><label class="grid min-w-0 gap-1 text-xs text-zinc-400">Component name<input class="w-full rounded border border-zinc-700 bg-zinc-950 px-2.5 py-2 text-[13px] text-zinc-300" name="name" required maxlength="100" autocomplete="off"></label><p class="text-xs text-zinc-400">Available after tokens.css is published.</p><button class="min-h-[30px] justify-self-start rounded bg-zinc-100 px-3 py-1.5 text-xs font-medium text-zinc-900" type="submit">Add component</button></form><p class="text-xs text-zinc-400" id="create-status" role="status" aria-live="polite"></p></section></section></div>`;
 
       await loadCodeEditor();
+      if (!isCurrentRoute()) {
+        return;
+      }
       const tokensEditor = area.querySelector("#tokens-editor");
       const tokenStatus = area.querySelector("#token-status");
       document.querySelector("#work-status").classList.add("hidden");
@@ -1304,6 +1331,9 @@ function initializeApp() {
       updatePublishState(false);
     });
     await loadCodeEditor();
+    if (!isCurrentRoute()) {
+      return;
+    }
     refreshPreview = studio.refresh;
     updateEditor();
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));

@@ -9,7 +9,7 @@ for (const width of [1440, 900, 612, 390]) {
     await page.route("https://at-li3.static.apphor.de/**", (route) =>
       route.fulfill({
         contentType: "text/javascript",
-        body: `export async function load() { customElements.define('code-editor', class extends HTMLElement { value = ''; }); }`,
+        body: `export async function load() { customElements.define('code-editor', class extends HTMLElement { value = ''; constructor() { super(); this.attachShadow({ mode: 'open' }).innerHTML = '<textarea></textarea>'; } }); }`,
       }),
     );
     let saved;
@@ -81,7 +81,13 @@ for (const width of [1440, 900, 612, 390]) {
     await expect(page.locator("#publish-source")).toBeDisabled();
     await expect(page.locator("#publish-source .publish-indicator")).toHaveClass(/bg-transparent/);
     await expect(page.locator(".studio-heading [role='tablist']")).toBeVisible();
+    await expect(page.locator(".studio-actions [role='tablist']")).toBeVisible();
     await expect(page.locator(".mode-bar [role='tablist']")).toHaveCount(0);
+    await expect(page.locator("#source-editor")).toHaveJSProperty(
+      "value",
+      '<template component="demo-button"><button class="flex items-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-lg"><span>Get Started</span></button><script setup>const x = 1;</script></template>',
+    );
+    await page.waitForTimeout(300);
     await expect(page.locator("#source-editor")).toHaveJSProperty(
       "value",
       '<template component="demo-button"><button class="flex items-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-lg"><span>Get Started</span></button><script setup>const x = 1;</script></template>',
@@ -165,7 +171,7 @@ test("a late component load cannot replace the preferences view", async ({ page 
   await page.route("https://at-li3.static.apphor.de/**", (route) =>
     route.fulfill({
       contentType: "text/javascript",
-      body: `export async function load() { customElements.define('code-editor', class extends HTMLElement { value = ''; }); }`,
+      body: `export async function load() { customElements.define('code-editor', class extends HTMLElement { value = ''; constructor() { super(); this.attachShadow({ mode: 'open' }).innerHTML = '<textarea></textarea>'; } }); }`,
     }),
   );
   let releaseSource;

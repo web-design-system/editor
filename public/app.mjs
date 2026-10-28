@@ -34,6 +34,19 @@ function initializeApp() {
     }
     await codeEditorLoad;
   }
+  async function waitForEditorMount(editor) {
+    if (!editor.shadowRoot) {
+      return;
+    }
+    const deadline = Date.now() + 5000;
+    while (Date.now() < deadline) {
+      if (editor.shadowRoot?.querySelector("textarea")) {
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        return;
+      }
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+    }
+  }
   let systems = [];
   let teams = [];
   let projects = [];
@@ -1101,8 +1114,8 @@ function initializeApp() {
     const modeTabs = area.querySelector('.mode-bar [role="tablist"]');
     const editorActions = editorHeading?.querySelector(".studio-actions");
     if (modeTabs && editorActions) {
-      modeTabs.classList.add("shrink-0");
-      editorActions.before(modeTabs);
+      modeTabs.classList.add("shrink-0", "ml-2");
+      editorActions.append(modeTabs);
     }
     const editorNav = area.querySelector(".studio-nav");
     const historyDrawer = editorNav.querySelector(".history-drawer");
@@ -1119,6 +1132,7 @@ function initializeApp() {
       codeSurface.append(historyDrawer);
     }
     let activeFile = Object.hasOwn(files, "component.html") ? "component.html" : Object.keys(files)[0] || "";
+    let editorReady = false;
     const languageForFile = (file) =>
       ({
         ".css": "css",
@@ -1149,10 +1163,6 @@ function initializeApp() {
         files[activeFile] = editor.value;
       }
       editor.value = files[activeFile] ?? "";
-      const sourceInput = editor.shadowRoot?.querySelector("textarea");
-      if (sourceInput) {
-        sourceInput.value = editor.value;
-      }
       editor.language = languageForFile(activeFile);
       editor.status = activeFile;
       area.querySelector("#active-file-label").textContent = activeFile;
@@ -1240,6 +1250,9 @@ function initializeApp() {
     });
     let refreshPreview;
     editor.addEventListener("change", (event) => {
+      if (!editorReady) {
+        return;
+      }
       files[activeFile] = typeof event.detail === "string" ? event.detail : (editor.value ?? "");
       markCodeDirty();
       refreshPreview();
@@ -1334,10 +1347,13 @@ function initializeApp() {
     if (!isCurrentRoute()) {
       return;
     }
+    await waitForEditorMount(editor);
+    if (!isCurrentRoute()) {
+      return;
+    }
     refreshPreview = studio.refresh;
     updateEditor();
-    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-    updateEditor();
+    editorReady = true;
     refreshPreview();
     loadHistory();
   }

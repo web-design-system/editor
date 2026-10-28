@@ -2367,12 +2367,29 @@ createServer(async (request, response) => {
     }
     return serveStatic(request, response, url.pathname === "/" ? "/index.html" : url.pathname);
   } catch (error) {
-    console.error(error);
+    const errorId = randomBytes(6).toString("hex");
+    console.error(`[${errorId}]`, error);
+    const isPublishRequest = request.method === "POST" && /^\/api\/publish\//.test(url.pathname);
+    let publicError =
+      error.status === 503 || (error.status && error.status < 500)
+        ? String(error.message || error)
+        : "An internal server error occurred.";
+    if (isPublishRequest && (!error.status || error.status >= 500)) {
+      if (error.code === "ENOENT") {
+        publicError =
+          "Publish could not find a required source file or Foundation token artifact. Check the component files and its Foundation revision.";
+      } else if (error.code === "EACCES" || error.code === "EPERM") {
+        publicError = "Publish could not write generated artifacts. Check repository artifact permissions and retry.";
+      } else if (error.code === "ENOSPC") {
+        publicError =
+          "Publish could not write generated artifacts because storage is full. Contact the workspace administrator.";
+      } else {
+        publicError = `Publish failed during an internal build or artifact-storage step. Try again; if it persists, share error reference ${errorId}.`;
+      }
+    }
     reply(response, error.status || 500, {
-      error:
-        error.status === 503 || (error.status && error.status < 500)
-          ? String(error.message || error)
-          : "An internal server error occurred.",
+      error: publicError,
+      ...(isPublishRequest && (!error.status || error.status >= 500) ? { errorId } : {}),
       ...(error.file ? { file: error.file } : {}),
     });
   }

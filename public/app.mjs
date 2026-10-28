@@ -267,6 +267,8 @@ function initializeApp() {
       const link = document.createElement("a");
       link.href = entry.href;
       link.style.setProperty("--layer-step", `${index * 8}px`);
+      link.style.setProperty("--layer-depth", `${index}`);
+      link.style.setProperty("--layer-order", `${index + 1}`);
       link.className = entry.current ? "layer-current" : "";
       if (entry.current) {
         link.setAttribute("aria-current", "page");

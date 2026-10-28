@@ -190,6 +190,14 @@ for (const width of [1440, 900, 390, 360]) {
     await expect(page.locator("#dashboard-title")).toHaveText("Acme UI");
     await expect(page.locator("#layer-stack a")).toHaveCount(3);
     await expect(page.locator('#layer-stack a[href="/?system=acme-ui"]')).toBeVisible();
+    const layerCards = page.locator("#layer-stack a");
+    await expect(layerCards.last()).toHaveCSS("box-shadow", /rgba/);
+    const previousLayer = page.getByRole("link", { name: "Go back to acme" });
+    await expect(previousLayer).toBeVisible();
+    await previousLayer.click();
+    await expect(page).toHaveURL(/teamSlug=acme$/);
+    await page.locator("#system-grid .system-card").filter({ hasText: "Acme UI" }).click();
+    await expect(page.locator("#dashboard-title")).toHaveText("Acme UI");
     const backToTeam = page.getByRole("link", { name: "Go back to acme" });
     await backToTeam.focus();
     await expect(backToTeam).toBeFocused();

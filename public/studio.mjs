@@ -24,6 +24,344 @@ const selectedLayerClasses = [
   "after:content-[attr(data-studio-label)]",
 ];
 
+const tailwindScales = [
+  "0",
+  "px",
+  "0.5",
+  "1",
+  "1.5",
+  "2",
+  "2.5",
+  "3",
+  "3.5",
+  "4",
+  "5",
+  "6",
+  "7",
+  "8",
+  "9",
+  "10",
+  "11",
+  "12",
+  "14",
+  "16",
+  "20",
+  "24",
+  "28",
+  "32",
+  "36",
+  "40",
+  "44",
+  "48",
+  "52",
+  "56",
+  "60",
+  "64",
+  "72",
+  "80",
+  "96",
+  "auto",
+  "full",
+  "screen",
+  "min",
+  "max",
+  "fit",
+];
+const tailwindVariants = [
+  "hover",
+  "focus",
+  "focus-visible",
+  "active",
+  "disabled",
+  "checked",
+  "first",
+  "last",
+  "odd",
+  "even",
+  "group-hover",
+  "group-focus",
+  "peer-checked",
+  "sm",
+  "md",
+  "lg",
+  "xl",
+  "2xl",
+  "dark",
+];
+
+function tailwindBaseCandidates(styles = "") {
+  const candidates = new Set([
+    "sr-only",
+    "not-sr-only",
+    "container",
+    "static",
+    "fixed",
+    "absolute",
+    "relative",
+    "sticky",
+    "visible",
+    "invisible",
+    "collapse",
+    "block",
+    "inline-block",
+    "inline",
+    "flex",
+    "inline-flex",
+    "table",
+    "grid",
+    "inline-grid",
+    "hidden",
+    "flow-root",
+    "contents",
+    "list-item",
+    "flex-row",
+    "flex-row-reverse",
+    "flex-col",
+    "flex-col-reverse",
+    "flex-wrap",
+    "flex-nowrap",
+    "flex-1",
+    "flex-auto",
+    "flex-initial",
+    "flex-none",
+    "grow",
+    "shrink",
+    "grow-0",
+    "shrink-0",
+    "items-start",
+    "items-end",
+    "items-center",
+    "items-baseline",
+    "items-stretch",
+    "justify-start",
+    "justify-end",
+    "justify-center",
+    "justify-between",
+    "justify-around",
+    "justify-evenly",
+    "self-start",
+    "self-end",
+    "self-center",
+    "self-stretch",
+    "place-items-center",
+    "place-content-center",
+    "overflow-auto",
+    "overflow-hidden",
+    "overflow-visible",
+    "overflow-scroll",
+    "truncate",
+    "text-left",
+    "text-center",
+    "text-right",
+    "text-justify",
+    "font-sans",
+    "font-serif",
+    "font-mono",
+    "font-thin",
+    "font-light",
+    "font-normal",
+    "font-medium",
+    "font-semibold",
+    "font-bold",
+    "font-extrabold",
+    "italic",
+    "not-italic",
+    "uppercase",
+    "lowercase",
+    "capitalize",
+    "normal-case",
+    "underline",
+    "overline",
+    "line-through",
+    "no-underline",
+    "antialiased",
+    "subpixel-antialiased",
+    "whitespace-normal",
+    "whitespace-nowrap",
+    "break-words",
+    "break-all",
+    "rounded",
+    "rounded-none",
+    "rounded-sm",
+    "rounded-md",
+    "rounded-lg",
+    "rounded-xl",
+    "rounded-2xl",
+    "rounded-full",
+    "shadow",
+    "shadow-sm",
+    "shadow-md",
+    "shadow-lg",
+    "shadow-xl",
+    "shadow-none",
+    "border",
+    "border-0",
+    "border-2",
+    "border-4",
+    "border-dashed",
+    "border-solid",
+    "border-none",
+    "outline-none",
+    "cursor-pointer",
+    "cursor-default",
+    "pointer-events-none",
+    "select-none",
+    "object-cover",
+    "object-contain",
+    "aspect-square",
+    "aspect-video",
+    "list-none",
+    "list-disc",
+    "list-decimal",
+    "decoration-2",
+    "transition",
+    "transition-all",
+    "transition-colors",
+    "duration-150",
+    "duration-300",
+    "ease-in",
+    "ease-out",
+    "ease-in-out",
+    "animate-spin",
+    "animate-ping",
+    "animate-pulse",
+    "animate-bounce",
+    "whitespace-pre",
+  ]);
+  const spacingFamilies = [
+    "p",
+    "px",
+    "py",
+    "ps",
+    "pe",
+    "pt",
+    "pr",
+    "pb",
+    "pl",
+    "m",
+    "mx",
+    "my",
+    "ms",
+    "me",
+    "mt",
+    "mr",
+    "mb",
+    "ml",
+    "gap",
+    "gap-x",
+    "gap-y",
+    "space-x",
+    "space-y",
+    "scroll-m",
+    "scroll-p",
+    "top",
+    "right",
+    "bottom",
+    "left",
+    "inset",
+    "inset-x",
+    "inset-y",
+    "w",
+    "min-w",
+    "max-w",
+    "h",
+    "min-h",
+    "max-h",
+    "size",
+    "basis",
+    "translate-x",
+    "translate-y",
+    "-translate-x",
+    "-translate-y",
+  ];
+  for (const family of spacingFamilies) {
+    for (const scale of tailwindScales) {
+      candidates.add(`${family}-${scale}`);
+    }
+  }
+  for (let columns = 1; columns <= 12; columns++) {
+    candidates.add(`grid-cols-${columns}`);
+    candidates.add(`grid-rows-${columns}`);
+    candidates.add(`col-span-${columns}`);
+  }
+  for (const value of ["0", "5", "10", "15", "20", "25", "30", "40", "50", "60", "70", "75", "80", "90", "95", "100"]) {
+    candidates.add(`opacity-${value}`);
+    candidates.add(`z-${value}`);
+    candidates.add(`order-${value}`);
+    candidates.add(`rotate-${value}`);
+  }
+  for (const value of ["xs", "sm", "base", "lg", "xl", "2xl", "3xl", "4xl", "5xl", "6xl", "7xl", "8xl", "9xl"]) {
+    candidates.add(`text-${value}`);
+    candidates.add(`leading-${value}`);
+  }
+  for (const value of ["none", "tight", "snug", "normal", "relaxed", "loose"]) {
+    candidates.add(`leading-${value}`);
+    candidates.add(`tracking-${value}`);
+  }
+  const colors = new Set([
+    "inherit",
+    "current",
+    "transparent",
+    "black",
+    "white",
+    "slate",
+    "gray",
+    "zinc",
+    "neutral",
+    "stone",
+    "red",
+    "orange",
+    "amber",
+    "yellow",
+    "lime",
+    "green",
+    "emerald",
+    "teal",
+    "cyan",
+    "sky",
+    "blue",
+    "indigo",
+    "violet",
+    "purple",
+    "fuchsia",
+    "pink",
+    "rose",
+  ]);
+  const themeColors = new Set();
+  for (const [, color] of styles.matchAll(/--color-([a-z0-9-]+)\s*:/gi)) {
+    themeColors.add(color);
+  }
+  const colorFamilies = [
+    "bg",
+    "text",
+    "border",
+    "ring",
+    "outline",
+    "decoration",
+    "placeholder",
+    "fill",
+    "stroke",
+    "accent",
+    "caret",
+  ];
+  const shades = ["50", "100", "200", "300", "400", "500", "600", "700", "800", "900", "950"];
+  for (const family of colorFamilies) {
+    for (const color of themeColors) {
+      candidates.add(`${family}-${color}`);
+    }
+    for (const color of colors) {
+      if (["inherit", "current", "transparent", "black", "white"].includes(color)) {
+        candidates.add(`${family}-${color}`);
+        continue;
+      }
+      for (const shade of shades) {
+        candidates.add(`${family}-${color}-${shade}`);
+      }
+    }
+  }
+  return [...candidates];
+}
+
 // The studio edits the same draft object used by source commits and the code editor.
 export function createStudio(area, files, onEdit) {
   const workspace = document.querySelector("#workspace");
@@ -217,7 +555,7 @@ export function createStudio(area, files, onEdit) {
   area.querySelector(".inspector-drawer > summary").textContent = "Selected element";
   area.querySelector(".inspector-drawer").open = true;
   fields.classList.add("p-0", "gap-0");
-  fields.innerHTML = `<p id="selected-element" class="px-4 pb-3 text-blue-400 font-mono"></p><section class="property-section border-t border-zinc-800 p-4"><h2 class="mb-3.5 text-[11px] tracking-[0.08em] text-zinc-100">Layout</h2>${select("display", "Display", ["", "block", "flex", "inline-flex", "grid", "inline-block", "none"])}${select("flex-direction", "Direction", ["", "row", "column", "row-reverse", "column-reverse"])}${select("align-items", "Align", ["", "flex-start", "center", "flex-end", "stretch"])}${select("justify-content", "Justify", ["", "flex-start", "center", "flex-end", "space-between"])}</section><section class="property-section border-t border-zinc-800 p-4"><h2 class="mb-3.5 text-[11px] tracking-[0.08em] text-zinc-100">Spacing</h2><div class="spacing-fields grid grid-cols-2 gap-4 text-[10px] text-zinc-400"><div><span>Padding</span><div class="padding-grid mt-1.5 grid grid-cols-3 gap-1">${["top", "left", "right", "bottom"].map((side) => `<input aria-label="Padding ${side}" data-style="padding-${side}" placeholder="auto" title="CSS length, e.g. 12px" class="px-0 py-1 text-center text-[10px]">`).join("")}<span class="col-start-2 row-start-2 place-self-center text-lg">□</span></div></div><label>Gap<input data-style="gap" placeholder="normal"></label></div>${input("margin", "Margin")}</section><section class="property-section border-t border-zinc-800 p-4"><h2 class="mb-3.5 text-[11px] tracking-[0.08em] text-zinc-100">Colors</h2>${input("background-color", "Background")}${input("color", "Text")}</section><section class="property-section border-t border-zinc-800 p-4"><h2 class="mb-3.5 text-[11px] tracking-[0.08em] text-zinc-100">Effects</h2>${input("border-radius", "Radius")}${select("box-shadow", "Shadow", ["", "none", "0 1px 2px #0003", "0 4px 6px #0003", "0 10px 15px #0003"])}<label class="property-row mt-2 grid grid-cols-[76px_minmax(0,1fr)] items-center gap-2 text-xs text-zinc-400">Opacity<input aria-label="Opacity" data-style="opacity" type="range" min="0" max="1" step="0.05" value="1" class="accent-blue-500"></label></section><section class="property-section border-t border-zinc-800 p-4"><h2 class="mb-3.5 text-[11px] tracking-[0.08em] text-zinc-100">Element</h2><label>Classes<input id="element-classes" placeholder="Add CSS classes"></label><p id="style-status" role="status"></p></section>`;
+  fields.innerHTML = `<p id="selected-element" class="px-4 pb-3 text-blue-400 font-mono"></p><section class="property-section border-t border-zinc-800 p-4"><h2 class="mb-3.5 text-[11px] tracking-[0.08em] text-zinc-100">Layout</h2>${select("display", "Display", ["", "block", "flex", "inline-flex", "grid", "inline-block", "none"])}${select("flex-direction", "Direction", ["", "row", "column", "row-reverse", "column-reverse"])}${select("align-items", "Align", ["", "flex-start", "center", "flex-end", "stretch"])}${select("justify-content", "Justify", ["", "flex-start", "center", "flex-end", "space-between"])}</section><section class="property-section border-t border-zinc-800 p-4"><h2 class="mb-3.5 text-[11px] tracking-[0.08em] text-zinc-100">Spacing</h2><div class="spacing-fields grid grid-cols-2 gap-4 text-[10px] text-zinc-400"><div><span>Padding</span><div class="padding-grid mt-1.5 grid grid-cols-3 gap-1">${["top", "left", "right", "bottom"].map((side) => `<input aria-label="Padding ${side}" data-style="padding-${side}" placeholder="auto" title="CSS length, e.g. 12px" class="px-0 py-1 text-center text-[10px]">`).join("")}<span class="col-start-2 row-start-2 place-self-center text-lg">□</span></div></div><label>Gap<input data-style="gap" placeholder="normal"></label></div>${input("margin", "Margin")}</section><section class="property-section border-t border-zinc-800 p-4"><h2 class="mb-3.5 text-[11px] tracking-[0.08em] text-zinc-100">Colors</h2>${input("background-color", "Background")}${input("color", "Text")}</section><section class="property-section border-t border-zinc-800 p-4"><h2 class="mb-3.5 text-[11px] tracking-[0.08em] text-zinc-100">Effects</h2>${input("border-radius", "Radius")}${select("box-shadow", "Shadow", ["", "none", "0 1px 2px #0003", "0 4px 6px #0003", "0 10px 15px #0003"])}<label class="property-row mt-2 grid grid-cols-[76px_minmax(0,1fr)] items-center gap-2 text-xs text-zinc-400">Opacity<input aria-label="Opacity" data-style="opacity" type="range" min="0" max="1" step="0.05" value="1" class="accent-blue-500"></label></section><section class="property-section border-t border-zinc-800 p-4"><h2 class="mb-3.5 text-[11px] tracking-[0.08em] text-zinc-100">Element</h2><div class="grid gap-2"><p class="m-0 text-xs text-zinc-400">Classes</p><div id="class-tags" class="flex flex-wrap gap-1.5" aria-label="Element classes"></div><label class="grid gap-1 text-xs text-zinc-400">Add a Tailwind class<input id="class-input" role="combobox" aria-label="Add a Tailwind class" aria-autocomplete="list" aria-controls="class-suggestions" aria-expanded="false" autocomplete="off" placeholder="Search classes…" class="w-full rounded border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-xs text-zinc-100"></label><div id="class-suggestions" class="max-h-48 overflow-auto rounded border border-zinc-700 bg-zinc-900 p-1" role="listbox" hidden></div><p id="style-status" role="status" class="m-0 text-xs text-rose-400"></p></div></section>`;
   fields.querySelectorAll(":scope > section:first-of-type select[data-style]").forEach((select) => {
     const options = [...select.options].map((option) => option.value).filter(Boolean);
     const values = select.dataset.style === "display" ? ["flex", "inline", "block", "grid"] : options;
@@ -252,7 +590,7 @@ export function createStudio(area, files, onEdit) {
   canvas.querySelector(".surface-heading").remove();
   canvas.insertAdjacentHTML(
     "afterbegin",
-    '<div class="canvas-tools absolute right-4 top-4 z-10 flex items-center gap-2 rounded border border-zinc-800 bg-zinc-900 p-1 shadow-lg"><button type="button" id="zoom-out" aria-label="Zoom out">−</button><button type="button" id="zoom-reset" aria-label="Reset zoom">100%</button><button type="button" id="zoom-in" aria-label="Zoom in">+</button></div><span class="canvas-caption absolute bottom-4 left-4 text-[10px] tracking-[0.12em] text-zinc-500">COMPONENT CANVAS</span>',
+    '<div class="canvas-tools absolute right-4 top-4 z-10 flex items-center gap-2 rounded border border-zinc-800 bg-zinc-900 p-1 shadow-lg"><button type="button" id="zoom-out" aria-label="Zoom out">−</button><button type="button" id="zoom-reset" aria-label="Reset zoom">100%</button><button type="button" id="zoom-in" aria-label="Zoom in">+</button></div>',
   );
   area.querySelector("#save-source").textContent = "Save Component";
   code.querySelector(".surface-heading").innerHTML =
@@ -263,7 +601,12 @@ export function createStudio(area, files, onEdit) {
   let preview = false;
   let holder;
   let nodes = [];
+  let candidateCache = null;
+  let highlightedSuggestion = 0;
   const list = area.querySelector("#layer-list");
+  const classTags = area.querySelector("#class-tags");
+  const classInput = area.querySelector("#class-input");
+  const classSuggestions = area.querySelector("#class-suggestions");
   // Same-origin access is solely for selection; the sandbox never permits scripts.
   frame.setAttribute("sandbox", "allow-same-origin");
   function parse() {
@@ -276,12 +619,136 @@ export function createStudio(area, files, onEdit) {
     selected = Math.min(selected, Math.max(0, nodes.length - 1));
     return root;
   }
+  function getClassCandidates() {
+    if (!candidateCache) {
+      candidateCache = tailwindBaseCandidates(`${files["styles.css"] || ""}\n${foundationTokens}`);
+    }
+    return candidateCache;
+  }
+  function renderClassTags(element) {
+    classTags.replaceChildren();
+    classInput.value = "";
+    classInput.disabled = !element;
+    for (const className of element?.classList || []) {
+      const tag = document.createElement("span");
+      tag.className =
+        "inline-flex max-w-full items-center gap-1 rounded border border-zinc-700 bg-zinc-800 px-1.5 py-1 font-mono text-[10px] leading-none text-zinc-200";
+      const text = document.createElement("span");
+      text.className = "max-w-[170px] overflow-hidden text-ellipsis whitespace-nowrap";
+      text.textContent = className;
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className =
+        "ml-0.5 inline-flex size-4 shrink-0 items-center justify-center rounded text-zinc-400 hover:bg-zinc-700 hover:text-white";
+      remove.setAttribute("aria-label", `Remove ${className}`);
+      remove.textContent = "×";
+      remove.addEventListener("click", () => {
+        const node = nodes[selected];
+        if (!node) {
+          return;
+        }
+        const remaining = [...node.classList].filter((value) => value !== className);
+        if (remaining.length) {
+          node.setAttribute("class", remaining.join(" "));
+        } else {
+          node.removeAttribute("class");
+        }
+        write();
+      });
+      tag.append(text, remove);
+      classTags.append(tag);
+    }
+    renderClassSuggestions();
+  }
+  function renderClassSuggestions() {
+    const query = classInput.value.trim();
+    const used = new Set(nodes[selected]?.classList || []);
+    const candidates = getClassCandidates();
+    let matches;
+    if (!query) {
+      matches = [];
+    } else if (query.includes(":")) {
+      const lastColon = query.lastIndexOf(":");
+      const modifiers = query.slice(0, lastColon).split(":");
+      const prefix = query.slice(0, lastColon + 1);
+      const fragment = query.slice(lastColon + 1);
+      matches = modifiers.every((modifier) => tailwindVariants.includes(modifier))
+        ? candidates.filter((candidate) => candidate.startsWith(fragment)).map((candidate) => `${prefix}${candidate}`)
+        : [];
+    } else {
+      matches = candidates.filter((candidate) => candidate.startsWith(query));
+      for (const variant of tailwindVariants) {
+        if (`${variant}:`.startsWith(query)) {
+          matches.unshift(`${variant}:`);
+        }
+      }
+    }
+    matches = [...new Set(matches)].filter((candidate) => candidate && !used.has(candidate)).slice(0, 40);
+    classSuggestions.replaceChildren();
+    highlightedSuggestion = 0;
+    for (const [index, candidate] of matches.entries()) {
+      const option = document.createElement("button");
+      option.type = "button";
+      option.role = "option";
+      option.dataset.className = candidate;
+      option.setAttribute("aria-selected", String(index === highlightedSuggestion));
+      option.className =
+        "block w-full rounded px-2 py-1.5 text-left font-mono text-[11px] text-zinc-300 hover:bg-zinc-800 aria-selected:bg-blue-500/15 aria-selected:text-blue-200";
+      option.textContent = candidate;
+      classSuggestions.append(option);
+    }
+    classSuggestions.hidden = matches.length === 0;
+    classInput.setAttribute("aria-expanded", String(matches.length > 0));
+  }
+  function addClassNames(value) {
+    const node = nodes[selected];
+    const additions = value.trim().split(/\s+/).filter(Boolean);
+    if (!node || !additions.length) {
+      return;
+    }
+    const merged = [...new Set([...node.classList, ...additions])];
+    node.setAttribute("class", merged.join(" "));
+    classInput.value = "";
+    write();
+    classInput.focus();
+  }
+  classInput.addEventListener("input", renderClassSuggestions);
+  classInput.addEventListener("keydown", (event) => {
+    const options = [...classSuggestions.querySelectorAll('[role="option"]')];
+    if (event.key === "ArrowDown" && options.length) {
+      event.preventDefault();
+      highlightedSuggestion = (highlightedSuggestion + 1) % options.length;
+      options.forEach((option, index) => {
+        option.setAttribute("aria-selected", String(index === highlightedSuggestion));
+      });
+      options[highlightedSuggestion].scrollIntoView({ block: "nearest" });
+    } else if (event.key === "ArrowUp" && options.length) {
+      event.preventDefault();
+      highlightedSuggestion = (highlightedSuggestion + options.length - 1) % options.length;
+      options.forEach((option, index) => {
+        option.setAttribute("aria-selected", String(index === highlightedSuggestion));
+      });
+      options[highlightedSuggestion].scrollIntoView({ block: "nearest" });
+    } else if (event.key === "Enter") {
+      event.preventDefault();
+      addClassNames(options[highlightedSuggestion]?.dataset.className || classInput.value);
+    } else if (event.key === "Escape") {
+      classSuggestions.hidden = true;
+      classInput.setAttribute("aria-expanded", "false");
+    }
+  });
+  classSuggestions.addEventListener("click", (event) => {
+    const option = event.target.closest('[role="option"]');
+    if (option) {
+      addClassNames(option.dataset.className);
+    }
+  });
   function selectLayer(index) {
     selected = index;
     list.querySelectorAll("button").forEach((button, i) => button.setAttribute("aria-pressed", String(i === selected)));
     const element = nodes[selected];
     area.querySelector("#selected-element").textContent = element ? element.localName : "No elements in this template";
-    area.querySelector("#element-classes").value = element?.getAttribute("class") || "";
+    renderClassTags(element);
     const rendered = frame.contentDocument?.querySelector(`[data-studio-node="${selected}"]`);
     frame.contentDocument?.querySelectorAll("[data-studio-selected]").forEach((el) => {
       el.removeAttribute("data-studio-selected");
@@ -306,7 +773,6 @@ export function createStudio(area, files, onEdit) {
         control.value = value;
       }
     });
-    area.querySelector("#element-classes").disabled = !element;
   }
   function refresh() {
     const root = parse();
@@ -353,7 +819,7 @@ export function createStudio(area, files, onEdit) {
     } catch {
       tokenStylesheet = "";
     }
-    frame.srcdoc = `<!doctype html><html class="min-h-full bg-zinc-950"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self' 'unsafe-inline'; img-src data: https:; font-src data:; form-action 'none'">${tokenStylesheet}<link rel="stylesheet" href="/css/tailwind.css"><style>${css}</style></head><body class="m-0 flex min-h-dvh items-center justify-center bg-[radial-gradient(#27272a_1px,transparent_1px)] [background-size:16px_16px] p-10 text-sm text-[#d4d4d8]">${container.innerHTML}</body></html>`;
+    frame.srcdoc = `<!doctype html><html class="min-h-full bg-zinc-950"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self' 'unsafe-inline'; img-src data: https:; font-src data:; form-action 'none'">${tokenStylesheet}<link rel="stylesheet" href="/css/tailwind.css"><style>${css}\nhtml,body{background-color:#09090b!important}</style></head><body class="m-0 flex min-h-dvh items-center justify-center bg-zinc-950 bg-[radial-gradient(#27272a_1px,transparent_1px)] [background-size:16px_16px] p-10 text-sm text-[#d4d4d8]">${container.innerHTML}</body></html>`;
     selectLayer(selected);
   }
   try {
@@ -365,6 +831,7 @@ export function createStudio(area, files, onEdit) {
         .then((source) => {
           if (typeof source?.files?.["tokens.css"] === "string") {
             foundationTokens = source.files["tokens.css"];
+            candidateCache = null;
             refresh();
           }
         })
@@ -418,12 +885,6 @@ export function createStudio(area, files, onEdit) {
     node.style.setProperty(button.dataset.style, button.dataset.value);
     area.querySelector("#style-status").textContent = "";
     write();
-  });
-  area.querySelector("#element-classes").addEventListener("change", (event) => {
-    if (nodes[selected]) {
-      nodes[selected].setAttribute("class", event.target.value);
-      write();
-    }
   });
   function setZoom(value) {
     zoom = Math.max(0.25, Math.min(2, value));

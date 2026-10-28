@@ -51,7 +51,8 @@ for (const width of [1440, 900, 612, 390]) {
             files: {
               "component.html":
                 '<template component="demo-button"><button class="flex items-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-lg"><span>Get Started</span></button><script setup>const x = 1;</script></template>',
-              "styles.css": "button { border:0; font:500 16px system-ui; }",
+              "styles.css":
+                ":root { --color-brand: #123456; } body { background-color: white; } button { border:0; font:500 16px system-ui; }",
               "stories.html": "<demo-button></demo-button>",
             },
           };
@@ -98,18 +99,33 @@ for (const width of [1440, 900, 612, 390]) {
     await expect(page.locator(".studio-nav")).not.toContainText("Current component");
     await expect(page.getByText("Include component.mjs")).toHaveCount(0);
     const preview = page.frameLocator("#draft-preview");
+    await expect(preview.getByText("COMPONENT CANVAS")).toHaveCount(0);
+    await expect(preview.locator("body")).toHaveCSS("background-color", "rgb(9, 9, 11)");
     await expect(preview.locator("button")).toBeVisible();
-    await page.locator("#layer-list button").nth(1).click();
+    await page.locator("#layer-list button").first().click();
+    const classInput = page.getByRole("combobox", { name: "Add a Tailwind class" });
+    await classInput.fill("bg-brand");
+    await expect(page.getByRole("option", { name: "bg-brand", exact: true })).toBeVisible();
+    await classInput.fill("hover:bg-blue-");
+    await expect(page.getByRole("option", { name: "hover:bg-blue-500", exact: true })).toBeVisible();
+    await classInput.fill("px-");
+    await expect(page.getByRole("option", { name: "px-4", exact: true })).toHaveCount(0);
+    await classInput.fill("p-5");
+    await classInput.press("Enter");
+    await expect(preview.locator('[data-studio-node="0"]')).toHaveClass(/p-5/);
     if (width < 640) {
       await page.keyboard.press("Escape");
       await expect(page.locator("#project-content")).not.toHaveClass(/mobile-nav-open/);
     }
-    await page.getByLabel("Text", { exact: true }).fill("#ff0000");
-    await page.getByLabel("Text", { exact: true }).press("Tab");
-    await expect(preview.locator("span[data-studio-node]")).toHaveCSS("color", "rgb(255, 0, 0)");
+    await page.getByRole("button", { name: "Remove p-5" }).click();
+    await expect(preview.locator('[data-studio-node="0"]')).not.toHaveClass(/p-5/);
     if (width < 640) {
       await page.getByRole("button", { name: "Open layers" }).click();
     }
+    await page.locator("#layer-list button").nth(1).click();
+    await page.getByLabel("Text", { exact: true }).fill("#ff0000");
+    await page.getByLabel("Text", { exact: true }).press("Tab");
+    await expect(preview.locator("span[data-studio-node]")).toHaveCSS("color", "rgb(255, 0, 0)");
     await page.locator("#layer-list button").first().click();
     if (width < 640) {
       await page.keyboard.press("Escape");

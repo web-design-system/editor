@@ -5,6 +5,16 @@ for (const width of [1440, 360]) {
     await page.setViewportSize({ width, height: 740 });
     const errors = [];
     page.on("pageerror", (error) => errors.push(error.stack || error.message));
+    page.on("console", (message) => {
+      if (message.type() === "error" && !message.text().startsWith("Failed to load resource:")) {
+        errors.push(`console: ${message.text()}`);
+      }
+    });
+    page.on("requestfailed", (request) => {
+      if (new URL(request.url()).origin === "http://127.0.0.1:4175") {
+        errors.push(`request failed: ${request.method()} ${request.url()}`);
+      }
+    });
     await page.route("**/api/oidc/me", (route) => route.fulfill({ json: { authenticated: false } }));
     await page.goto("http://127.0.0.1:4175/");
     await expect(page.getByRole("heading", { name: "A home for your team’s UX" })).toBeVisible();
@@ -49,6 +59,24 @@ for (const width of [1440, 900, 390, 360]) {
     await page.setViewportSize({ width, height: 740 });
     const errors = [];
     page.on("pageerror", (error) => errors.push(error.stack || error.message));
+    page.on("console", (message) => {
+      if (message.type() === "error" && !message.text().startsWith("Failed to load resource:")) {
+        errors.push(`console: ${message.text()}`);
+      }
+    });
+    page.on("requestfailed", (request) => {
+      if (new URL(request.url()).origin === "http://127.0.0.1:4175") {
+        errors.push(`request failed: ${request.method()} ${request.url()}`);
+      }
+    });
+    page.on("response", (response) => {
+      const url = new URL(response.url());
+      const expectedUnpublishedFoundation =
+        response.status() === 404 && url.pathname === "/static/acme-ui/foundation/latest/tokens.css";
+      if (response.status() >= 400 && !expectedUnpublishedFoundation) {
+        errors.push(`HTTP ${response.status()}: ${response.url()}`);
+      }
+    });
     const teams = [
       { id: 1, slug: "acme" },
       { id: 2, slug: "other-team" },
@@ -72,6 +100,12 @@ for (const width of [1440, 900, 390, 360]) {
     let createdSystem;
     let createdComponent;
     let foundationPublished = false;
+    let pausePublication = false;
+    let notifyPublicationRequest;
+    let releasePublicationResponse;
+    const publicationRequestStarted = new Promise((resolve) => {
+      notifyPublicationRequest = resolve;
+    });
     let documentNavigations = 0;
     page.on("request", (request) => {
       if (request.isNavigationRequest() && request.resourceType() === "document") {
@@ -86,9 +120,16 @@ for (const width of [1440, 900, 390, 360]) {
             body: `export async function load() { if (!customElements.get('code-editor')) customElements.define('code-editor', class extends HTMLElement { value = ''; }); }`,
           }),
     );
-    await page.route("**/static/**", (route) =>
-      route.fulfill({ status: foundationPublished ? 200 : 404, body: ":root { --brand: blue; }" }),
-    );
+    await page.route("**/static/**", async (route) => {
+      if (pausePublication) {
+        pausePublication = false;
+        notifyPublicationRequest();
+        await new Promise((resolve) => {
+          releasePublicationResponse = resolve;
+        });
+      }
+      await route.fulfill({ status: foundationPublished ? 200 : 404, body: ":root { --brand: blue; }" });
+    });
     await page.route("**/api/**", async (route) => {
       const path = new URL(route.request().url()).pathname;
       let body = {};
@@ -156,15 +197,11 @@ for (const width of [1440, 900, 390, 360]) {
     await expect(page.getByRole("link", { name: /Workspace overview/ })).toHaveCount(0);
     await expect(page.locator(".team-card").first()).toContainText("Members not tracked");
     await page.screenshot({ path: test.info().outputPath(`landing-${width}.png`), fullPage: true });
-    if (width <= 760) {
-      await page.locator(".team-drawer > summary").click();
-    }
     await page.getByRole("link", { name: /acme/ }).first().click();
     await expect(page.locator(".system-card")).toHaveCount(2);
     await expect(page.locator("#teams-title")).toHaveText("Design systems");
-    await expect(page.locator(".sidebar-create")).toHaveText("＋ New system");
-    await expect(page.locator(".sidebar-create")).toHaveAttribute("data-create", "system");
-    await page.locator(".sidebar-create").click();
+    await expect(page.locator(".workspace-sidebar")).toBeHidden();
+    await page.getByRole("button", { name: "New design system" }).click();
     await expect(page.getByRole("dialog", { name: "Create a design system" })).toBeVisible();
     await expect(page.locator("#system-form")).toBeVisible();
     await expect(page.locator("#system-team")).toHaveValue("acme");
@@ -174,8 +211,7 @@ for (const width of [1440, 900, 390, 360]) {
     expect(documentNavigations).toBe(1);
     await page.reload();
     await expect(page.locator(".system-card")).toHaveCount(2);
-    await expect(page.locator("#layer-stack a")).toHaveCount(2);
-    await expect(page.locator('#layer-stack a[href="/?teamSlug=acme"]')).toBeVisible();
+    await expect(page.locator("#page-deck > wds-page-layer")).toHaveCount(1);
     await page.getByRole("button", { name: "New design system" }).click();
     await expect(page.getByRole("dialog")).toBeVisible();
     await expect(page.locator("#system-team")).toHaveValue("acme");
@@ -186,24 +222,48 @@ for (const width of [1440, 900, 390, 360]) {
         customElements.define("wds-repository-card", class extends HTMLElement {});
       }
     });
+    pausePublication = true;
+    await page.locator("#system-grid .system-card").filter({ hasText: "Acme UI" }).click();
+    await publicationRequestStarted;
+    await page.locator("#active-page-layer #dashboard-breadcrumbs a").click();
+    await expect(page.locator("#dashboard-title")).toHaveText("Your teams");
+    releasePublicationResponse();
+    await expect(page).toHaveTitle("Your teams · Workbench");
+    await page.locator("#system-grid .team-card").filter({ hasText: "acme" }).click();
+    await expect(page.locator(".system-card")).toHaveCount(2);
     await page.locator("#system-grid .system-card").filter({ hasText: "Acme UI" }).click();
     await expect(page.locator("#dashboard-title")).toHaveText("Acme UI");
-    await expect(page.locator("#layer-stack a")).toHaveCount(3);
-    await expect(page.locator('#layer-stack a[href="/?system=acme-ui"]')).toBeVisible();
-    const layerCards = page.locator("#layer-stack a");
-    await expect(layerCards.last()).toHaveCSS("box-shadow", /rgba/);
-    const previousLayer = page.getByRole("link", { name: "Go back to acme" });
+    await expect(page.locator("#page-deck > .page-layer--snapshot")).toHaveCount(1);
+    const previousLayer = page.getByRole("link", { name: "Return to acme" });
     await expect(previousLayer).toBeVisible();
+    await expect(page.locator(".page-layer--snapshot .page-layer-snapshot-content .system-card")).toHaveCount(2);
+    await expect(page.locator("#active-page-layer")).toHaveCSS("box-shadow", /rgba/);
+    const cardGeometry = await page.evaluate(() => {
+      const active = document.querySelector("#active-page-layer").getBoundingClientRect();
+      const snapshot = document.querySelector(".page-layer--snapshot").getBoundingClientRect();
+      return {
+        activeTop: active.top,
+        activeBottom: active.bottom,
+        snapshotTop: snapshot.top,
+        snapshotBottom: snapshot.bottom,
+      };
+    });
+    expect(cardGeometry.activeTop).toBeGreaterThan(cardGeometry.snapshotTop);
+    expect(cardGeometry.activeTop).toBeLessThan(cardGeometry.snapshotBottom);
+    await expect(page.locator(".page-layer--snapshot [id]")).toHaveCount(0);
+    await page.screenshot({ path: test.info().outputPath(`deck-${width}.png`), fullPage: true });
     await previousLayer.click();
     await expect(page).toHaveURL(/teamSlug=acme$/);
+    await expect(page.locator("#page-deck > .page-layer--snapshot")).toHaveCount(0);
+    await expect(page.locator("#active-page-layer")).toBeFocused();
     await page.locator("#system-grid .system-card").filter({ hasText: "Acme UI" }).click();
     await expect(page.locator("#dashboard-title")).toHaveText("Acme UI");
-    const backToTeam = page.getByRole("link", { name: "Go back to acme" });
+    const backToTeam = page.getByRole("link", { name: "Return to acme" });
     await backToTeam.focus();
     await expect(backToTeam).toBeFocused();
     await backToTeam.press("Enter");
     await expect(page).toHaveURL(/teamSlug=acme$/);
-    await expect(page.getByRole("link", { name: "Current layer: acme" })).toBeFocused();
+    await expect(page.locator("#active-page-layer")).toBeFocused();
     await page.locator("#system-grid .system-card").filter({ hasText: "Acme UI" }).click();
     await expect(page.locator("#dashboard-title")).toHaveText("Acme UI");
     expect(documentNavigations).toBe(2);
@@ -211,10 +271,8 @@ for (const width of [1440, 900, 390, 360]) {
     await expect(page).toHaveURL(/teamSlug=acme$/);
     await page.goForward();
     await expect(page.locator("#dashboard-title")).toHaveText("Acme UI");
-    await expect(page.locator("#team-list")).toContainText("← Back to systems");
-    await expect(page.locator("#team-list")).toContainText("Button");
+    await expect(page.locator("#active-page-layer #foundation-setup")).toBeVisible();
     await expect(page.getByRole("link", { name: "All design systems" })).toHaveAttribute("href", "/");
-    await expect(page.locator("#foundation-setup")).toBeVisible();
     await expect(page.locator("#foundation-setup")).toContainText("Define your design tokens");
     await expect(page.locator("#foundation-setup")).toContainText(
       "Give your design system the foundation it needs: the colors, spacing, or any tokens used by all components.",
@@ -229,10 +287,24 @@ for (const width of [1440, 900, 390, 360]) {
     await expect(page.locator(".setup-action")).toHaveText("Create Design Foundation →");
     await page.locator(".setup-action").click();
     await expect(page).toHaveURL(/team=acme-ui&repo=foundation/);
-    await expect(page.locator("#layer-stack a").last()).toHaveAttribute("aria-current", "page");
+    await expect(page.locator("#active-page-layer")).toHaveAttribute("aria-current", "page");
+    await expect(page.locator("#page-deck > .page-layer--snapshot")).toHaveCount(2);
+    await expect(page.locator("#active-page-layer #workspace")).toBeVisible();
+    await expect(page.locator("#active-page-layer #project-content")).toBeVisible();
+    await page.screenshot({ path: test.info().outputPath(`editor-deck-${width}.png`), fullPage: true });
+    page.once("dialog", (dialog) => dialog.accept());
+    await page.getByRole("link", { name: "Return to acme", exact: true }).click();
+    await expect(page).toHaveURL(/teamSlug=acme$/);
+    await expect(page.locator("#page-deck > .page-layer--snapshot")).toHaveCount(0);
+    await expect(page.locator("#active-page-layer")).toBeFocused();
+    await page.locator("#system-grid .system-card").filter({ hasText: "Acme UI" }).click();
+    await expect(page.locator(".setup-action")).toBeVisible();
+    await page.locator(".setup-action").click();
+    await expect(page).toHaveURL(/team=acme-ui&repo=foundation/);
+    await expect(page.locator("#page-deck > .page-layer--snapshot")).toHaveCount(2);
     await expect(page.getByRole("button", { name: "Save Foundation" })).toBeVisible();
     if (width <= 760) {
-      await page.locator(".project-drawer > summary").click();
+      await page.locator("#active-page-layer .project-drawer > summary").click();
     }
     if (width === 1440) {
       await expect(page.getByRole("button", { name: "Save Foundation" })).toBeEnabled();
@@ -240,10 +312,10 @@ for (const width of [1440, 900, 390, 360]) {
       await expect(page.getByRole("button", { name: "Save Foundation" })).toBeDisabled();
     }
     await expect(page.getByRole("textbox", { name: "Describe your changes" })).toBeVisible();
-    await expect(page.getByLabel("Public tokens.css URL")).toHaveValue(
+    await expect(page.locator("#active-page-layer").getByLabel("Public tokens.css URL")).toHaveValue(
       /^http:\/\/127\.0\.0\.1:4175\/static\/acme-ui\/foundation\/latest\/tokens\.css$/,
     );
-    await expect(page.getByLabel("Public reset.css URL")).toHaveValue(
+    await expect(page.locator("#active-page-layer").getByLabel("Public reset.css URL")).toHaveValue(
       /^http:\/\/127\.0\.0\.1:4175\/static\/acme-ui\/foundation\/latest\/reset\.css$/,
     );
     await page.getByRole("button", { name: "reset.css", exact: true }).click();
@@ -271,6 +343,47 @@ for (const width of [1440, 900, 390, 360]) {
     await page.screenshot({ path: test.info().outputPath(`foundation-${width}.png`), fullPage: true });
     await page.locator(".component-list a").first().click();
     await expect(page.locator("#layer-list button")).toHaveCount(1);
+    await expect(
+      page.locator(".page-layer--snapshot").last().locator(".page-layer-snapshot-content .foundation-layout"),
+    ).toHaveCount(1);
+    await expect(page.locator(".page-layer--snapshot .page-layer-snapshot-content").first()).toHaveJSProperty(
+      "inert",
+      true,
+    );
+    const unsafeSnapshotNodes = await page
+      .locator(".page-layer--snapshot .page-layer-snapshot-content")
+      .evaluateAll((roots) =>
+        roots.flatMap((root) =>
+          [...root.querySelectorAll("*")]
+            .filter((element) => {
+              const unsafeTag = [
+                "script",
+                "style",
+                "link",
+                "meta",
+                "base",
+                "iframe",
+                "object",
+                "embed",
+                "audio",
+                "video",
+                "source",
+                "track",
+              ].includes(element.localName.toLowerCase());
+              const unsafeAttribute = [...element.attributes].some(
+                (attribute) =>
+                  ["href", "src", "srcset", "poster", "action", "formaction", "srcdoc"].includes(
+                    attribute.name.toLowerCase(),
+                  ) ||
+                  /^on/i.test(attribute.name) ||
+                  (attribute.name.toLowerCase() === "style" && /url\s*\(/i.test(attribute.value)),
+              );
+              return unsafeTag || unsafeAttribute || element.localName.includes("-");
+            })
+            .map((element) => element.localName),
+        ),
+      );
+    expect(unsafeSnapshotNodes).toEqual([]);
     await page.goBack();
     await page.goBack();
     await expect(page.locator("#dashboard-title")).toHaveText("Acme UI");
@@ -280,10 +393,18 @@ for (const width of [1440, 900, 390, 360]) {
     await expect(page.locator("#component-area")).toBeVisible();
     await expect(page.getByRole("button", { name: "New component" })).toBeEnabled();
     await expect(page.locator("#overview-components .system-card")).toHaveCount(6);
-    const searchRow = await page.locator(".component-toolbar").boundingBox();
+    const searchRow = await page.locator("#active-page-layer .component-toolbar").boundingBox();
     const searchInput = await page.getByRole("searchbox", { name: "Find a component" }).boundingBox();
     const createButton = await page.getByRole("button", { name: "New component" }).boundingBox();
-    expect(Math.abs(searchInput.y - createButton.y)).toBeLessThan(3);
+    await expect
+      .poll(async () => {
+        const [input, button] = await Promise.all([
+          page.getByRole("searchbox", { name: "Find a component" }).boundingBox(),
+          page.getByRole("button", { name: "New component" }).boundingBox(),
+        ]);
+        return Math.abs(input.y - button.y);
+      })
+      .toBeLessThanOrEqual(6);
     expect(searchInput.x + searchInput.width).toBeLessThanOrEqual(createButton.x);
     expect(searchRow.height).toBeLessThan(60);
     await page.getByRole("searchbox", { name: "Find a component" }).fill("checkbox");
@@ -296,16 +417,13 @@ for (const width of [1440, 900, 390, 360]) {
     await page.getByRole("button", { name: "Close dialog" }).click();
     await page.screenshot({ path: test.info().outputPath(`system-${width}.png`), fullPage: true });
     await page.getByRole("link", { name: "All design systems" }).click();
-    if (width <= 760) {
-      await page.locator(".team-drawer > summary").click();
-    }
     await page.getByRole("button", { name: "New team" }).click();
     await page.getByLabel("Team slug", { exact: true }).fill("new-team");
     await page.getByRole("button", { name: "Create team", exact: true }).click();
     await expect(page.getByRole("dialog")).not.toBeVisible();
     await expect(page.locator("#dashboard-title")).toHaveText("Design systems");
     await expect(page.locator("#first-system-empty")).toBeVisible();
-    await page.getByPlaceholder("Name").fill("Web System");
+    await page.locator("#active-page-layer").getByPlaceholder("Name").fill("Web System");
     await page.getByRole("button", { name: "Create", exact: true }).click();
     await expect(page.locator("#dashboard-title")).toHaveText("Web System");
     expect(createdSystem.team).toBe("new-team");
@@ -325,6 +443,32 @@ for (const width of [1440, 900, 390, 360]) {
       repo: "foundation",
       revision: "latest",
     });
+    await page.locator("#sidebar-user-card").click();
+    await expect(page.locator("#preferences-view")).toBeVisible();
+    await expect(page.locator("#page-deck > .page-layer--exiting")).toHaveCount(0);
+    const snapshots = page.locator("#page-deck > .page-layer--snapshot");
+    const retainedPageCount = await snapshots.count();
+    expect(retainedPageCount).toBeGreaterThan(4);
+    await expect(snapshots.last().locator(".page-layer-snapshot-content .studio-shell")).toHaveCount(1);
+    for (let index = 0; index < 5; index += 1) {
+      const route = `/?view=preferences&layer=${index}`;
+      await page.evaluate((href) => window.dispatchEvent(new CustomEvent("wds:navigate", { detail: href })), route);
+      await expect(page).toHaveURL(new RegExp(`layer=${index}$`));
+    }
+    await expect(page.locator("#page-deck > .page-layer--exiting")).toHaveCount(0);
+    await expect(snapshots).toHaveCount(retainedPageCount + 5);
+    const oldestSnapshot = page.locator("#page-deck > .page-layer--snapshot").first();
+    const oldestRoute = await oldestSnapshot.getAttribute("data-route");
+    await oldestSnapshot.locator(".page-layer-snapshot-header").click();
+    await expect
+      .poll(() => page.evaluate(() => `${location.pathname}${location.search}${location.hash}`))
+      .toBe(oldestRoute);
+    await expect(page.locator("#page-deck > .page-layer--snapshot")).toHaveCount(0);
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent("wds:navigate", { detail: "/?view=preferences" })));
+    await expect(page.locator("#preferences-view")).toBeVisible();
+    await page.locator("#preferences-sign-out").click();
+    await expect(page.getByRole("heading", { name: "A home for your team’s UX" })).toBeVisible();
+    await expect(page.locator("#page-deck > .page-layer--snapshot")).toHaveCount(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     expect(errors).toEqual([]);
   });

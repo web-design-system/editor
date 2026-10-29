@@ -69,11 +69,11 @@ for (const width of [1440, 900, 612, 390]) {
     await expect(page.locator(".brand-mark")).toHaveText("W");
     await expect(page.locator("#workspace-name")).toContainText(/demo\s*\/\s*Button/);
     if (width === 900) {
-      await expect(page.locator(".user-avatar")).toHaveText("Ag");
-      await expect(page.locator(".user-copy")).not.toContainText("private@example.test");
+      await expect(page.locator("#active-page-layer .user-avatar")).toHaveText("Ag");
+      await expect(page.locator("#active-page-layer .user-copy")).not.toContainText("private@example.test");
     } else {
-      await expect(page.locator(".user-avatar img")).toHaveAttribute("src", /^data:image/);
-      await expect(page.locator(".user-copy")).toContainText("studio@example.test");
+      await expect(page.locator("#active-page-layer .user-avatar img")).toHaveAttribute("src", /^data:image/);
+      await expect(page.locator("#active-page-layer .user-copy")).toContainText("studio@example.test");
     }
     if (width < 640) {
       await page.getByRole("button", { name: "Open layers" }).click();

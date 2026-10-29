@@ -1,6 +1,7 @@
 import { createStudio } from "./studio.mjs";
 import { registerEditorFallback } from "./editor-fallback.mjs";
 import { initializeUiComponents } from "./ui-components.mjs";
+import "./page-layer.mjs";
 import {
   initializeNavigation,
   filterRepositories,
@@ -18,9 +19,11 @@ function initializeApp() {
 
   const landing = document.querySelector("#landing");
   const workspace = document.querySelector("#workspace");
+  const pageDeck = document.querySelector("#page-deck");
+  const activePageLayer = document.querySelector("#active-page-layer");
   const teamList = document.querySelector("#team-list");
   const systemGrid = document.querySelector("#system-grid");
-  document.querySelector(".dashboard-main").append(workspace);
+  activePageLayer.append(workspace);
   let codeEditorLoad;
   async function loadCodeEditor() {
     if (!codeEditorLoad) {
@@ -58,7 +61,6 @@ function initializeApp() {
   let routeRenderSequence = 0;
   let editorDirty = false;
   let foundationDirty = false;
-  let restoreLayerFocus = false;
   let themeChoice = "system";
   function escapeHtml(value) {
     return String(value ?? "").replace(
@@ -227,74 +229,191 @@ function initializeApp() {
       ? `${escapeHtml(message)}${signIn ? ' <a class="font-semibold text-blue-400 hover:underline" href="/api/oidc/login">Sign in</a> to continue.' : ""}`
       : "";
   }
-  function updateLayerStack(params) {
-    const stack = document.querySelector("#layer-stack");
-    const systemOrg = params.get("system") || params.get("team");
+  const routeLayers = [];
+  const MAX_VISUAL_LAYER_DEPTH = 4;
+  const unsafeSnapshotTags = new Set([
+    "script",
+    "style",
+    "link",
+    "meta",
+    "base",
+    "iframe",
+    "object",
+    "embed",
+    "audio",
+    "video",
+    "source",
+    "track",
+    "portal",
+    "foreignobject",
+    "animate",
+    "animatemotion",
+    "animatetransform",
+    "set",
+  ]);
+  const unsafeSnapshotAttributes = new Set([
+    "id",
+    "is",
+    "srcdoc",
+    "href",
+    "xlink:href",
+    "src",
+    "srcset",
+    "poster",
+    "data",
+    "action",
+    "formaction",
+    "form",
+    "ping",
+    "background",
+    "manifest",
+    "autofocus",
+  ]);
+  function pageTitleForUrl(value) {
+    const url = new URL(value, location.origin);
+    const params = url.searchParams;
+    const team = params.get("team");
     const repo = params.get("repo");
-    const teamSlug = params.get("teamSlug") || systems.find((item) => item.org === systemOrg)?.team || "all";
-    const system = systems.find((item) => item.org === systemOrg);
-    const project = repo ? projects.find((item) => item.team === systemOrg && item.repo === repo) : null;
-    const entries = [];
-    const add = (label, href, icon, current = false) => entries.push({ label, href, icon, current });
-    add("Teams", "/", "W", !systemOrg && teamSlug === "all");
-    if (teamSlug !== "all") {
-      add(teamSlug, `/?teamSlug=${encodeURIComponent(teamSlug)}`, "T", !systemOrg);
+    if (params.get("view") === "preferences") {
+      return "Preferences";
     }
+    if (team && repo) {
+      return projects.find((item) => item.team === team && item.repo === repo)?.name || repo;
+    }
+    const system = params.get("system");
     if (system) {
-      add(system.name, `/?system=${encodeURIComponent(system.org)}`, "◇", Boolean(systemOrg) && !repo);
-      if (repo && project?.type === "component") {
-        add("Components", `/?system=${encodeURIComponent(system.org)}`, "▱");
+      return systems.find((item) => item.org === system)?.name || system;
+    }
+    return params.get("teamSlug") || "Teams";
+  }
+  function cloneSnapshotNode(source) {
+    if (source.nodeType === Node.TEXT_NODE) {
+      return document.createTextNode(source.textContent || "");
+    }
+    if (source.nodeType !== Node.ELEMENT_NODE) {
+      return null;
+    }
+    const tagName = source.localName;
+    const normalizedTagName = tagName.toLowerCase();
+    if (unsafeSnapshotTags.has(normalizedTagName)) {
+      return null;
+    }
+    if (source instanceof HTMLSlotElement) {
+      const slotChildren = source.assignedNodes({ flatten: true });
+      const fragment = document.createDocumentFragment();
+      for (const child of slotChildren.length ? slotChildren : source.childNodes) {
+        const childClone = cloneSnapshotNode(child);
+        if (childClone) {
+          fragment.append(childClone);
+        }
+      }
+      return fragment;
+    }
+    const isCustomElement = normalizedTagName.includes("-");
+    const cloneTag = isCustomElement ? "div" : tagName;
+    const clone = document.createElementNS(source.namespaceURI, cloneTag);
+    for (const attribute of source.attributes) {
+      const attributeName = attribute.name.toLowerCase();
+      if (
+        unsafeSnapshotAttributes.has(attributeName) ||
+        /^on/i.test(attributeName) ||
+        (attributeName === "style" && /url\s*\(/i.test(attribute.value))
+      ) {
+        continue;
+      }
+      clone.setAttribute(attribute.name, attribute.value);
+    }
+    if (source instanceof HTMLInputElement) {
+      clone.setAttribute("value", source.value);
+      if (source.checked) {
+        clone.setAttribute("checked", "");
       }
     }
-    if (repo) {
-      add(project?.name || repo, `/?team=${encodeURIComponent(systemOrg)}&repo=${encodeURIComponent(repo)}`, "✎", true);
+    const children = source.shadowRoot ? source.shadowRoot.childNodes : source.childNodes;
+    if (source instanceof HTMLTextAreaElement) {
+      clone.textContent = source.value;
+    } else {
+      for (const child of children) {
+        const childClone = cloneSnapshotNode(child);
+        if (childClone) {
+          clone.append(childClone);
+        }
+      }
     }
-    const visible = params.get("view") !== "preferences" && authenticatedUser;
-    stack.hidden = !visible || entries.length < 2;
-    if (stack.hidden) {
-      stack.replaceChildren();
+    if (source instanceof HTMLOptionElement && source.selected) {
+      clone.setAttribute("selected", "");
+    }
+    return clone;
+  }
+  function sanitizeLayerPreview(preview) {
+    preview.setAttribute("aria-hidden", "true");
+    preview.inert = true;
+    preview.querySelectorAll("[id]").forEach((element) => element.removeAttribute("id"));
+    preview.querySelectorAll("a, button, input, select, textarea, summary, [tabindex]").forEach((element) => {
+      element.removeAttribute("href");
+      element.setAttribute("tabindex", "-1");
+      if ("disabled" in element) {
+        element.disabled = true;
+      }
+    });
+  }
+  function captureActivePage(url) {
+    if (!authenticatedUser || !activePageLayer || !activePageLayer.childElementCount) {
       return;
     }
-    const exit = stack.childElementCount ? stack.cloneNode(true) : null;
-    if (exit) {
-      exit.removeAttribute("id");
-      exit.className = "layer-stack-exit";
-      exit.setAttribute("aria-hidden", "true");
-      exit.inert = true;
-    }
-    const fragment = document.createDocumentFragment();
-    entries.forEach((entry, index) => {
-      const link = document.createElement("a");
-      link.href = entry.href;
-      link.style.setProperty("--layer-step", `${index * 8}px`);
-      link.style.setProperty("--layer-depth", `${index}`);
-      link.style.setProperty("--layer-order", `${index + 1}`);
-      link.className = entry.current ? "layer-current" : "";
-      if (entry.current) {
-        link.setAttribute("aria-current", "page");
+    const layer = document.createElement("wds-page-layer");
+    layer.className = "page-layer page-layer--snapshot page-layer--entering";
+    layer.dataset.route = url;
+    const title = pageTitleForUrl(url);
+    const header = document.createElement("a");
+    header.className = "page-layer-snapshot-header";
+    header.href = url;
+    header.setAttribute("aria-label", `Return to ${title}`);
+    header.textContent = title;
+    const preview = document.createElement("div");
+    preview.className = "page-layer-snapshot-content";
+    for (const child of activePageLayer.childNodes) {
+      const childClone = cloneSnapshotNode(child);
+      if (childClone) {
+        preview.append(childClone);
       }
-      link.setAttribute("aria-label", `${entry.current ? "Current layer: " : "Go back to "}${entry.label}`);
-      const icon = document.createElement("span");
-      icon.className = "layer-icon";
-      icon.setAttribute("aria-hidden", "true");
-      icon.textContent = entry.icon;
-      const label = document.createElement("span");
-      label.className = "layer-label";
-      label.textContent = entry.label;
-      link.append(icon, label);
-      fragment.append(link);
-    });
-    stack.replaceChildren(fragment);
-    stack.classList.remove("layer-stack-enter");
-    void stack.offsetWidth;
-    stack.classList.add("layer-stack-enter");
-    if (restoreLayerFocus) {
-      stack.querySelector('a[aria-current="page"]')?.focus({ preventScroll: true });
-      restoreLayerFocus = false;
     }
-    if (exit) {
-      stack.append(exit);
-      window.setTimeout(() => exit.remove(), 180);
+    sanitizeLayerPreview(preview);
+    layer.append(header, preview);
+    layer.addEventListener("animationend", () => layer.classList.remove("page-layer--entering"), { once: true });
+    routeLayers.push({ url, element: layer });
+  }
+  function updatePageDeck() {
+    pageDeck.style.setProperty("--layer-count", `${routeLayers.length}`);
+    routeLayers.forEach(({ element }, index) => {
+      element.style.setProperty("--layer-index", `${index}`);
+      element.style.setProperty("--layer-count", `${routeLayers.length}`);
+      element.style.setProperty("--layer-depth", `${Math.min(routeLayers.length - index, MAX_VISUAL_LAYER_DEPTH)}`);
+      element.style.zIndex = `${index + 1}`;
+    });
+    activePageLayer.style.setProperty("--layer-count", `${routeLayers.length}`);
+    activePageLayer.tabIndex = -1;
+    activePageLayer.setAttribute("aria-label", `Current page: ${pageTitleForUrl(location.href)}`);
+    const visibleLayers = new Set(routeLayers.map(({ element }) => element));
+    for (const child of [...pageDeck.children]) {
+      if (child !== activePageLayer && !visibleLayers.has(child)) {
+        if (!child.classList.contains("page-layer--exiting")) {
+          child.classList.add("page-layer--exiting");
+          child.inert = true;
+          child.setAttribute("aria-hidden", "true");
+          window.setTimeout(() => child.remove(), 180);
+        }
+      }
+    }
+    if (pageDeck.firstElementChild !== activePageLayer) {
+      pageDeck.prepend(activePageLayer);
+    }
+    let insertionPoint = activePageLayer.nextElementSibling;
+    for (const { element } of routeLayers) {
+      if (insertionPoint !== element) {
+        pageDeck.insertBefore(element, insertionPoint);
+      }
+      insertionPoint = element.nextElementSibling;
     }
   }
   function showGuestWelcome(message, footnote) {
@@ -312,7 +431,9 @@ function initializeApp() {
     document.querySelector("#welcome-footnote").textContent = footnote;
     document.querySelector("#welcome-footnote").hidden = !footnote;
     document.querySelector("#app-topbar").hidden = true;
-    document.querySelector("#layer-stack").hidden = true;
+    routeLayers.length = 0;
+    pageDeck.querySelectorAll(":scope > .page-layer--snapshot").forEach((layer) => layer.remove());
+    updatePageDeck();
   }
   function createDataCard({ href, title, subtitle, count, meta, iconText = "▱", kind = "system" }) {
     const card = document.createElement("a");
@@ -425,7 +546,7 @@ function initializeApp() {
       "Teams will appear here when you have access to a design system.",
     );
   }
-  function renderSystems() {
+  async function renderSystems(renderSequence) {
     const dashboardContent = document.querySelector("#dashboard-content");
     const toolbar = document.querySelector(".list-toolbar");
     if (toolbar && toolbar.parentElement !== systemGrid.parentElement) {
@@ -452,7 +573,7 @@ function initializeApp() {
     if (org) {
       const system = systems.find((item) => (item.org || item.team) === org);
       if (system) {
-        renderSystemOverview(system, systemGrid);
+        await renderSystemOverview(system, systemGrid, () => renderSequence === routeRenderSequence);
       } else {
         systemGrid.innerHTML =
           '<div class="empty rounded border border-dashed border-zinc-700 bg-zinc-900/50 p-5 text-left text-xs text-zinc-400">Design system not found. <a class="font-semibold text-blue-400 hover:underline" href="/">Return to workspace →</a></div>';
@@ -742,7 +863,7 @@ function initializeApp() {
     }
   });
   let lastAcceptedUrl = `${location.pathname}${location.search}${location.hash}`;
-  function navigateTo(value, { replace = false } = {}) {
+  function navigateTo(value, { replace = false, fromLayer = false } = {}) {
     const target = value instanceof URL ? value : new URL(value, location.origin);
     const currentParams = new URLSearchParams(location.search);
     const nextParams = target.searchParams;
@@ -757,6 +878,29 @@ function initializeApp() {
       return false;
     }
     const nextUrl = `${target.pathname}${target.search}${target.hash}`;
+    const currentUrl = `${location.pathname}${location.search}${location.hash}`;
+    if (nextUrl === currentUrl) {
+      return true;
+    }
+    if (replace) {
+      routeLayers.length = 0;
+      pageDeck.querySelectorAll(":scope > .page-layer--snapshot").forEach((layer) => layer.remove());
+    } else {
+      const targetLayer = routeLayers.findIndex((layer) => layer.url === nextUrl);
+      if (targetLayer >= 0) {
+        routeLayers.splice(targetLayer);
+      } else {
+        captureActivePage(currentUrl);
+      }
+    }
+    updatePageDeck();
+    if (fromLayer) {
+      activePageLayer.focus({ preventScroll: true });
+    }
+    activePageLayer.classList.remove("page-layer--transition-in");
+    void activePageLayer.offsetWidth;
+    activePageLayer.classList.add("page-layer--transition-in");
+    window.setTimeout(() => activePageLayer.classList.remove("page-layer--transition-in"), 260);
     if (replace) {
       history.replaceState(null, "", nextUrl);
     } else {
@@ -772,7 +916,7 @@ function initializeApp() {
       return;
     }
     const params = new URLSearchParams(location.search);
-    updateLayerStack(params);
+    updatePageDeck();
     const preferences = params.get("view") === "preferences";
     const team = params.get("team");
     const repo = params.get("repo");
@@ -782,6 +926,12 @@ function initializeApp() {
     const firstSystem = document.querySelector("#first-system-empty");
     const preferencesView = document.querySelector("#preferences-view");
     const topbarName = document.querySelector("#workspace-name");
+    const createTeamTopbar = document.querySelector("#create-team-topbar");
+    createTeamTopbar.hidden =
+      preferences ||
+      Boolean(system) ||
+      Boolean(team && repo) ||
+      (params.has("teamSlug") && params.get("teamSlug") !== "all");
     if (team && repo) {
       workspace.classList.remove("hidden", "workspace-exit");
       workspace.classList.add("workspace-enter");
@@ -839,7 +989,10 @@ function initializeApp() {
       selectedTeam = systems.find((item) => item.org === system)?.team || selectedTeam;
     }
     renderTeams();
-    renderSystems();
+    await renderSystems(renderSequence);
+    if (renderSequence !== routeRenderSequence) {
+      return;
+    }
     const selectedSystems = systems.filter((item) => item.team === selectedTeam);
     if (selectedTeam === "all" && !system && teams.length === 0) {
       firstTeam.hidden = false;
@@ -880,14 +1033,12 @@ function initializeApp() {
     if (target.search === location.search && target.hash) {
       return;
     }
-    if (anchor.closest("#layer-stack") && event.detail === 0) {
-      restoreLayerFocus = true;
-    }
     event.preventDefault();
-    navigateTo(target);
+    navigateTo(target, { fromLayer: Boolean(anchor.closest(".page-layer--snapshot")) });
   });
   window.addEventListener("wds:navigate", (event) => navigateTo(event.detail));
   window.addEventListener("popstate", () => {
+    const previousUrl = lastAcceptedUrl;
     const params = new URLSearchParams(location.search);
     const team = params.get("team");
     const repo = params.get("repo");
@@ -899,6 +1050,13 @@ function initializeApp() {
       }
     }
     lastAcceptedUrl = `${location.pathname}${location.search}${location.hash}`;
+    const targetLayer = routeLayers.findIndex((layer) => layer.url === lastAcceptedUrl);
+    if (targetLayer >= 0) {
+      routeLayers.splice(targetLayer);
+    } else {
+      captureActivePage(previousUrl);
+    }
+    updatePageDeck();
     void renderCurrentRoute();
   });
   window.addEventListener("beforeunload", (event) => {

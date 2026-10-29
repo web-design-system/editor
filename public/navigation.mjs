@@ -75,7 +75,7 @@ function renderSystemSidebar(system, org, projects) {
   }`;
 }
 
-export async function renderSystemOverview(system, grid) {
+export async function renderSystemOverview(system, grid, isCurrent = () => true) {
   grid.before(document.querySelector(".list-toolbar"));
   const org = system.org || system.team;
   document.title = `${system.name} · WDS`;
@@ -193,7 +193,7 @@ export async function renderSystemOverview(system, grid) {
       `/static/${encodeURIComponent(org)}/${encodeURIComponent(system.repo)}/latest/tokens.css`,
       { method: "HEAD", cache: "no-store" },
     );
-    if (!publication.isConnected) {
+    if (!publication.isConnected || !isCurrent()) {
       return;
     }
     publication.innerHTML = published.ok ? '<span class="status-dot"></span> Published' : "Not published";
@@ -201,8 +201,11 @@ export async function renderSystemOverview(system, grid) {
     setup.hidden = published.ok;
     if (!published.ok) {
       const response = await fetch("/api/projects");
-      if (response.ok) {
+      if (response.ok && isCurrent() && publication.isConnected) {
         const projects = (await response.json()).filter((item) => item.team === org && item.type === "component");
+        if (!isCurrent() || !publication.isConnected) {
+          return;
+        }
         renderSystemSidebar(system, org, projects);
       }
       return;
@@ -212,7 +215,7 @@ export async function renderSystemOverview(system, grid) {
       throw new Error("Could not load component repositories. Reload to try again.");
     }
     const projects = (await response.json()).filter((item) => item.team === org && item.type === "component");
-    if (!components.isConnected) {
+    if (!components.isConnected || !isCurrent()) {
       return;
     }
     renderSystemSidebar(system, org, projects);
@@ -267,7 +270,7 @@ export async function renderSystemOverview(system, grid) {
     }
     filterRepositories();
   } catch {
-    if (!publication.isConnected) {
+    if (!publication.isConnected || !isCurrent()) {
       return;
     }
     publication.textContent = "Could not check";

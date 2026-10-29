@@ -363,6 +363,8 @@ function initializeApp() {
     const layer = document.createElement("wds-page-layer");
     layer.className = "page-layer page-layer--snapshot page-layer--entering";
     layer.dataset.route = url;
+    layer.inert = true;
+    layer.setAttribute("aria-hidden", "true");
     const title = pageTitleForUrl(url);
     const header = document.createElement("a");
     header.className = "page-layer-snapshot-header";
@@ -384,14 +386,11 @@ function initializeApp() {
   }
   function updatePageDeck() {
     const layerCount = routeLayers.length + 1;
-    pageDeck.style.setProperty("--layer-count", `${layerCount}`);
     routeLayers.forEach(({ element }, index) => {
       element.style.setProperty("--layer", `${index + 1}`);
-      element.style.setProperty("--layer-count", `${layerCount}`);
       element.style.zIndex = `${index + 1}`;
     });
     activePageLayer.style.setProperty("--layer", `${layerCount}`);
-    activePageLayer.style.setProperty("--layer-count", `${layerCount}`);
     activePageLayer.style.zIndex = `${layerCount}`;
     activePageLayer.tabIndex = -1;
     activePageLayer.setAttribute("aria-label", `Current page: ${pageTitleForUrl(location.href)}`);
@@ -892,6 +891,12 @@ function initializeApp() {
     }
   });
   let lastAcceptedUrl = `${location.pathname}${location.search}${location.hash}`;
+  const historyIndexKey = "__wdsHistoryIndex";
+  const initialHistoryState = history.state && typeof history.state === "object" ? history.state : {};
+  let currentHistoryIndex = Number.isSafeInteger(initialHistoryState[historyIndexKey])
+    ? initialHistoryState[historyIndexKey]
+    : 0;
+  history.replaceState({ ...initialHistoryState, [historyIndexKey]: currentHistoryIndex }, "", location.href);
   function navigateTo(value, { replace = false, fromLayer = false } = {}) {
     const target = value instanceof URL ? value : new URL(value, location.origin);
     const currentParams = new URLSearchParams(location.search);
@@ -931,9 +936,10 @@ function initializeApp() {
     activePageLayer.classList.add("page-layer--transition-in");
     window.setTimeout(() => activePageLayer.classList.remove("page-layer--transition-in"), 260);
     if (replace) {
-      history.replaceState(null, "", nextUrl);
+      history.replaceState({ [historyIndexKey]: currentHistoryIndex }, "", nextUrl);
     } else {
-      history.pushState(null, "", nextUrl);
+      currentHistoryIndex += 1;
+      history.pushState({ [historyIndexKey]: currentHistoryIndex }, "", nextUrl);
     }
     lastAcceptedUrl = nextUrl;
     void renderCurrentRoute();
@@ -1065,17 +1071,29 @@ function initializeApp() {
   window.addEventListener("wds:navigate", (event) => navigateTo(event.detail));
   window.addEventListener("popstate", () => {
     const previousUrl = lastAcceptedUrl;
+    const poppedHistoryIndex = history.state?.[historyIndexKey];
+    const historyDelta = Number.isSafeInteger(poppedHistoryIndex) ? poppedHistoryIndex - currentHistoryIndex : 0;
+    const nextUrl = `${location.pathname}${location.search}${location.hash}`;
+    if (nextUrl === lastAcceptedUrl) {
+      currentHistoryIndex = Number.isSafeInteger(poppedHistoryIndex) ? poppedHistoryIndex : currentHistoryIndex;
+      return;
+    }
     const params = new URLSearchParams(location.search);
     const team = params.get("team");
     const repo = params.get("repo");
     const nextProject = team && repo ? `${team}/${repo}` : "";
     if ((editorDirty || foundationDirty) && activeWorkbench && nextProject !== activeWorkbench) {
       if (!window.confirm("You have unsaved component changes. Leave this editor?")) {
-        history.pushState(null, "", lastAcceptedUrl);
+        if (historyDelta) {
+          history.go(-historyDelta);
+        } else {
+          history.replaceState({ [historyIndexKey]: currentHistoryIndex }, "", lastAcceptedUrl);
+        }
         return;
       }
     }
-    lastAcceptedUrl = `${location.pathname}${location.search}${location.hash}`;
+    currentHistoryIndex = Number.isSafeInteger(poppedHistoryIndex) ? poppedHistoryIndex : currentHistoryIndex;
+    lastAcceptedUrl = nextUrl;
     const targetLayer = routeLayers.findIndex((layer) => layer.url === lastAcceptedUrl);
     if (targetLayer >= 0) {
       routeLayers.splice(targetLayer);

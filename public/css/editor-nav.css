@@ -116,10 +116,10 @@ wds-page-deck,
 .page-layer {
   box-sizing: border-box;
   position: absolute;
-  top: calc(var(--layer, 1) * 2rem);
-  right: calc(1rem + (var(--layer-count, 1) - var(--layer, 1)) * 1rem);
+  top: 2rem;
+  right: 1rem;
   bottom: 0;
-  left: calc(var(--layer, 1) * 1rem);
+  left: 1rem;
   z-index: var(--layer, 1);
   display: flex;
   flex-direction: column;
@@ -155,12 +155,10 @@ wds-page-deck,
 }
 
 .page-layer--snapshot {
+  right: 0;
+  left: 0;
   overflow: hidden;
-  transition:
-    top 220ms ease,
-    left 220ms ease,
-    right 220ms ease,
-    box-shadow 220ms ease;
+  transform: translateX(-100%);
 }
 
 .page-layer--snapshot.page-layer--entering {
@@ -246,10 +244,10 @@ wds-page-deck,
 
 @keyframes page-layer-snapshot-enter {
   from {
-    opacity: 0;
+    transform: translateX(0);
   }
   to {
-    opacity: 1;
+    transform: translateX(-100%);
   }
 }
 
@@ -269,7 +267,7 @@ wds-page-deck,
     animation-duration: 1ms;
   }
   .page-layer--snapshot {
-    transition-duration: 1ms;
+    animation-duration: 1ms;
   }
 }
 

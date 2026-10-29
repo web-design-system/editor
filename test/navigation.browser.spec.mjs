@@ -245,8 +245,10 @@ for (const width of [1440, 900, 390, 360]) {
     await expect(page.locator("#dashboard-title")).toHaveText("Acme UI");
     await expect(page.locator("#workspace-name")).toBeEmpty();
     await expect(page.locator("#page-deck > .page-layer--snapshot")).toHaveCount(1);
-    const previousLayer = page.getByRole("link", { name: "Return to acme" });
-    await expect(previousLayer).toBeVisible();
+    const previousLayer = page.locator('.page-layer--snapshot[data-route*="teamSlug=acme"]');
+    await expect(previousLayer).toHaveCount(1);
+    await expect(previousLayer).toHaveAttribute("aria-hidden", "true");
+    await expect(previousLayer).toHaveJSProperty("inert", true);
     await expect(page.locator(".page-layer--snapshot .page-layer-snapshot-content .system-card")).toHaveCount(2);
     await expect(page.locator("#active-page-layer")).toHaveCSS("box-shadow", /rgba/);
     const mainLayout = await page.evaluate(() => {
@@ -272,42 +274,42 @@ for (const width of [1440, 900, 390, 360]) {
     ]);
     expect(mainLayout.at(-1).width).toBe(width);
     expect(mainLayout.at(-1).height).toBe(676);
+    await expect(page.locator(".page-layer--snapshot")).not.toHaveClass(/page-layer--entering/);
     const cardGeometry = await page.evaluate(() => {
       const active = document.querySelector("#active-page-layer").getBoundingClientRect();
       const snapshot = document.querySelector(".page-layer--snapshot").getBoundingClientRect();
       return {
         activeStyle: {
           layer: getComputedStyle(document.querySelector("#active-page-layer")).getPropertyValue("--layer"),
-          layerCount: getComputedStyle(document.querySelector("#active-page-layer")).getPropertyValue("--layer-count"),
           top: getComputedStyle(document.querySelector("#active-page-layer")).top,
           left: getComputedStyle(document.querySelector("#active-page-layer")).left,
           right: getComputedStyle(document.querySelector("#active-page-layer")).right,
+          transform: getComputedStyle(document.querySelector("#active-page-layer")).transform,
         },
         snapshotStyle: {
           layer: getComputedStyle(document.querySelector(".page-layer--snapshot")).getPropertyValue("--layer"),
-          layerCount: getComputedStyle(document.querySelector(".page-layer--snapshot")).getPropertyValue(
-            "--layer-count",
-          ),
           top: getComputedStyle(document.querySelector(".page-layer--snapshot")).top,
           left: getComputedStyle(document.querySelector(".page-layer--snapshot")).left,
           right: getComputedStyle(document.querySelector(".page-layer--snapshot")).right,
+          transform: getComputedStyle(document.querySelector(".page-layer--snapshot")).transform,
         },
         activeTop: active.top,
         activeBottom: active.bottom,
         snapshotTop: snapshot.top,
         snapshotBottom: snapshot.bottom,
+        snapshotRight: snapshot.right,
+        deckLeft: document.querySelector("#page-deck").getBoundingClientRect().left,
+        snapshotWidth: snapshot.width,
       };
     });
-    expect(cardGeometry.activeStyle).toEqual({ layer: "2", layerCount: "2", top: "64px", left: "32px", right: "16px" });
-    expect(cardGeometry.snapshotStyle).toEqual({
-      layer: "1",
-      layerCount: "2",
-      top: "32px",
-      left: "16px",
-      right: "32px",
-    });
-    expect(cardGeometry.activeTop).toBeGreaterThan(cardGeometry.snapshotTop);
-    expect(cardGeometry.activeTop).toBeLessThan(cardGeometry.snapshotBottom);
+    expect(cardGeometry.activeStyle).toMatchObject({ layer: "2", top: "32px", left: "16px", right: "16px" });
+    expect(cardGeometry.snapshotStyle).toMatchObject({ layer: "1", top: "32px", left: "0px", right: "0px" });
+    expect(cardGeometry.activeTop).toBe(cardGeometry.snapshotTop);
+    expect(cardGeometry.snapshotRight).toBeLessThanOrEqual(cardGeometry.deckLeft);
+    const snapshotTranslation = Number(
+      cardGeometry.snapshotStyle.transform.match(/matrix\([^,]+,[^,]+,[^,]+,[^,]+,([^,]+)/)?.[1],
+    );
+    expect(snapshotTranslation).toBeCloseTo(-cardGeometry.snapshotWidth, 0);
     const accountPanel = await page.locator("#sidebar-user-card").boundingBox();
     expect(accountPanel.x + accountPanel.width).toBeCloseTo(width - 16, 0);
     expect(accountPanel.y + accountPanel.height).toBeLessThan(cardGeometry.snapshotTop);
@@ -315,18 +317,17 @@ for (const width of [1440, 900, 390, 360]) {
     await expect(page.getByText("Workbench", { exact: true })).toHaveCount(0);
     await expect(page.locator(".page-layer--snapshot [id]")).toHaveCount(0);
     await page.screenshot({ path: test.info().outputPath(`deck-${width}.png`), fullPage: true });
-    await previousLayer.click();
+    await page.goBack();
     await expect(page).toHaveURL(/teamSlug=acme$/);
     await expect(page.locator("#page-deck > .page-layer--snapshot")).toHaveCount(0);
-    await expect(page.locator("#active-page-layer")).toBeFocused();
-    await page.locator("#system-grid .system-card").filter({ hasText: "Acme UI" }).click();
+    await expect(page.locator("#teams-title")).toHaveText("Design systems");
+    await page.goForward();
+    await expect(page).toHaveURL(/teamSlug=acme&system=acme-ui$/);
     await expect(page.locator("#dashboard-title")).toHaveText("Acme UI");
-    const backToTeam = page.getByRole("link", { name: "Return to acme" });
-    await backToTeam.focus();
-    await expect(backToTeam).toBeFocused();
-    await backToTeam.press("Enter");
+    await expect(page.locator("#page-deck > .page-layer--snapshot")).toHaveCount(1);
+    await page.goBack();
     await expect(page).toHaveURL(/teamSlug=acme$/);
-    await expect(page.locator("#active-page-layer")).toBeFocused();
+    await expect(page.locator("#page-deck > .page-layer--snapshot")).toHaveCount(0);
     await page.locator("#system-grid .system-card").filter({ hasText: "Acme UI" }).click();
     await expect(page.locator("#dashboard-title")).toHaveText("Acme UI");
     expect(documentNavigations).toBe(2);
@@ -356,11 +357,16 @@ for (const width of [1440, 900, 390, 360]) {
     await expect(page.locator(".nav-context[href]")).toHaveCount(0);
     await expect(page.locator("#active-page-layer #project-content")).toBeVisible();
     await page.screenshot({ path: test.info().outputPath(`editor-deck-${width}.png`), fullPage: true });
-    page.once("dialog", (dialog) => dialog.accept());
-    await page.getByRole("link", { name: "Return to acme", exact: true }).click();
+    const acceptHistoryDialogs = (dialog) => dialog.accept();
+    page.on("dialog", acceptHistoryDialogs);
+    await page.goBack();
+    await expect(page).toHaveURL(/teamSlug=acme&system=acme-ui$/);
+    await expect(page.locator("#page-deck > .page-layer--snapshot")).toHaveCount(1);
+    await page.goBack();
     await expect(page).toHaveURL(/teamSlug=acme$/);
     await expect(page.locator("#page-deck > .page-layer--snapshot")).toHaveCount(0);
-    await expect(page.locator("#active-page-layer")).toBeFocused();
+    await expect(page.locator("#teams-title")).toHaveText("Design systems");
+    page.off("dialog", acceptHistoryDialogs);
     await page.locator("#system-grid .system-card").filter({ hasText: "Acme UI" }).click();
     await expect(page.locator(".setup-action")).toBeVisible();
     await page.locator(".setup-action").click();
@@ -392,6 +398,12 @@ for (const width of [1440, 900, 390, 360]) {
       });
     }
     await expect(page.getByRole("button", { name: "Save Foundation" })).toBeEnabled();
+    page.once("dialog", (dialog) => dialog.dismiss());
+    await page.goBack();
+    await expect(page).toHaveURL(/team=acme-ui&repo=foundation/);
+    await expect(page.getByRole("button", { name: "Save Foundation" })).toBeEnabled();
+    await expect(page.locator("#page-deck > .page-layer--snapshot")).toHaveCount(2);
+    await expect(page.locator("#active-page-layer #workspace")).toBeVisible();
     await page.getByRole("button", { name: "tokens.css", exact: true }).click();
     await page.getByRole("button", { name: "Save Foundation" }).click();
     await expect(page.locator("#token-status")).toBeEmpty();
@@ -522,13 +534,22 @@ for (const width of [1440, 900, 390, 360]) {
     }
     await expect(page.locator("#page-deck > .page-layer--exiting")).toHaveCount(0);
     await expect(snapshots).toHaveCount(retainedPageCount + 5);
-    const oldestSnapshot = page.locator("#page-deck > .page-layer--snapshot").first();
-    const oldestRoute = await oldestSnapshot.getAttribute("data-route");
-    await oldestSnapshot.locator(".page-layer-snapshot-header").click();
-    await expect
-      .poll(() => page.evaluate(() => `${location.pathname}${location.search}${location.hash}`))
-      .toBe(oldestRoute);
-    await expect(page.locator("#page-deck > .page-layer--snapshot")).toHaveCount(0);
+    for (let index = 3; index >= 0; index -= 1) {
+      await page.goBack();
+      await expect(page).toHaveURL(new RegExp(`layer=${index}$`));
+      await expect(page.locator("#preferences-view")).toBeVisible();
+      await expect(snapshots).toHaveCount(retainedPageCount + index + 1);
+    }
+    await page.goBack();
+    await expect(page).toHaveURL(/view=preferences$/);
+    await expect(page.locator("#preferences-view")).toBeVisible();
+    await expect(snapshots).toHaveCount(retainedPageCount);
+    for (let index = 0; index < 5; index += 1) {
+      await page.goForward();
+      await expect(page).toHaveURL(new RegExp(`layer=${index}$`));
+      await expect(page.locator("#preferences-view")).toBeVisible();
+      await expect(snapshots).toHaveCount(retainedPageCount + index + 1);
+    }
     await page.evaluate(() => window.dispatchEvent(new CustomEvent("wds:navigate", { detail: "/?view=preferences" })));
     await expect(page.locator("#preferences-view")).toBeVisible();
     await page.locator("#preferences-sign-out").click();

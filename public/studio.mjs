@@ -379,7 +379,6 @@ export function createStudio(area, files, onEdit) {
     "max-[760px]:overflow-auto",
   );
   document.querySelector("#app-topbar")?.classList.add("h-14", "gap-4", "bg-zinc-900", "px-4");
-  document.querySelector(".brand-mark")?.classList.add("size-8", "rounded");
   document.querySelector(".workspace-name")?.classList.add("mr-auto", "text-zinc-200");
   workArea.classList.remove("p-6", "min-h-[calc(100dvh-56px)]");
   workArea.classList.add("h-[calc(100dvh-56px)]", "min-h-0", "bg-zinc-950", "p-0", "max-[760px]:h-auto");
@@ -445,29 +444,22 @@ export function createStudio(area, files, onEdit) {
       "py-2",
       "max-[1100px]:static",
     );
-  area.querySelector(".studio-heading > div:first-child").classList.add("min-w-0", "max-[1100px]:block");
+  area.querySelector(".studio-heading > div:first-child").classList.add("min-w-0");
   area
     .querySelector(".studio-heading")
-    .classList.add(
-      "min-[1101px]:absolute",
-      "min-[1101px]:right-20",
-      "min-[1101px]:top-0",
-      "min-[1101px]:z-10",
-      "min-[1101px]:h-14",
-      "min-[1101px]:border-0",
-      "min-[1101px]:bg-transparent",
-      "min-[1101px]:p-0",
-      "max-[760px]:h-auto",
-      "max-[760px]:items-stretch",
-      "max-[760px]:flex-col",
-    );
-  area.querySelector(".studio-heading > div:first-child").classList.add("min-[1101px]:hidden");
+    .classList.add("max-[760px]:h-auto", "max-[760px]:items-center", "max-[760px]:flex-row", "max-[760px]:flex-wrap");
+  area.querySelector(".studio-heading > div:first-child").classList.add("hidden");
   area.querySelector(".studio-heading h1").classList.add("text-sm", "font-medium", "text-zinc-50", "tracking-normal");
   area.querySelectorAll(".studio-heading p").forEach((paragraph) => paragraph.classList.add("hidden"));
-  area.querySelector(".studio-actions").prepend(tabs);
+  const parentRouteLink = area.querySelector(".studio-kicker a");
+  parentRouteLink?.replaceWith(document.createTextNode(parentRouteLink.textContent));
+  area.querySelector(".studio-heading").classList.add("w-full");
+  area.querySelector(".studio-heading").prepend(tabs);
   code.querySelector("code-editor").classList.add("h-full", "min-h-0");
   code.querySelector("code-editor").style.height = "100%";
-  area.querySelector(".studio-actions").classList.add("gap-2", "max-[760px]:justify-start", "max-[760px]:flex-wrap");
+  area
+    .querySelector(".studio-actions")
+    .classList.add("gap-2", "justify-end", "max-[760px]:justify-end", "max-[760px]:flex-wrap");
   nav.classList.add("min-h-0", "overflow-auto", "bg-zinc-900", "p-0", "gap-0", "max-[760px]:max-h-[220px]");
   inspector.classList.add(
     "min-h-0",
@@ -487,6 +479,7 @@ export function createStudio(area, files, onEdit) {
   nav.setAttribute("aria-label", "Layers");
   area.querySelector(".inspector-drawer > summary").classList.add("px-4", "py-3", "text-zinc-400", "font-medium");
   tabs.classList.add("flex", "shrink-0", "border-b", "border-zinc-800");
+  tabs.classList.add("border-0");
   tabs.querySelectorAll("button").forEach((button) => {
     button.classList.add(
       "flex-1",

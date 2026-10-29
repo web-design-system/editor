@@ -436,11 +436,27 @@ function initializeApp() {
     pageDeck.querySelectorAll(":scope > .page-layer--snapshot").forEach((layer) => layer.remove());
     updatePageDeck();
   }
-  function createDataCard({ href, title, subtitle, count, meta, iconText = "▱", kind = "system" }) {
+  function createDataCard({ href, title, subtitle, count, memberCount, meta, iconText = "▱", kind = "system" }) {
     const card = document.createElement("a");
     card.href = href;
     card.className = `${kind}-card group flex min-h-40 flex-col rounded-2xl border border-zinc-800 bg-zinc-900 p-5 text-left transition hover:-translate-y-0.5 hover:border-blue-400 hover:bg-zinc-800`;
     card.dataset.search = `${title} ${subtitle}`.toLowerCase();
+    if (kind === "team") {
+      const heading = document.createElement("h2");
+      heading.className = "m-0 text-base font-semibold text-zinc-100";
+      heading.textContent = title;
+      const metadata = document.createElement("p");
+      metadata.className = "mt-2 overflow-hidden text-ellipsis whitespace-nowrap text-xs text-zinc-400";
+      const knownMemberCount = Number.isSafeInteger(memberCount) && memberCount >= 0 ? memberCount : null;
+      const memberSummary =
+        knownMemberCount === null
+          ? "Unknown members"
+          : `${knownMemberCount} ${knownMemberCount === 1 ? "member" : "members"}`;
+      metadata.textContent = `${memberSummary} · ${subtitle}`;
+      card.className = `${kind}-card group flex min-h-0 flex-col rounded-xl border border-zinc-800 bg-zinc-900 p-3 text-left transition hover:border-blue-400 hover:bg-zinc-800`;
+      card.append(heading, metadata);
+      return card;
+    }
     const icon = document.createElement("span");
     icon.className =
       "mb-5 grid size-10 place-items-center rounded-xl border border-blue-500/20 bg-blue-500/10 text-xl text-blue-300";
@@ -467,7 +483,7 @@ function initializeApp() {
     const title = document.querySelector("#dashboard-title");
     title.textContent = "Your teams";
     title.hidden = false;
-    document.querySelector("#dashboard-breadcrumbs").hidden = true;
+    document.querySelector('.dashboard-heading [data-create="system"]').hidden = true;
     document.querySelector("#teams-title").textContent = "Teams";
     document.querySelector("#systems-title").textContent = "Teams";
     document.querySelector("#system-filter").hidden = true;
@@ -479,12 +495,22 @@ function initializeApp() {
       (team) => {
         const slug = typeof team === "string" ? team : team.slug;
         const count = systems.filter((system) => system.team === slug).length;
+        const memberCount =
+          typeof team === "string"
+            ? null
+            : Number.isSafeInteger(team.memberCount) && team.memberCount >= 0
+              ? team.memberCount
+              : Number.isSafeInteger(team.member_count) && team.member_count >= 0
+                ? team.member_count
+                : Array.isArray(team.members)
+                  ? team.members.length
+                  : null;
         return createDataCard({
           href: `/?teamSlug=${encodeURIComponent(slug)}`,
           title: typeof team === "string" ? team : team.name || slug,
-          subtitle: `Team · ${slug}`,
-          count: "Members not tracked",
-          meta: `${count} ${count === 1 ? "design system" : "design systems"}`,
+          subtitle: `${count} ${count === 1 ? "design system" : "design systems"}`,
+          memberCount,
+          meta: "",
           iconText: "T",
           kind: "team",
         });
@@ -571,13 +597,15 @@ function initializeApp() {
     }
     document.querySelector("#first-team-empty").hidden = true;
     const org = new URLSearchParams(location.search).get("system");
+    const createSystemButton = document.querySelector('.dashboard-heading [data-create="system"]');
+    createSystemButton.hidden = selectedTeam === "all" || Boolean(org);
     if (org) {
       const system = systems.find((item) => (item.org || item.team) === org);
       if (system) {
         await renderSystemOverview(system, systemGrid, () => renderSequence === routeRenderSequence);
       } else {
         systemGrid.innerHTML =
-          '<div class="empty rounded border border-dashed border-zinc-700 bg-zinc-900/50 p-5 text-left text-xs text-zinc-400">Design system not found. <a class="font-semibold text-blue-400 hover:underline" href="/">Return to workspace →</a></div>';
+          '<div class="empty rounded border border-dashed border-zinc-700 bg-zinc-900/50 p-5 text-left text-xs text-zinc-400">Design system not found.</div>';
       }
       return;
     }

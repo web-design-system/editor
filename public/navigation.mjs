@@ -3,7 +3,6 @@ const escape = (value) =>
     /[&<>"']/g,
     (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c],
   );
-export const systemUrl = (org) => `/?system=${encodeURIComponent(org)}`;
 const projectUrl = (org, repo) => `/?team=${encodeURIComponent(org)}&repo=${encodeURIComponent(repo)}`;
 
 export function initializeNavigation() {
@@ -54,18 +53,15 @@ export function dashboardHeading(team) {
   document.querySelector("#dashboard-title").textContent = selected ? team : "";
   document.querySelector("#system-settings-link").hidden = true;
   document.querySelector("#dashboard-title").hidden = !selected;
-  document.querySelector("#dashboard-breadcrumbs").hidden = !selected;
-  document.querySelector("#dashboard-breadcrumbs").innerHTML = selected ? '<a href="/">← All teams</a>' : "";
   document.querySelector("#systems-title").textContent = selected ? "Design systems" : "All design systems";
 }
 
 function renderSystemSidebar(system, org, projects) {
   const sidebar = document.querySelector("#team-list");
-  const teamSlug = system.team || org;
   document.querySelector("#team-navigation-label").textContent = system.name;
   document.querySelector("#teams-title").textContent = "Components";
   document.querySelector("#team-summary").textContent = `${projects.length}`;
-  sidebar.innerHTML = `<a class="mb-2 block rounded px-2 py-2 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-blue-400" href="/?teamSlug=${encodeURIComponent(teamSlug)}">← Back to systems</a><div class="mb-2 px-2 text-xs font-semibold text-zinc-100">${escape(system.name)}</div>${
+  sidebar.innerHTML = `<div class="mb-2 px-2 text-xs font-semibold text-zinc-100">${escape(system.name)}</div>${
     projects
       .map(
         (item) =>
@@ -84,8 +80,6 @@ export async function renderSystemOverview(system, grid, isCurrent = () => true)
   settingsLink.href = projectUrl(system.org || system.team, system.repo);
   settingsLink.hidden = false;
   document.querySelector("#dashboard-title").hidden = false;
-  document.querySelector("#dashboard-breadcrumbs").hidden = false;
-  document.querySelector("#dashboard-breadcrumbs").innerHTML = '<a href="/">← All design systems</a>';
   document.querySelector('.dashboard-heading [data-create="system"]').hidden = true;
   document.querySelector("#systems-title").textContent = "Repositories";
   document.querySelector("#system-summary").textContent = "";
@@ -306,13 +300,15 @@ export function workbenchNavigation(area, project, projects, org, repo) {
   const navigation = area.querySelector(".project-nav-content");
   const context = navigation?.querySelector(".nav-context");
   if (context) {
-    context.href = systemUrl(org);
-    context.textContent = org;
+    const label = document.createElement("span");
+    label.className = context.className;
+    label.textContent = org;
+    context.replaceWith(label);
   }
   if (project.type === "component" && navigation) {
     const hierarchy = document.createElement("section");
     hierarchy.className = "component-hierarchy mb-3 flex flex-col gap-2 border-b border-zinc-800 px-3 pb-3";
-    hierarchy.innerHTML = `<a class="text-xs text-zinc-400 hover:text-blue-400" href="${systemUrl(org)}">← Back to systems</a><h2 class="mt-1 truncate text-xs font-semibold text-zinc-100">${escape(project.designSystem?.name || org)}</h2><strong class="text-[10px] font-medium uppercase tracking-wide text-zinc-500">Components</strong><div class="hierarchy-components flex flex-col gap-1">${projects
+    hierarchy.innerHTML = `<h2 class="truncate text-xs font-semibold text-zinc-100">${escape(project.designSystem?.name || org)}</h2><strong class="text-[10px] font-medium uppercase tracking-wide text-zinc-500">Components</strong><div class="hierarchy-components flex flex-col gap-1">${projects
       .filter((item) => item.team === org && item.type === "component")
       .map(
         (item) =>

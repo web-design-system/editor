@@ -17,6 +17,7 @@ for (const width of [1440, 360]) {
     });
     await page.route("**/api/oidc/me", (route) => route.fulfill({ json: { authenticated: false } }));
     await page.goto("http://127.0.0.1:4175/");
+    await expect(page.getByRole("heading", { level: 1, name: "Web Design System Studio" })).toHaveCount(1);
     await expect(page.getByRole("heading", { name: "A home for your team’s UX" })).toBeVisible();
     await expect(page.getByRole("link", { name: "Get started" })).toHaveAttribute("href", "/api/oidc/login");
     await expect(page.locator('a[href="/api/oidc/login"]')).toHaveCount(1);
@@ -195,12 +196,19 @@ for (const width of [1440, 900, 390, 360]) {
     await page.goto("http://127.0.0.1:4175/");
     await expect(page.locator(".team-card")).toHaveCount(2);
     await expect(page.getByRole("link", { name: /Workspace overview/ })).toHaveCount(0);
-    await expect(page.locator(".team-card").first()).toContainText("Members not tracked");
+    await expect(page.locator(".team-card").first()).toContainText("Unknown members · 2 design systems");
+    await expect(page.locator(".team-card").first()).not.toContainText("Team ·");
+    await expect(page.locator(".team-card").first().locator(":scope > *")).toHaveCount(2);
+    await expect(page.locator("#dashboard-breadcrumbs")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "New design system" })).toBeHidden();
     await page.screenshot({ path: test.info().outputPath(`landing-${width}.png`), fullPage: true });
     await page.getByRole("link", { name: /acme/ }).first().click();
     await expect(page.locator(".system-card")).toHaveCount(2);
     await expect(page.locator("#teams-title")).toHaveText("Design systems");
     await expect(page.locator(".workspace-sidebar")).toBeHidden();
+    await expect(page.getByRole("button", { name: "New design system" })).toBeVisible();
+    await expect(page.locator(".team-card").first()).toHaveCSS("min-height", "0px");
+    await expect(page.locator(".sidebar-create")).toHaveText("＋ New system");
     await page.getByRole("button", { name: "New design system" }).click();
     await expect(page.getByRole("dialog", { name: "Create a design system" })).toBeVisible();
     await expect(page.locator("#system-form")).toBeVisible();
@@ -225,7 +233,7 @@ for (const width of [1440, 900, 390, 360]) {
     pausePublication = true;
     await page.locator("#system-grid .system-card").filter({ hasText: "Acme UI" }).click();
     await publicationRequestStarted;
-    await page.locator("#active-page-layer #dashboard-breadcrumbs a").click();
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent("wds:navigate", { detail: "/" })));
     await expect(page.locator("#dashboard-title")).toHaveText("Your teams");
     releasePublicationResponse();
     await expect(page).toHaveTitle("Your teams · Workbench");
@@ -253,9 +261,14 @@ for (const width of [1440, 900, 390, 360]) {
         };
       });
     });
-    expect(mainLayout.map(({ margin, padding }) => [margin, padding])).toEqual(mainLayout.map(() => ["0px", "0px"]));
+    expect(mainLayout.map(({ margin, padding }) => [margin, padding])).toEqual([
+      ["0px", "0px"],
+      ["0px", "0px"],
+      ["0px", "0px"],
+      ["64px 0px 0px", "0px"],
+    ]);
     expect(mainLayout.at(-1).width).toBe(width);
-    expect(mainLayout.at(-1).height).toBe(740);
+    expect(mainLayout.at(-1).height).toBe(676);
     const cardGeometry = await page.evaluate(() => {
       const active = document.querySelector("#active-page-layer").getBoundingClientRect();
       const snapshot = document.querySelector(".page-layer--snapshot").getBoundingClientRect();
@@ -292,6 +305,11 @@ for (const width of [1440, 900, 390, 360]) {
     });
     expect(cardGeometry.activeTop).toBeGreaterThan(cardGeometry.snapshotTop);
     expect(cardGeometry.activeTop).toBeLessThan(cardGeometry.snapshotBottom);
+    const accountPanel = await page.locator("#sidebar-user-card").boundingBox();
+    expect(accountPanel.x + accountPanel.width).toBeCloseTo(width - 16, 0);
+    expect(accountPanel.y + accountPanel.height).toBeLessThan(cardGeometry.snapshotTop);
+    await expect(page.locator("#page-deck .page-layer--snapshot #sidebar-user-card")).toHaveCount(0);
+    await expect(page.getByText("Workbench", { exact: true })).toHaveCount(0);
     await expect(page.locator(".page-layer--snapshot [id]")).toHaveCount(0);
     await page.screenshot({ path: test.info().outputPath(`deck-${width}.png`), fullPage: true });
     await previousLayer.click();
@@ -314,7 +332,7 @@ for (const width of [1440, 900, 390, 360]) {
     await page.goForward();
     await expect(page.locator("#dashboard-title")).toHaveText("Acme UI");
     await expect(page.locator("#active-page-layer #foundation-setup")).toBeVisible();
-    await expect(page.getByRole("link", { name: "All design systems" })).toHaveAttribute("href", "/");
+    await expect(page.getByRole("link", { name: "All design systems" })).toHaveCount(0);
     await expect(page.locator("#foundation-setup")).toContainText("Define your design tokens");
     await expect(page.locator("#foundation-setup")).toContainText(
       "Give your design system the foundation it needs: the colors, spacing, or any tokens used by all components.",
@@ -332,6 +350,7 @@ for (const width of [1440, 900, 390, 360]) {
     await expect(page.locator("#active-page-layer")).toHaveAttribute("aria-current", "page");
     await expect(page.locator("#page-deck > .page-layer--snapshot")).toHaveCount(2);
     await expect(page.locator("#active-page-layer #workspace")).toBeVisible();
+    await expect(page.locator(".nav-context[href]")).toHaveCount(0);
     await expect(page.locator("#active-page-layer #project-content")).toBeVisible();
     await page.screenshot({ path: test.info().outputPath(`editor-deck-${width}.png`), fullPage: true });
     page.once("dialog", (dialog) => dialog.accept());
@@ -458,7 +477,7 @@ for (const width of [1440, 900, 390, 360]) {
     await expect(page.getByRole("dialog", { name: "Create a component" })).toBeVisible();
     await page.getByRole("button", { name: "Close dialog" }).click();
     await page.screenshot({ path: test.info().outputPath(`system-${width}.png`), fullPage: true });
-    await page.getByRole("link", { name: "All design systems" }).click();
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent("wds:navigate", { detail: "/" })));
     await page.getByRole("button", { name: "New team" }).click();
     await page.getByLabel("Team slug", { exact: true }).fill("new-team");
     await page.getByRole("button", { name: "Create team", exact: true }).click();
@@ -485,6 +504,7 @@ for (const width of [1440, 900, 390, 360]) {
       repo: "foundation",
       revision: "latest",
     });
+    await expect(page.locator("#sidebar-user-card")).toBeVisible();
     await page.locator("#sidebar-user-card").click();
     await expect(page.locator("#preferences-view")).toBeVisible();
     await expect(page.locator("#page-deck > .page-layer--exiting")).toHaveCount(0);

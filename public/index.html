@@ -16,6 +16,7 @@
   <body>
     <template app>
       <div id="app-root">
+        <h1 class="sr-only">Web Design System Studio</h1>
         <div class="shell" id="landing">
           <section
             class="guest-welcome grid min-h-dvh w-[min(1040px,calc(100%-48px))] mx-auto items-center gap-[clamp(40px,9vw,132px)] py-16 grid-cols-[minmax(0,.9fr)_minmax(340px,.8fr)] max-[760px]:grid-cols-1 max-[760px]:w-[min(500px,calc(100%-36px))] max-[760px]:gap-[30px] max-[760px]:py-9 max-[390px]:gap-5 max-[390px]:py-6"
@@ -132,6 +133,13 @@
               </details>
             </wds-sidebar-panel>
             <main class="main dashboard-main min-w-0 w-full max-w-none" slot="main" aria-label="Workspace">
+              <button
+                class="user-card sidebar-user-card account-panel flex cursor-pointer items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-950 p-1.5 text-left hover:border-zinc-600"
+                id="sidebar-user-card"
+                type="button"
+                aria-label="Open preferences"
+                hidden
+              ></button>
               <wds-page-deck id="page-deck" class="page-deck">
                 <wds-page-layer id="active-page-layer" class="page-layer page-layer--active" aria-current="page">
                   <header
@@ -139,10 +147,6 @@
                     id="app-topbar"
                     hidden
                   >
-                    <a class="brand inline-flex shrink-0 items-center gap-2.5" href="/" aria-label="WDS home"
-                      ><span class="brand-mark grid size-8 place-items-center rounded bg-blue-500 text-white">W</span
-                      ><span class="brand-name text-sm font-semibold">Workbench</span></a
-                    >
                     <button
                       type="button"
                       class="editor-nav-toggle hidden rounded border border-zinc-700 px-2 py-1 text-xs"
@@ -165,13 +169,6 @@
                     >
                       ＋ New team
                     </button>
-                    <button
-                      class="user-card sidebar-user-card mb-0 flex w-auto shrink-0 cursor-pointer items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-950 p-1.5 text-left hover:border-zinc-600"
-                      id="sidebar-user-card"
-                      type="button"
-                      aria-label="Open preferences"
-                      hidden
-                    ></button>
                   </header>
                   <section
                     class="mx-auto grid min-h-[calc(100dvh-56px)] w-[min(560px,calc(100%-36px))] content-center justify-items-center py-12 text-center"
@@ -250,13 +247,6 @@
                     </section>
                   </section>
                   <div id="dashboard-content">
-                    <nav
-                      class="breadcrumbs mb-4 flex flex-wrap items-center gap-2.5 text-xs text-zinc-500"
-                      id="dashboard-breadcrumbs"
-                      aria-label="Breadcrumb"
-                    >
-                      <span class="text-zinc-300">Workspace</span>
-                    </nav>
                     <div class="dashboard-heading flex items-center justify-between gap-3">
                       <div>
                         <h1 class="text-[22px] font-semibold text-zinc-100" id="dashboard-title" hidden></h1>

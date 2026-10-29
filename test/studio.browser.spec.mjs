@@ -22,7 +22,11 @@ for (const width of [1440, 900, 612, 390]) {
           authenticated: true,
           user:
             width === 900
-              ? { name: "Build Agent", role: "agent", email: "private@example.test" }
+              ? {
+                  name: "Build Agent",
+                  role: "agent",
+                  email: "private@example.test",
+                }
               : {
                   name: "Studio tester",
                   email: "studio@example.test",
@@ -38,7 +42,10 @@ for (const width of [1440, 900, 612, 390]) {
             rejectNextSave = false;
             await route.fulfill({
               status: 400,
-              json: { error: "Relative imports and assets must remain inside the repository.", file: "styles.css" },
+              json: {
+                error: "Relative imports and assets must remain inside the repository.",
+                file: "styles.css",
+              },
             });
             return;
           }
@@ -66,23 +73,57 @@ for (const width of [1440, 900, 612, 390]) {
     });
     await page.goto("http://127.0.0.1:4175/?team=demo&repo=button");
     await expect(page.locator(".back-link")).toHaveCount(0);
-    await expect(page.locator(".brand-mark")).toHaveText("W");
+    await expect(page.getByText("Workbench", { exact: true })).toHaveCount(0);
+    await expect(page.getByRole("heading", { level: 1, name: "Web Design System Studio" })).toHaveCount(1);
+    expect(
+      await page.locator("#sidebar-user-card").evaluate((button) => button.parentElement.matches(".dashboard-main")),
+    ).toBe(true);
+    const panel = await page.locator("#sidebar-user-card").boundingBox();
+    expect(panel.x + panel.width).toBeCloseTo(width - 16, 0);
+    await expect(page.locator("#active-page-layer #sidebar-user-card")).toHaveCount(0);
+    await expect(page.locator(".studio-kicker a")).toHaveCount(0);
+    await expect(page.locator(".nav-context[href]")).toHaveCount(0);
+    await expect(page.locator(".component-hierarchy > a")).toHaveCount(0);
     await expect(page.locator("#workspace-name")).toContainText(/demo\s*\/\s*Button/);
     if (width === 900) {
-      await expect(page.locator("#active-page-layer .user-avatar")).toHaveText("Ag");
-      await expect(page.locator("#active-page-layer .user-copy")).not.toContainText("private@example.test");
+      await expect(page.locator("#sidebar-user-card .user-avatar")).toHaveText("Ag");
+      await expect(page.locator("#sidebar-user-card .user-copy")).not.toContainText("private@example.test");
     } else {
-      await expect(page.locator("#active-page-layer .user-avatar img")).toHaveAttribute("src", /^data:image/);
-      await expect(page.locator("#active-page-layer .user-copy")).toContainText("studio@example.test");
+      await expect(page.locator("#sidebar-user-card .user-avatar img")).toHaveAttribute("src", /^data:image/);
+      await expect(page.locator("#sidebar-user-card .user-copy")).toContainText("studio@example.test");
     }
     if (width < 640) {
       await page.getByRole("button", { name: "Open layers" }).click();
       await expect(page.locator("#project-content")).toHaveClass(/mobile-nav-open/);
+      await page.keyboard.press("Escape");
     }
     await expect(page.locator("#publish-source")).toBeDisabled();
     await expect(page.locator("#publish-source .publish-indicator")).toHaveClass(/bg-transparent/);
-    await expect(page.locator(".studio-heading [role='tablist']")).toBeVisible();
-    await expect(page.locator(".studio-actions [role='tablist']")).toBeVisible();
+    await expect(page.locator(".studio-heading > [role='tablist']")).toBeVisible();
+    await expect(page.locator(".studio-heading > div.min-w-0")).toBeHidden();
+    await expect(page.locator(".studio-actions [role='tablist']")).toHaveCount(0);
+    const toolbar = await page.locator(".studio-heading").boundingBox();
+    const modes = await page.locator(".studio-heading > [role='tablist']").boundingBox();
+    const actions = await page.locator(".studio-actions").boundingBox();
+    const zoom = page.locator("#zoom-reset");
+    await expect(zoom).toBeVisible();
+    const zoomBox = await zoom.boundingBox();
+    expect(modes.x).toBeGreaterThanOrEqual(toolbar.x);
+    if (width >= 1101) {
+      expect(modes.x + modes.width).toBeLessThanOrEqual(actions.x + 1);
+    }
+    expect(actions.x + actions.width).toBeLessThanOrEqual(toolbar.x + toolbar.width + 1);
+    const overlaps =
+      modes.x < zoomBox.x + zoomBox.width &&
+      modes.x + modes.width > zoomBox.x &&
+      modes.y < zoomBox.y + zoomBox.height &&
+      modes.y + modes.height > zoomBox.y;
+    expect(overlaps).toBe(false);
+    await zoom.click();
+    await expect(zoom).toHaveText("100%");
+    if (width < 640) {
+      await page.getByRole("button", { name: "Open layers" }).click();
+    }
     await expect(page.locator(".mode-bar [role='tablist']")).toHaveCount(0);
     await expect(page.locator("#source-editor")).toHaveJSProperty(
       "value",
@@ -103,7 +144,9 @@ for (const width of [1440, 900, 612, 390]) {
     await expect(preview.locator("body")).toHaveCSS("background-color", "rgb(9, 9, 11)");
     await expect(preview.locator("button")).toBeVisible();
     await page.locator("#layer-list button").first().click();
-    const classInput = page.getByRole("combobox", { name: "Add a Tailwind class" });
+    const classInput = page.getByRole("combobox", {
+      name: "Add a Tailwind class",
+    });
     await classInput.fill("bg-brand");
     await expect(page.getByRole("option", { name: "bg-brand", exact: true })).toBeVisible();
     await classInput.fill("hover:bg-blue-");
@@ -179,7 +222,10 @@ for (const width of [1440, 900, 612, 390]) {
     await expect(page.locator("#publish-result")).toContainText("Published");
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     expect(errors).toEqual([]);
-    await page.screenshot({ path: test.info().outputPath(`studio-${width}.png`), fullPage: true });
+    await page.screenshot({
+      path: test.info().outputPath(`studio-${width}.png`),
+      fullPage: true,
+    });
   });
 }
 
@@ -212,7 +258,11 @@ test("a late component load cannot replace the preferences view", async ({ page 
     } else if (path === "/api/source/demo/button") {
       sourceStarted();
       await heldSource;
-      body = { baseRef: "source-ref", revision: "source-ref", files: { "component.html": "<h1>Late source</h1>" } };
+      body = {
+        baseRef: "source-ref",
+        revision: "source-ref",
+        files: { "component.html": "<h1>Late source</h1>" },
+      };
     }
     await route.fulfill({ json: body });
   });

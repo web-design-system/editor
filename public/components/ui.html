@@ -115,11 +115,20 @@
 <template component="wds-dashboard-layout" shadow-dom="open">
   <link rel="stylesheet" href="/css/tailwind.css" />
   <style>
+    :host {
+      display: block;
+      width: 100%;
+      height: 100dvh;
+      min-height: 0;
+      margin: 0;
+      padding: 0;
+    }
+
     slot[name="sidebar"] {
       display: none;
     }
   </style>
-  <div class="grid min-h-dvh grid-cols-[minmax(0,1fr)]">
+  <div class="grid h-full min-h-0 grid-cols-[minmax(0,1fr)]">
     <slot name="sidebar" class="contents"></slot>
     <slot name="main" class="contents"></slot>
   </div>

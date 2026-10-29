@@ -102,7 +102,7 @@
             </div>
           </section>
           <wds-dashboard-layout
-            class="dashboard-layout block min-h-dvh aria-busy:invisible"
+            class="dashboard-layout block aria-busy:invisible"
             id="dashboard-layout"
             aria-busy="true"
           >
@@ -131,11 +131,7 @@
                 </button>
               </details>
             </wds-sidebar-panel>
-            <main
-              class="main dashboard-main min-w-0 w-full max-w-none px-6 py-4 pb-8 max-[760px]:px-3 max-[760px]:py-3"
-              slot="main"
-              aria-label="Workspace"
-            >
+            <main class="main dashboard-main min-w-0 w-full max-w-none" slot="main" aria-label="Workspace">
               <wds-page-deck id="page-deck" class="page-deck">
                 <wds-page-layer id="active-page-layer" class="page-layer page-layer--active" aria-current="page">
                   <header

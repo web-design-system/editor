@@ -238,15 +238,57 @@ for (const width of [1440, 900, 390, 360]) {
     await expect(previousLayer).toBeVisible();
     await expect(page.locator(".page-layer--snapshot .page-layer-snapshot-content .system-card")).toHaveCount(2);
     await expect(page.locator("#active-page-layer")).toHaveCSS("box-shadow", /rgba/);
+    const mainLayout = await page.evaluate(() => {
+      const selectors = ["#dashboard-layout", "wds-dashboard-layout", ".dashboard-main", "#page-deck"];
+      return selectors.map((selector) => {
+        const element = document.querySelector(selector);
+        const style = getComputedStyle(element);
+        const rect = element.getBoundingClientRect();
+        return {
+          selector,
+          margin: style.margin,
+          padding: style.padding,
+          width: rect.width,
+          height: rect.height,
+        };
+      });
+    });
+    expect(mainLayout.map(({ margin, padding }) => [margin, padding])).toEqual(mainLayout.map(() => ["0px", "0px"]));
+    expect(mainLayout.at(-1).width).toBe(width);
+    expect(mainLayout.at(-1).height).toBe(740);
     const cardGeometry = await page.evaluate(() => {
       const active = document.querySelector("#active-page-layer").getBoundingClientRect();
       const snapshot = document.querySelector(".page-layer--snapshot").getBoundingClientRect();
       return {
+        activeStyle: {
+          layer: getComputedStyle(document.querySelector("#active-page-layer")).getPropertyValue("--layer"),
+          layerCount: getComputedStyle(document.querySelector("#active-page-layer")).getPropertyValue("--layer-count"),
+          top: getComputedStyle(document.querySelector("#active-page-layer")).top,
+          left: getComputedStyle(document.querySelector("#active-page-layer")).left,
+          right: getComputedStyle(document.querySelector("#active-page-layer")).right,
+        },
+        snapshotStyle: {
+          layer: getComputedStyle(document.querySelector(".page-layer--snapshot")).getPropertyValue("--layer"),
+          layerCount: getComputedStyle(document.querySelector(".page-layer--snapshot")).getPropertyValue(
+            "--layer-count",
+          ),
+          top: getComputedStyle(document.querySelector(".page-layer--snapshot")).top,
+          left: getComputedStyle(document.querySelector(".page-layer--snapshot")).left,
+          right: getComputedStyle(document.querySelector(".page-layer--snapshot")).right,
+        },
         activeTop: active.top,
         activeBottom: active.bottom,
         snapshotTop: snapshot.top,
         snapshotBottom: snapshot.bottom,
       };
+    });
+    expect(cardGeometry.activeStyle).toEqual({ layer: "2", layerCount: "2", top: "64px", left: "32px", right: "16px" });
+    expect(cardGeometry.snapshotStyle).toEqual({
+      layer: "1",
+      layerCount: "2",
+      top: "32px",
+      left: "16px",
+      right: "32px",
     });
     expect(cardGeometry.activeTop).toBeGreaterThan(cardGeometry.snapshotTop);
     expect(cardGeometry.activeTop).toBeLessThan(cardGeometry.snapshotBottom);

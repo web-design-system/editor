@@ -55,36 +55,89 @@
   overflow: hidden;
 }
 
-.page-deck {
-  --deck-step: 32px;
-  position: relative;
+#app-root {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100dvh;
+  margin: 0;
+  padding: 0;
+}
+
+#dashboard-layout,
+wds-dashboard-layout {
+  box-sizing: border-box;
   display: block;
   width: 100%;
-  max-width: 1600px;
-  margin-inline: auto;
-  padding-top: calc(var(--layer-count, 0) * var(--deck-step));
+  height: 100dvh;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.dashboard-main {
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+wds-page-deck,
+.page-deck {
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.page-deck {
+  position: relative;
   isolation: isolate;
+  overflow: hidden;
 }
 
 .page-layer {
   box-sizing: border-box;
-  display: block;
+  position: absolute;
+  top: calc(var(--layer, 1) * 2rem);
+  right: calc(1rem + (var(--layer-count, 1) - var(--layer, 1)) * 1rem);
+  bottom: 0;
+  left: calc(var(--layer, 1) * 1rem);
+  z-index: var(--layer, 1);
+  display: flex;
+  flex-direction: column;
   min-width: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 0.5rem;
   border: 1px solid #3f3f46;
-  border-radius: 1rem;
+  border-radius: 0.5rem;
   background: #111113;
   box-shadow:
-    0 24px 55px rgb(0 0 0 / 38%),
-    0 7px 18px rgb(0 0 0 / 25%),
-    inset 0 1px rgb(255 255 255 / 4%);
+    0 10px 15px -3px rgb(0 0 0 / 30%),
+    0 4px 6px -4px rgb(0 0 0 / 24%);
 }
 
 .page-layer--active {
-  position: relative;
-  z-index: 20;
-  min-height: calc(100dvh - 116px);
-  padding: clamp(0.75rem, 1.5vw, 1.25rem);
+  overflow: auto;
   animation: page-layer-enter 240ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.page-layer--active > #app-topbar {
+  margin: 0;
+  padding: 0;
+}
+
+.page-layer--active .breadcrumbs {
+  margin: 0;
+  padding: 0;
 }
 
 .page-layer--transition-in {
@@ -92,18 +145,11 @@
 }
 
 .page-layer--snapshot {
-  position: absolute;
-  top: calc(var(--layer-index, 0) * var(--deck-step));
-  right: calc(var(--layer-depth, 1) * 8px);
-  left: calc(var(--layer-depth, 1) * 8px);
-  z-index: calc(var(--layer-index, 0) + 1);
-  height: max(74vh, 520px);
   overflow: hidden;
-  transform: scale(calc(1 - var(--layer-depth, 1) * 0.018));
-  transform-origin: center top;
   transition:
     top 220ms ease,
-    transform 220ms ease,
+    left 220ms ease,
+    right 220ms ease,
     box-shadow 220ms ease;
 }
 
@@ -120,26 +166,24 @@
   position: relative;
   z-index: 1;
   display: flex;
-  min-height: 42px;
+  min-height: 1rem;
   align-items: center;
-  padding: 0.55rem 0.9rem;
+  flex: none;
+  padding: 0;
   overflow: hidden;
-  border-bottom: 1px solid #3f3f46;
-  border-radius: inherit;
-  background: #18181b;
-  color: #e4e4e7;
-  font-size: 0.8rem;
-  font-weight: 600;
+  color: #9ca3af;
+  font-size: 0.75rem;
+  font-weight: 500;
   cursor: pointer;
   text-decoration: none;
+  text-transform: uppercase;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .page-layer-snapshot-header:hover,
 .page-layer-snapshot-header:focus-visible {
-  background: #202024;
-  color: #f4f4f5;
+  color: #e5e7eb;
 }
 
 .page-layer-snapshot-header:focus-visible {
@@ -148,9 +192,10 @@
 }
 
 .page-layer-snapshot-content {
-  height: 100%;
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
-  padding: clamp(0.75rem, 1.5vw, 1.25rem);
+  padding: 0.5rem;
   pointer-events: none;
 }
 
@@ -218,29 +263,6 @@
   }
 }
 
-@media (max-width: 639px) {
-  .page-deck {
-    --deck-step: 24px;
-  }
-
-  .page-layer--active {
-    min-height: calc(100dvh - 96px);
-    padding: 0.75rem;
-  }
-
-  .page-layer--snapshot {
-    height: max(68vh, 420px);
-    right: calc(var(--layer-depth, 1) * 5px);
-    left: calc(var(--layer-depth, 1) * 5px);
-    transform: scale(calc(1 - var(--layer-depth, 1) * 0.014));
-  }
-
-  .page-layer-snapshot-header {
-    min-height: 36px;
-    padding-inline: 0.7rem;
-  }
-}
-
 @media (max-width: 760px) {
   #sidebar-user-card .user-copy {
     display: none;
@@ -284,13 +306,11 @@ html[data-theme="light"] .page-layer {
   border-color: #e2e8f0;
   background: #fff;
   box-shadow:
-    0 24px 55px rgb(15 23 42 / 18%),
-    0 7px 18px rgb(15 23 42 / 12%);
+    0 10px 15px -3px rgb(15 23 42 / 14%),
+    0 4px 6px -4px rgb(15 23 42 / 10%);
 }
 
 html[data-theme="light"] .page-layer-snapshot-header {
-  border-color: #e2e8f0;
-  background: #f8fafc;
   color: #1f2937;
 }
 

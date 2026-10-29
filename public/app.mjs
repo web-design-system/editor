@@ -230,7 +230,6 @@ function initializeApp() {
       : "";
   }
   const routeLayers = [];
-  const MAX_VISUAL_LAYER_DEPTH = 4;
   const unsafeSnapshotTags = new Set([
     "script",
     "style",
@@ -384,14 +383,16 @@ function initializeApp() {
     routeLayers.push({ url, element: layer });
   }
   function updatePageDeck() {
-    pageDeck.style.setProperty("--layer-count", `${routeLayers.length}`);
+    const layerCount = routeLayers.length + 1;
+    pageDeck.style.setProperty("--layer-count", `${layerCount}`);
     routeLayers.forEach(({ element }, index) => {
-      element.style.setProperty("--layer-index", `${index}`);
-      element.style.setProperty("--layer-count", `${routeLayers.length}`);
-      element.style.setProperty("--layer-depth", `${Math.min(routeLayers.length - index, MAX_VISUAL_LAYER_DEPTH)}`);
+      element.style.setProperty("--layer", `${index + 1}`);
+      element.style.setProperty("--layer-count", `${layerCount}`);
       element.style.zIndex = `${index + 1}`;
     });
-    activePageLayer.style.setProperty("--layer-count", `${routeLayers.length}`);
+    activePageLayer.style.setProperty("--layer", `${layerCount}`);
+    activePageLayer.style.setProperty("--layer-count", `${layerCount}`);
+    activePageLayer.style.zIndex = `${layerCount}`;
     activePageLayer.tabIndex = -1;
     activePageLayer.setAttribute("aria-label", `Current page: ${pageTitleForUrl(location.href)}`);
     const visibleLayers = new Set(routeLayers.map(({ element }) => element));

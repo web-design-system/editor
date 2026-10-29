@@ -1030,13 +1030,10 @@ function initializeApp() {
       firstSystem.hidden = false;
       dashboardContent.hidden = true;
     }
-    topbarName.textContent = system
-      ? systems.find((item) => item.org === system)?.name || system
-      : selectedTeam === "all"
-        ? "Your teams"
-        : selectedTeam;
+    const systemName = system ? systems.find((item) => item.org === system)?.name || system : "";
+    topbarName.textContent = system || selectedTeam === "all" ? "" : selectedTeam;
     document.title = system
-      ? `${topbarName.textContent} · Workbench`
+      ? `${systemName} · Workbench`
       : selectedTeam === "all"
         ? "Your teams · Workbench"
         : `${selectedTeam} · Workbench`;

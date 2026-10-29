@@ -195,6 +195,8 @@ for (const width of [1440, 900, 390, 360]) {
     });
     await page.goto("http://127.0.0.1:4175/");
     await expect(page.locator(".team-card")).toHaveCount(2);
+    await expect(page.locator("#dashboard-title")).toHaveText("Your teams");
+    await expect(page.locator("#workspace-name")).toBeEmpty();
     await expect(page.getByRole("link", { name: /Workspace overview/ })).toHaveCount(0);
     await expect(page.locator(".team-card").first()).toContainText("Unknown members · 2 design systems");
     await expect(page.locator(".team-card").first()).not.toContainText("Team ·");
@@ -241,6 +243,7 @@ for (const width of [1440, 900, 390, 360]) {
     await expect(page.locator(".system-card")).toHaveCount(2);
     await page.locator("#system-grid .system-card").filter({ hasText: "Acme UI" }).click();
     await expect(page.locator("#dashboard-title")).toHaveText("Acme UI");
+    await expect(page.locator("#workspace-name")).toBeEmpty();
     await expect(page.locator("#page-deck > .page-layer--snapshot")).toHaveCount(1);
     const previousLayer = page.getByRole("link", { name: "Return to acme" });
     await expect(previousLayer).toBeVisible();
